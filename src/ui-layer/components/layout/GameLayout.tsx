@@ -36,11 +36,12 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
   }, [onEngineReady]);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-game-900">
+    <div className="fixed inset-0 w-screen h-screen overflow-hidden bg-black">
       {/* Engine Container */}
       <div
         ref={containerRef}
-        className="absolute inset-0 w-full h-full"
+        className="absolute inset-0 w-full h-full bg-blue-500"
+        style={{ minHeight: '100vh' }}
       />
 
       {/* HUD Layer */}

@@ -1,6 +1,5 @@
 import React from 'react';
 import { Button } from '../shared/Button';
-import { AppLayout } from '../layout/AppLayout';
 
 interface WelcomeScreenProps {
   onQuickPlay: () => void;
@@ -16,7 +15,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onTutorial,
 }) => {
   return (
-    <AppLayout className="flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-b from-game-900 to-game-800 text-white flex items-center justify-center">
       <div className="w-full max-w-lg px-6 py-8">
         {/* Logo and Title */}
         <div className="text-center mb-12">
@@ -74,6 +73,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <p>Version 0.1.0-alpha</p>
         </div>
       </div>
-    </AppLayout>
+    </div>
   );
 };

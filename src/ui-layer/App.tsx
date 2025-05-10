@@ -1,5 +1,4 @@
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
-import { AppLayout } from './components/layout/AppLayout';
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
 import { LobbyScreen } from './components/screens/LobbyScreen';
 import { RaceScreen } from './components/screens/RaceScreen';
@@ -35,25 +34,25 @@ function AppContent() {
   };
 
   return (
-    <AppLayout>
-      <Routes>
-        <Route path="/" element={
-          <WelcomeScreen 
-            onQuickPlay={handleQuickPlay}
-            onCustomGame={handleCustomGame}
-            onSettings={handleSettings}
-            onTutorial={handleTutorial}
-          />
-        } />
-        <Route path="/lobby" element={
+    <Routes>
+      <Route path="/" element={
+        <WelcomeScreen 
+          onQuickPlay={handleQuickPlay}
+          onCustomGame={handleCustomGame}
+          onSettings={handleSettings}
+          onTutorial={handleTutorial}
+        />
+      } />
+      <Route path="/lobby" element={
+        <div className="min-h-screen bg-gradient-to-b from-game-900 to-game-800 text-white">
           <LobbyScreen 
             onStartRace={handleStartRace}
             onBack={handleBackToMenu}
           />
-        } />
-        <Route path="/race" element={<RaceScreen />} />
-      </Routes>
-    </AppLayout>
+        </div>
+      } />
+      <Route path="/race" element={<RaceScreen />} />
+    </Routes>
   );
 }
 

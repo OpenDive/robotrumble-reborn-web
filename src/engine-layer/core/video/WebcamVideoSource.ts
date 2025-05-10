@@ -1,60 +1,129 @@
-import { VideoSource } from './VideoSource';
+/**
+ * Interface for video sources used in AR system
+ */
+export interface VideoSource {
+  initialize(): Promise<void>;
+  start(): Promise<void>;
+  stop(): void;
+  getVideoElement(): HTMLVideoElement;
+  isStreaming(): boolean;
+  getDimensions(): { width: number; height: number };
+}
 
 /**
  * Implementation of VideoSource using the device's webcam
  */
 export class WebcamVideoSource implements VideoSource {
   private video: HTMLVideoElement;
-  private stream: MediaStream | null = null;
+  private stream: MediaStream | null;
+  private dimensions: { width: number; height: number };
+  private isActive: boolean;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private dimensions = { width: 1280, height: 720 }; // Default HD resolution
 
   constructor() {
+    // Create video element for THREE.js texture
     this.video = document.createElement('video');
-    this.video.playsInline = true; // Important for iOS
+    this.video.playsInline = true;
     this.video.muted = true;
+    this.video.autoplay = true;
+    this.video.style.display = 'none';
+    document.body.appendChild(this.video); // Needed for iOS
+    
+    console.log('WebcamVideoSource: Created video element', {
+      playsInline: this.video.playsInline,
+      muted: this.video.muted,
+      autoplay: this.video.autoplay,
+      inDOM: document.body.contains(this.video)
+    });
+
+    // Create canvas and context for frame capture
     this.canvas = document.createElement('canvas');
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('Failed to get 2D context');
     this.ctx = ctx;
+    
+    console.log('WebcamVideoSource: Created canvas', {
+      width: this.canvas.width,
+      height: this.canvas.height,
+      context: ctx ? 'available' : 'null'
+    });
+
+    this.stream = null;
+    this.dimensions = { width: 1280, height: 720 }; // Default HD resolution
+    this.isActive = false;
+
+    // Set initial canvas size
+    this.canvas.width = this.dimensions.width;
+    this.canvas.height = this.dimensions.height;
   }
 
   async initialize(): Promise<void> {
     try {
-      console.log('Requesting camera access...');
+      console.log('WebcamVideoSource: Starting initialization...');
+      console.log('WebcamVideoSource: Requesting camera access...', {
+        requested: {
+          width: this.dimensions.width,
+          height: this.dimensions.height
+        }
+      });
+
+      // Get camera stream
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: this.dimensions.width },
           height: { ideal: this.dimensions.height },
-          facingMode: 'environment' // Prefer rear camera if available
         },
         audio: false
       });
-      console.log('Camera access granted');
+
+      // Set video source
+      this.video.srcObject = this.stream;
+      console.log('WebcamVideoSource: Set video srcObject', { stream: this.stream });
+
+      console.log('WebcamVideoSource: Camera access granted', {
+        tracks: this.stream.getVideoTracks().map(track => ({
+          label: track.label,
+          settings: track.getSettings()
+        }))
+      });
 
       this.video.srcObject = this.stream;
       
-      // Wait for video metadata to load to get actual dimensions
+      // Wait for video metadata to load
       await new Promise<void>((resolve) => {
         this.video.onloadedmetadata = () => {
-          console.log('Video metadata loaded:', {
-            width: this.video.videoWidth,
-            height: this.video.videoHeight
+          console.log('WebcamVideoSource: Video metadata loaded', {
+            video: {
+              width: this.video.videoWidth,
+              height: this.video.videoHeight,
+              readyState: this.video.readyState
+            }
           });
+          // Update dimensions and canvas size with actual video dimensions
           this.dimensions.width = this.video.videoWidth;
           this.dimensions.height = this.video.videoHeight;
+          this.canvas.width = this.video.videoWidth;
+          this.canvas.height = this.video.videoHeight;
+          console.log('WebcamVideoSource: Updated canvas dimensions', {
+            width: this.canvas.width,
+            height: this.canvas.height
+          });
           resolve();
         };
       });
-      
-      // Set canvas size to match video
-      this.canvas.width = this.video.videoWidth;
-      this.canvas.height = this.video.videoHeight;
-      
-      console.log('Video source initialized');
+
+      // Wait for first frame
+      await new Promise<void>((resolve) => {
+        this.video.onloadeddata = () => {
+          console.log('WebcamVideoSource: First frame loaded');
+          resolve();
+        };
+      });
+
+      console.log('WebcamVideoSource: Initialization complete');
     } catch (error) {
-      console.error('Failed to initialize webcam:', error);
+      console.error('WebcamVideoSource: Failed to initialize:', error);
       throw error;
     }
   }
@@ -94,6 +163,7 @@ export class WebcamVideoSource implements VideoSource {
         const checkVideo = () => {
           if (this.video.readyState >= 2) { // HAVE_CURRENT_DATA or better
             console.log('First video frame available');
+            this.isActive = true;
             resolve();
           } else {
             requestAnimationFrame(checkVideo);
@@ -108,15 +178,19 @@ export class WebcamVideoSource implements VideoSource {
   }
 
   stop(): void {
-    this.video.pause();
+    // Stop all video tracks
     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
       this.stream = null;
     }
+
+    // Clear video source
+    this.video.srcObject = null;
+    this.isActive = false;
   }
 
   isStreaming(): boolean {
-    return !!this.stream && !this.video.paused;
+    return this.isActive && this.stream !== null && !this.video.paused;
   }
 
   getDimensions(): { width: number; height: number } {
