@@ -9,6 +9,7 @@ A browser-based Mixed Reality (MR) racing game client that allows users to contr
 - **3D Rendering**: three.js
 - **AR Processing**: js-aruco for marker detection
 - **Real-time Communication**: WebRTC, WebSocket
+- **Styling**: Tailwind CSS
 - **Node Version**: v22.15.0 (LTS)
 - **Package Manager**: npm v10.9.2
 
@@ -26,12 +27,41 @@ src/
 │   │   └── ARManager.ts       # Marker detection/tracking
 │   └── network/     # Real-time communication
 │       └── WebRTCManager.ts   # Video streaming
-├── components/      # React components (coming soon)
-│   ├── hud/         # In-game overlays
-│   └── ui/          # Menu interfaces
-└── types/           # TypeScript definitions
+├── hooks/         # Custom React hooks
+├── utils/         # Utility functions
+└── types/         # TypeScript type definitions
     └── js-aruco.d.ts # AR library types
 ```
+
+## UI Components
+
+### Shared Components
+
+- **Button**: Customizable button with variants (primary, secondary, danger), sizes, and loading state
+- **Modal**: Accessible modal dialog with backdrop blur and dark theme
+- **LoadingState**: Loading indicator with multiple variants and sizes
+
+### Layout Components
+
+- **AppLayout**: Base application layout with loading state management
+- **GameLayout**: Game-specific layout with AR canvas and HUD layers
+
+### Screen Components
+
+- **WelcomeScreen**: Landing page with quick play, custom game, settings, and tutorial options
+- **LobbyScreen**: (Coming soon) Browse and create race sessions
+- **RaceScreen**: (Coming soon) Main game interface with AR view and controls
+- **ResultsScreen**: (Coming soon) Post-race summary and leaderboard
+
+### Styling
+
+The project uses Tailwind CSS for styling, providing:
+
+- Custom gaming theme with dark mode by default
+- Responsive design utilities
+- GPU-accelerated animations
+- Modern backdrop blur effects
+- Consistent spacing and typography
 
 ## Core Features
 

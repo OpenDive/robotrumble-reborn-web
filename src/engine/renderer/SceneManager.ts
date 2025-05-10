@@ -1,41 +1,30 @@
-import {
-    Scene,
-    AmbientLight,
-    DirectionalLight,
-    WebGLRenderer,
-    PCFSoftShadowMap,
-    Color,
-    Object3D,
-    Material,
-    BufferGeometry,
-    Mesh,
-    Camera
-} from 'three';
+import { Scene, WebGLRenderer, Camera, Object3D, Mesh, Material, BufferGeometry, Color, PCFSoftShadowMap, AmbientLight, DirectionalLight } from 'three';
 
 export class SceneManager {
     private scene: Scene;
     private renderer: WebGLRenderer;
 
-    constructor(container: HTMLElement) {
+    constructor(canvas: HTMLCanvasElement) {
         // Initialize scene
         this.scene = new Scene();
         this.scene.background = new Color(0x000000);
 
         // Initialize renderer
         this.renderer = new WebGLRenderer({
+            canvas,
             antialias: true,
             alpha: true // Enable transparency for AR
         });
-        this.renderer.setPixelRatio(window.devicePixelRatio);
+
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = PCFSoftShadowMap;
-        container.appendChild(this.renderer.domElement);
 
         // Setup basic lighting
         this.setupLighting();
 
-        // Handle window resizing
+        // Handle window resize
         window.addEventListener('resize', this.onWindowResize.bind(this));
     }
 

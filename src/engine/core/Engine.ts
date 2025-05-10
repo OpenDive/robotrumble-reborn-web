@@ -3,19 +3,41 @@ import { ARManager } from '../ar/ARManager';
 import { SceneManager } from '../renderer/SceneManager';
 import { CameraManager } from '../renderer/CameraManager';
 
+interface EngineOptions {
+    canvas: HTMLCanvasElement;
+    showStats?: boolean;
+    debugMode?: boolean;
+}
+
 export class Engine {
     private sceneManager: SceneManager;
     private cameraManager: CameraManager;
     private webrtc: WebRTCManager;
     private ar: ARManager;
     private isRunning: boolean = false;
+    private readonly debugMode: boolean;
+    private readonly showStats: boolean;
     
-    constructor(container: HTMLElement) {
+    constructor(options: EngineOptions) {
+        this.debugMode = options.debugMode ?? false;
+        this.showStats = options.showStats ?? false;
+        
         // Initialize managers
-        this.sceneManager = new SceneManager(container);
+        this.sceneManager = new SceneManager(options.canvas);
         this.cameraManager = new CameraManager();
         this.webrtc = new WebRTCManager();
         this.ar = new ARManager(this.sceneManager.getScene(), this.cameraManager.getCamera());
+
+        // Initialize debug features if enabled
+        if (this.debugMode) {
+            console.log('Debug mode enabled');
+            // TODO: Initialize debug tools
+        }
+
+        if (this.showStats) {
+            console.log('Performance stats enabled');
+            // TODO: Initialize performance stats
+        }
     }
     
 
