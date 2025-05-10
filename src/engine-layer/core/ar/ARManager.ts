@@ -364,6 +364,48 @@ export class ARManager {
     };
   }
   
+  /**
+   * Process a video frame for marker detection and visualization
+   * @param frame The video frame to process
+   */
+  processFrame(frame: ImageData): void {
+    // Update frame count
+    this.frameCount++;
+
+    // Process frame for marker detection every 3rd frame
+    if (this.frameCount % 3 === 0) {
+      try {
+        // Update detection stats
+        const now = performance.now();
+        if (this.markerStats.lastDetectionTime > 0) {
+          this.markerStats.detectionFPS = 1000 / (now - this.markerStats.lastDetectionTime);
+        }
+        this.markerStats.lastDetectionTime = now;
+        this.markerStats.lastProcessedFrame = this.frameCount;
+
+        // Detect markers
+        const markers = this.markerDetector.detectMarkers(frame);
+        
+        // Update stats
+        this.markerStats.markersDetected = markers.length;
+        this.markerStats.totalDetections += markers.length;
+
+        // Update visualizations
+        this.updateMarkerVisuals(markers);
+
+      } catch (error) {
+        this.markerStats.errors++;
+        console.error('Error in marker detection:', error);
+      }
+    }
+
+    // Always update video background
+    this.videoBackground.update();
+    
+    // Render scene
+    this.renderer.render(this.scene, this.camera);
+  }
+  
   private updateMarkerVisuals(markers: Marker[]): void {
     // Remove old marker meshes that are no longer detected
     for (const [id, mesh] of this.markerMeshes) {

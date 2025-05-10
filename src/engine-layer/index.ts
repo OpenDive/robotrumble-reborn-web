@@ -1,6 +1,5 @@
 import { networkManager } from './core/NetworkManager';
 import { arManager } from './core/ar/ARManager';
-import { detectionManager } from './core/DetectionManager';
 import { VideoSourceFactory } from './core/video/VideoSourceFactory';
 import { VideoConfig } from './core/video/types';
 
@@ -92,7 +91,17 @@ export class GameEngine {
 
   // Frame processing
   processVideoFrame(frame: ImageData): void {
-    detectionManager.processFrame(frame);
+    // Process frame directly through ARManager which handles marker detection
+    const videoElement = arManager.getVideoSource().getVideoElement();
+    if (videoElement && frame.width === videoElement.videoWidth && frame.height === videoElement.videoHeight) {
+      // Only process if frame dimensions match video source
+      arManager.processFrame(frame);
+    } else {
+      console.warn('Frame dimensions mismatch:', {
+        frame: { width: frame.width, height: frame.height },
+        video: { width: videoElement?.videoWidth, height: videoElement?.videoHeight }
+      });
+    }
   }
 }
 
