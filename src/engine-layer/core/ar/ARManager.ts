@@ -42,16 +42,16 @@ export class ARManager {
     // Create scene
     this.scene = new THREE.Scene();
     
-    // Create camera with wider FOV
+    // Create camera with standard FOV
     this.camera = new THREE.PerspectiveCamera(
-      75,  // Wider FOV to see more
+      60, // Standard FOV
       this.container.clientWidth / this.container.clientHeight,
       0.1,
       1000
     );
     
-    // Position camera closer to video plane
-    this.camera.position.z = 1; // Move camera closer
+    // Position camera to see full video plane
+    this.camera.position.z =1; // Close to video plane
     this.camera.lookAt(0, 0, -1);
     
     console.log('Camera configured:', {

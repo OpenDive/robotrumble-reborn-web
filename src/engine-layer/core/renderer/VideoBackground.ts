@@ -78,29 +78,36 @@ export class VideoBackground {
     const videoAspect = this.videoElement.videoWidth / this.videoElement.videoHeight;
     console.log('Video background aspect ratio:', videoAspect);
 
-    // Position plane to fill view
-    const distance = 1;
+    // Position plane close to camera
+    const distance = 0.1;
     this.mesh.position.z = -distance;
     
-    // Calculate required plane size to fill view
-    const fov = 45; // Narrower FOV for less perspective distortion
-    const vFov = fov * Math.PI / 180; // vertical fov in radians
-    const height = 2 * distance * Math.tan(vFov / 2);
-    const width = height * videoAspect;
-
-    // Make plane much larger to fill view
-    const scale = 4.0; // Increased scale for larger video
-    this.mesh.geometry = new THREE.PlaneGeometry(width * scale, height * scale);
+    // Calculate size based on desired coverage
+    const targetHeight = 8.0; // Much larger base height
+    const width = targetHeight * videoAspect;
+    const height = targetHeight;
+    
+    // Create plane geometry with calculated size
+    this.mesh.geometry = new THREE.PlaneGeometry(width, height);
+    
+    // Scale up for good measure
+    this.mesh.scale.set(2, 2, 1);
+    
+    console.log('Video plane configured:', {
+      position: this.mesh.position.toArray(),
+      dimensions: { width, height },
+      videoAspect
+    });
     
     // Ensure plane faces camera
     this.mesh.lookAt(0, 0, 0);
     
-    console.log('Video background configured:', {
-      distance,
-      fov,
-      dimensions: { width: width * scale, height: height * scale },
-      videoAspect
-    });
+    // console.log('Video background configured:', {
+    //   distance,
+    //   fov,
+    //   dimensions: { width: width * scale, height: height * scale },
+    //   videoAspect
+    // });
     
     console.log('Video background initialized', {
       position: this.mesh.position.toArray(),
