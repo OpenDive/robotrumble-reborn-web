@@ -1,57 +1,54 @@
-# RobotRumble Reborn Web Client
+# React + TypeScript + Vite
 
-A browser-based Mixed Reality (MR) racing game client that allows users to control physical Unmanned Ground Vehicles (UGVs) through an augmented reality interface.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Technology Stack
+Currently, two official plugins are available:
 
-- **Frontend Framework**: React with TypeScript
-- **Build Tool**: Vite
-- **3D Rendering**: three.js
-- **AR Processing**: js-aruco for marker detection
-- **Real-time Communication**: WebRTC, WebSocket
-- **Node Version**: v22.15.0 (LTS)
-- **Package Manager**: npm v10.9.2
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## Architecture
+## Expanding the ESLint configuration
 
-The application follows a hybrid architecture:
-1. Core Engine (Vanilla TypeScript)
-   - three.js rendering
-   - WebRTC video streaming
-   - Marker detection
-   - Physics and game loop
-   - WebSocket communication
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-2. UI Layer (React)
-   - Game menus and settings
-   - HUD overlays
-   - Configuration panels
-   - Session management
-
-## Development Setup
-
-1. Ensure you have Node.js installed (preferably using nvm)
-```bash
-nvm install           # Installs Node version from .nvmrc
-nvm use              # Switches to the project's Node version
+```js
+export default tseslint.config({
+  extends: [
+    // Remove ...tseslint.configs.recommended and replace with this
+    ...tseslint.configs.recommendedTypeChecked,
+    // Alternatively, use this for stricter rules
+    ...tseslint.configs.strictTypeChecked,
+    // Optionally, add this for stylistic rules
+    ...tseslint.configs.stylisticTypeChecked,
+  ],
+  languageOptions: {
+    // other options...
+    parserOptions: {
+      project: ['./tsconfig.node.json', './tsconfig.app.json'],
+      tsconfigRootDir: import.meta.dirname,
+    },
+  },
+})
 ```
 
-2. Install dependencies
-```bash
-npm install
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
+
+export default tseslint.config({
+  plugins: {
+    // Add the react-x and react-dom plugins
+    'react-x': reactX,
+    'react-dom': reactDom,
+  },
+  rules: {
+    // other rules...
+    // Enable its recommended typescript rules
+    ...reactX.configs['recommended-typescript'].rules,
+    ...reactDom.configs.recommended.rules,
+  },
+})
 ```
-
-3. Start development server
-```bash
-npm run dev
-```
-
-## Building for Production
-
-```bash
-npm run build
-```
-
-## License
-
-[License information pending]
