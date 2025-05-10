@@ -1,5 +1,5 @@
 import { networkManager } from './core/NetworkManager';
-import { arManager } from './core/ARManager';
+import { arManager } from './core/ar/ARManager';
 import { detectionManager } from './core/DetectionManager';
 
 // This will be our main engine class that the UI layer interacts with

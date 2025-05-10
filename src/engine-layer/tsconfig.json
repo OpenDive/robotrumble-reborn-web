@@ -6,7 +6,11 @@
     "declarationMap": true,
     "outDir": "../../dist/engine-layer",
     "rootDir": ".",
-    "types": ["three", "webrtc"]
+    "types": ["three", "webrtc"],
+    "baseUrl": ".",
+    "paths": {
+      "js-aruco": ["../shared/types/js-aruco.d.ts"]
+    }
   },
   "include": ["./**/*"],
   "references": [
