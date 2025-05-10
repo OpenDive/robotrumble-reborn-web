@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -64,5 +68,66 @@ button:focus-visible {
   }
   button {
     background-color: #f9f9f9;
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-game-900 text-white antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Custom scrollbar for gaming feel */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-game-800;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-game-600 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-game-500;
+  }
+}
+
+@layer components {
+  .game-container {
+    @apply min-h-screen bg-gradient-to-b from-game-900 to-game-800;
+  }
+
+  .game-card {
+    @apply bg-game-800 rounded-lg border border-game-700 p-4 shadow-lg;
+  }
+
+  .game-button {
+    @apply px-4 py-2 rounded-md font-medium transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-game-900;
+  }
+
+  .game-button--primary {
+    @apply game-button bg-gradient-game from-primary-600 to-primary-700
+           hover:from-primary-500 hover:to-primary-600 text-white;
+  }
+
+  .game-button--secondary {
+    @apply game-button bg-game-700 hover:bg-game-600 text-white;
+  }
+
+  .game-input {
+    @apply bg-game-700 border-game-600 text-white rounded-md
+           focus:ring-primary-500 focus:border-primary-500;
+  }
+
+  .game-title {
+    @apply text-3xl font-bold bg-gradient-to-r from-primary-400 to-accent-400 text-transparent bg-clip-text;
   }
 }
