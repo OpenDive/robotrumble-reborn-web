@@ -1,8 +1,11 @@
 // Main application entry point
-import { StrictMode } from 'react'
+import React, { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { engine } from './engine-layer';
 import App from './ui-layer/App';
+
+// Import Tailwind styles
+import './ui-layer/styles/index.css';
 
 // Create container for engine
 const engineContainer = document.createElement('div');
