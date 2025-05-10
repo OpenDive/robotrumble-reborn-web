@@ -42,14 +42,23 @@ export class ARManager {
     // Create scene
     this.scene = new THREE.Scene();
     
-    // Create camera
+    // Create camera with wider FOV
     this.camera = new THREE.PerspectiveCamera(
-      60,  // FOV
+      75,  // Wider FOV to see more
       this.container.clientWidth / this.container.clientHeight,
-      0.1, // Near
-      1000 // Far
+      0.1,
+      1000
     );
-    this.camera.position.z = 0.1;
+    
+    // Position camera closer to video plane
+    this.camera.position.z = 1; // Move camera closer
+    this.camera.lookAt(0, 0, -1);
+    
+    console.log('Camera configured:', {
+      fov: this.camera.fov,
+      aspect: this.camera.aspect,
+      position: this.camera.position.toArray()
+    });
 
     // Create renderer
     this.renderer = new THREE.WebGLRenderer({ 
@@ -59,10 +68,23 @@ export class ARManager {
     });
     
     // Configure renderer
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.renderer.setClearColor(0x0000ff, 1); // Blue for debugging
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    
+    // Set canvas style for proper sizing
+    const canvas = this.renderer.domElement;
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.position = 'absolute';
+    canvas.style.left = '0';
+    canvas.style.top = '0';
+    
+    // Set size with pixel ratio
+    const pixelRatio = window.devicePixelRatio;
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    this.renderer.setPixelRatio(pixelRatio);
+    this.renderer.setSize(width, height, false); // false to not set canvas style
     
     // Add debug grid and axes
     const grid = new THREE.GridHelper(2, 20, 0x444444, 0x444444);
@@ -186,18 +208,29 @@ export class ARManager {
         
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
+        const pixelRatio = window.devicePixelRatio;
         
+        // Update camera
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         
-        this.renderer.setSize(width, height);
+        // Update renderer size without updating style
+        this.renderer.setSize(width, height, false);
+        this.renderer.setPixelRatio(pixelRatio);
         
         console.log('ARManager: Resized', {
           container: { width, height },
           canvas: {
-            width: this.renderer.domElement.width,
-            height: this.renderer.domElement.height
-          }
+            style: {
+              width: this.renderer.domElement.style.width,
+              height: this.renderer.domElement.style.height
+            },
+            actual: {
+              width: this.renderer.domElement.width,
+              height: this.renderer.domElement.height
+            }
+          },
+          pixelRatio
         });
       };
       
