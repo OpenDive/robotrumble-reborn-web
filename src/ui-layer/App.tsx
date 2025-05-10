@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-route
 import { AppLayout } from './components/layout/AppLayout';
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
 import { LobbyScreen } from './components/screens/LobbyScreen';
+import { RaceScreen } from './components/screens/RaceScreen';
 import './App.css';
 
 function AppContent() {
@@ -26,8 +27,7 @@ function AppContent() {
   };
 
   const handleStartRace = () => {
-    // TODO: Navigate to race screen once created
-    console.log('Start race clicked');
+    navigate('/race');
   };
 
   const handleBackToMenu = () => {
@@ -51,6 +51,7 @@ function AppContent() {
             onBack={handleBackToMenu}
           />
         } />
+        <Route path="/race" element={<RaceScreen />} />
       </Routes>
     </AppLayout>
   );

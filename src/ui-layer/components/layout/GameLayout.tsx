@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Engine } from '../../engine/core/Engine';
+import { engine } from '../../../engine-layer';
 
 interface GameLayoutProps {
   children: React.ReactNode;
@@ -7,7 +7,7 @@ interface GameLayoutProps {
     showStats?: boolean;
     debugMode?: boolean;
   };
-  onEngineReady?: (engine: Engine) => void;
+  onEngineReady?: () => void;
 }
 
 export const GameLayout: React.FC<GameLayoutProps> = ({
@@ -15,31 +15,23 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
   engineOptions = {},
   onEngineReady,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<Engine | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!canvasRef.current || engineRef.current) return;
+    if (!containerRef.current) return;
 
-    const engine = new Engine({
-      canvas: canvasRef.current,
-      ...engineOptions,
-    });
+    // Initialize engine with container
+    engine.initialize(containerRef.current);
+    onEngineReady?.();
 
-    engineRef.current = engine;
-    onEngineReady?.(engine);
-
-    return () => {
-      engine.dispose();
-      engineRef.current = null;
-    };
-  }, [engineOptions, onEngineReady]);
+    // No cleanup needed as engine is a singleton
+  }, [onEngineReady]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-game-900">
-      {/* AR Canvas */}
-      <canvas
-        ref={canvasRef}
+      {/* Engine Container */}
+      <div
+        ref={containerRef}
         className="absolute inset-0 w-full h-full"
       />
 
