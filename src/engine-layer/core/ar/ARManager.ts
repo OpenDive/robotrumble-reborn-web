@@ -6,7 +6,7 @@ import { MarkerDetector, Marker } from './MarkerDetector';
 export class ARManager {
   private static instance: ARManager;
   private scene: THREE.Scene;
-  private camera: THREE.PerspectiveCamera;
+  private camera: THREE.Camera;
   private renderer: THREE.WebGLRenderer;
   private videoSource: WebcamVideoSource;
   private videoBackground: VideoBackground;
@@ -16,8 +16,13 @@ export class ARManager {
 
   private constructor() {
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    
+    // Use orthographic camera for video background
+    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
+    
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    
     this.videoSource = new WebcamVideoSource();
     this.videoBackground = new VideoBackground();
     this.markerDetector = new MarkerDetector();
@@ -33,47 +38,60 @@ export class ARManager {
   }
 
   async initialize(container: HTMLElement): Promise<void> {
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    container.appendChild(this.renderer.domElement);
-    
-    // Initialize video source and marker detector
-    await this.videoSource.initialize();
-    await this.markerDetector.initialize();
-    
-    // Set up video background
-    this.videoBackground.initialize(this.videoSource.getVideoElement());
-    this.scene.add(this.videoBackground.getMesh());
-    
-    // Set up basic scene
-    this.setupScene();
-    
-    // Start render loop
-    this.animate();
-    
-    // Handle window resize
-    window.addEventListener('resize', this.handleResize);
+    try {
+      console.log('Initializing AR system...');
+      
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      container.appendChild(this.renderer.domElement);
+      
+      // Initialize video source and marker detector
+      console.log('Initializing video source...');
+      await this.videoSource.initialize();
+      await this.videoSource.start(); // Start the video stream
+      console.log('Video source initialized and started');
+      
+      await this.markerDetector.initialize();
+      
+      // Set up video background
+      console.log('Setting up video background...');
+      this.videoBackground.initialize(this.videoSource.getVideoElement());
+      this.scene.add(this.videoBackground.getMesh());
+      
+      // Set up basic scene
+      this.setupScene();
+      
+      // Start render loop
+      this.animate();
+      
+      // Handle window resize
+      window.addEventListener('resize', this.handleResize);
+      
+      console.log('AR system initialization complete');
+    } catch (error) {
+      console.error('Failed to initialize AR system:', error);
+      throw error;
+    }
   }
   
   private handleResize = (): void => {
     const width = window.innerWidth;
     const height = window.innerHeight;
     
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
+    // Update renderer size
     this.renderer.setSize(width, height);
+    
+    // Cast to OrthographicCamera to access its specific properties
+    const camera = this.camera as THREE.OrthographicCamera;
+    camera.left = -1;
+    camera.right = 1;
+    camera.top = 1;
+    camera.bottom = -1;
+    camera.updateProjectionMatrix();
   }
 
   private setupScene(): void {
-    // Add lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    this.scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    directionalLight.position.set(0, 1, 0);
-    this.scene.add(directionalLight);
-
-    // Position camera
-    this.camera.position.z = 5;
+    // Position camera at z=0 for orthographic view
+    this.camera.position.z = 0;
   }
 
   private animate = (): void => {

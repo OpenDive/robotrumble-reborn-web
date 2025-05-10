@@ -22,29 +22,37 @@ export class WebcamVideoSource implements VideoSource {
 
   async initialize(): Promise<void> {
     try {
+      console.log('Requesting camera access...');
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: this.dimensions.width },
           height: { ideal: this.dimensions.height },
           facingMode: 'environment' // Prefer rear camera if available
-        }
+        },
+        audio: false
       });
+      console.log('Camera access granted');
 
       this.video.srcObject = this.stream;
       
       // Wait for video metadata to load to get actual dimensions
       await new Promise<void>((resolve) => {
         this.video.onloadedmetadata = () => {
+          console.log('Video metadata loaded:', {
+            width: this.video.videoWidth,
+            height: this.video.videoHeight
+          });
           this.dimensions.width = this.video.videoWidth;
           this.dimensions.height = this.video.videoHeight;
           resolve();
         };
       });
-      await this.video.play();
       
       // Set canvas size to match video
       this.canvas.width = this.video.videoWidth;
       this.canvas.height = this.video.videoHeight;
+      
+      console.log('Video source initialized');
     } catch (error) {
       console.error('Failed to initialize webcam:', error);
       throw error;
@@ -75,8 +83,27 @@ export class WebcamVideoSource implements VideoSource {
     if (!this.stream) {
       throw new Error('Video source not initialized');
     }
-    if (this.video.paused) {
-      await this.video.play();
+    try {
+      console.log('Starting video playback...');
+      if (this.video.paused) {
+        await this.video.play();
+        console.log('Video playback started');
+      }
+      // Wait for the first frame to be available
+      await new Promise<void>((resolve) => {
+        const checkVideo = () => {
+          if (this.video.readyState >= 2) { // HAVE_CURRENT_DATA or better
+            console.log('First video frame available');
+            resolve();
+          } else {
+            requestAnimationFrame(checkVideo);
+          }
+        };
+        checkVideo();
+      });
+    } catch (error) {
+      console.error('Failed to start video:', error);
+      throw error;
     }
   }
 
