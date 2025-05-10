@@ -312,13 +312,37 @@ export class ARManager {
           this.markerStats.lastDetectionTime = now;
           this.markerStats.lastProcessedFrame = this.frameCount;
 
-          // Detect markers
+          // Log frame data for debugging
+          if (this.frameCount % 60 === 0) {
+            console.log('Frame data:', {
+              width: frame.width,
+              height: frame.height,
+              dataLength: frame.data.length,
+              hasData: frame.data.some(val => val !== 0)
+            });
+          }
+
+          // Create ImageData directly from frame data
           const imageData = new ImageData(
-            new Uint8ClampedArray(frame.data.buffer),
+            frame.data,
             frame.width,
             frame.height
           );
+
+          // Detect markers
           const markers = this.markerDetector.detectMarkers(imageData);
+
+          // Log marker detection details periodically
+          if (this.frameCount % 60 === 0) {
+            console.log('Marker detection:', {
+              imageDataValid: imageData.data.length > 0,
+              markersFound: markers.length,
+              firstMarkerIfAny: markers[0] ? {
+                id: markers[0].id,
+                corners: markers[0].corners
+              } : null
+            });
+          }
           
           // Update stats
           this.markerStats.markersDetected = markers.length;
