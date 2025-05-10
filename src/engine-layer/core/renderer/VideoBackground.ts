@@ -3,6 +3,12 @@ import * as THREE from 'three';
 /**
  * Handles rendering video as a background in ThreeJS scene
  */
+interface VideoPlaneConfig {
+  distance?: number;     // Distance from camera (default: 0.1)
+  baseHeight?: number;   // Base height in world units (default: 4.0)
+  scale?: number;        // Additional scale factor (default: 1.0)
+}
+
 export class VideoBackground {
   private mesh: THREE.Mesh;
   private texture!: THREE.VideoTexture;
@@ -37,7 +43,15 @@ export class VideoBackground {
     this.mesh.renderOrder = -1;  // Render first
   }
 
-  initialize(videoElement: HTMLVideoElement): void {
+  initialize(videoElement: HTMLVideoElement, config?: VideoPlaneConfig): void {
+    const defaultConfig: Required<VideoPlaneConfig> = {
+      distance: 0.1,    // Close to camera
+      baseHeight: 4.0,  // Moderate base height
+      scale: 1.0       // No additional scaling
+    };
+    
+    // Merge provided config with defaults
+    const finalConfig = { ...defaultConfig, ...config };
     console.log('Initializing video background...');
     
     this.videoElement = videoElement;
@@ -78,20 +92,18 @@ export class VideoBackground {
     const videoAspect = this.videoElement.videoWidth / this.videoElement.videoHeight;
     console.log('Video background aspect ratio:', videoAspect);
 
-    // Position plane close to camera
-    const distance = 0.1;
-    this.mesh.position.z = -distance;
+    // Position plane at configured distance
+    this.mesh.position.z = -finalConfig.distance;
     
-    // Calculate size based on desired coverage
-    const targetHeight = 8.0; // Much larger base height
-    const width = targetHeight * videoAspect;
-    const height = targetHeight;
+    // Calculate size based on configured height
+    const width = finalConfig.baseHeight * videoAspect;
+    const height = finalConfig.baseHeight;
     
     // Create plane geometry with calculated size
     this.mesh.geometry = new THREE.PlaneGeometry(width, height);
     
-    // Scale up for good measure
-    this.mesh.scale.set(2, 2, 1);
+    // Apply configured scale
+    this.mesh.scale.set(finalConfig.scale, finalConfig.scale, 1);
     
     console.log('Video plane configured:', {
       position: this.mesh.position.toArray(),

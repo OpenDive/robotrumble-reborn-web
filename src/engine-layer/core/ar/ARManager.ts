@@ -51,7 +51,7 @@ export class ARManager {
     );
     
     // Position camera to see full video plane
-    this.camera.position.z =1; // Close to video plane
+    this.camera.position.z = 0.5; // Close to video plane
     this.camera.lookAt(0, 0, -1);
     
     console.log('Camera configured:', {
@@ -173,9 +173,13 @@ export class ARManager {
       await this.markerDetector.initialize();
       console.log('ARManager: Marker detector initialized');
       
-      // Set up video background
+      // Set up video background with configuration
       console.log('ARManager: Setting up video background...');
-      this.videoBackground.initialize(this.videoSource.getVideoElement());
+      this.videoBackground.initialize(this.videoSource.getVideoElement(), {
+        distance: 0.1,     // Close to camera
+        baseHeight: 2.0,   // Moderate height
+        scale: 1.5        // Slight scale up
+      });
       this.scene.add(this.videoBackground.getMesh());
       console.log('ARManager: Video background added to scene', {
         mesh: {

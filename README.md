@@ -77,6 +77,32 @@ The project uses Tailwind CSS for styling, providing:
 - Camera calibration support
 - Smooth marker tracking
 
+#### Video Background Configuration
+The video background can be configured with the following parameters:
+
+```typescript
+interface VideoPlaneConfig {
+  distance?: number;     // Distance from camera (default: 0.1)
+  baseHeight?: number;   // Base height in world units (default: 4.0)
+  scale?: number;        // Additional scale factor (default: 1.0)
+}
+```
+
+Example usage in ARManager:
+```typescript
+videoBackground.initialize(videoElement, {
+  distance: 0.1,     // Closer to camera = larger view
+  baseHeight: 2.0,   // Base size of video plane
+  scale: 1.5        // Additional scaling if needed
+});
+```
+
+Tips for configuration:
+- Decrease `distance` to make video appear larger
+- Increase `baseHeight` for larger base size
+- Use `scale` for fine-tuning the final size
+- Keep `distance` > 0.1 to avoid z-fighting
+
 ### Network Stack
 - WebRTC video streaming
 - Peer connection management
