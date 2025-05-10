@@ -125,8 +125,8 @@ export class VideoBackground {
     // Create plane geometry with calculated size
     this.mesh.geometry = new THREE.PlaneGeometry(width, height);
     
-    // Apply configured scale
-    this.mesh.scale.set(finalConfig.scale, finalConfig.scale, 1);
+    // Apply configured scale and flip horizontally to correct mirroring
+    this.mesh.scale.set(-finalConfig.scale, finalConfig.scale, 1);
     
     console.log('Video plane configured:', {
       position: this.mesh.position.toArray(),
