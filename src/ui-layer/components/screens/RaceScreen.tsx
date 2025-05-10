@@ -2,6 +2,7 @@ import React from 'react';
 import { GameLayout } from '../layout/GameLayout';
 import { engine } from '../../../engine-layer';
 import { VideoSourceDebug } from '../debug/VideoSourceDebug';
+import { ARDebugPanel } from '../debug/ARDebugPanel';
 import { isDebugEnabled } from '../../../shared/config/env'
 
 export const RaceScreen: React.FC = () => {
@@ -25,7 +26,10 @@ export const RaceScreen: React.FC = () => {
       </div>
       {/* Debug Tools */}
       {isDebugEnabled && (
-        <VideoSourceDebug />
+        <>
+          <VideoSourceDebug />
+          <ARDebugPanel />
+        </>
       )}
     </GameLayout>
   );

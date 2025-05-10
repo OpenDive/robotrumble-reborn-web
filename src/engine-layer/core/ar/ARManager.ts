@@ -17,6 +17,14 @@ export class ARManager {
   private markerMeshes!: Map<number, THREE.Mesh>;
   private frameCount: number = 0;
   private debugCube!: THREE.Mesh;
+  private markerStats = {
+    lastDetectionTime: 0,
+    detectionFPS: 0,
+    markersDetected: 0,
+    lastProcessedFrame: 0,
+    totalDetections: 0,
+    errors: 0
+  };
 
   private constructor() {
     console.log('ARManager: Constructor called');
@@ -295,14 +303,44 @@ export class ARManager {
     if (this.frameCount % 3 === 0) {
       const frame = this.videoSource.getCurrentFrame();
       if (frame) {
-        // Convert frame to ImageData for marker detection
-        const imageData = new ImageData(
-          new Uint8ClampedArray(frame.data.buffer),
-          frame.width,
-          frame.height
-        );
-        const markers = this.markerDetector.detectMarkers(imageData);
-        this.updateMarkerVisuals(markers);
+        try {
+          // Update detection stats
+          const now = performance.now();
+          if (this.markerStats.lastDetectionTime > 0) {
+            this.markerStats.detectionFPS = 1000 / (now - this.markerStats.lastDetectionTime);
+          }
+          this.markerStats.lastDetectionTime = now;
+          this.markerStats.lastProcessedFrame = this.frameCount;
+
+          // Detect markers
+          const imageData = new ImageData(
+            new Uint8ClampedArray(frame.data.buffer),
+            frame.width,
+            frame.height
+          );
+          const markers = this.markerDetector.detectMarkers(imageData);
+          
+          // Update stats
+          this.markerStats.markersDetected = markers.length;
+          this.markerStats.totalDetections += markers.length;
+
+          // Update visualizations
+          this.updateMarkerVisuals(markers);
+
+          // Log stats periodically
+          if (this.frameCount % 60 === 0) {
+            console.log('Marker detection stats:', {
+              fps: this.markerStats.detectionFPS.toFixed(1),
+              currentMarkers: this.markerStats.markersDetected,
+              totalDetections: this.markerStats.totalDetections,
+              errors: this.markerStats.errors,
+              frameSkip: this.frameCount - this.markerStats.lastProcessedFrame
+            });
+          }
+        } catch (error) {
+          this.markerStats.errors++;
+          console.error('Error in marker detection:', error);
+        }
       }
     }
     this.frameCount++;
@@ -316,30 +354,79 @@ export class ARManager {
    */
   getVideoSource(): IVideoSource {
     return this.videoSource;
-  };
+  }
+
+  getMarkerStats() {
+    return {
+      ...this.markerStats,
+      fps: this.markerStats.detectionFPS.toFixed(1),
+      frameSkip: this.frameCount - this.markerStats.lastProcessedFrame
+    };
+  }
   
   private updateMarkerVisuals(markers: Marker[]): void {
-    // Remove old markers
-    this.markerMeshes.forEach((mesh) => {
-      this.scene.remove(mesh);
-    });
-    this.markerMeshes.clear();
+    // Remove old marker meshes that are no longer detected
+    for (const [id, mesh] of this.markerMeshes) {
+      if (!markers.find(m => m.id === id)) {
+        this.scene.remove(mesh);
+        this.markerMeshes.delete(id);
+      }
+    }
     
-    // Add new markers
+    // Update or create marker visualizations
     markers.forEach((marker) => {
-      const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-      const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
-      const mesh = new THREE.Mesh(geometry, material);
+      let mesh = this.markerMeshes.get(marker.id);
       
-      // Position mesh at marker center
-      mesh.position.set(
-        marker.center.x / this.videoSource.getDimensions().width * 2 - 1,
-        -(marker.center.y / this.videoSource.getDimensions().height * 2 - 1),
-        0
-      );
+      if (!mesh) {
+        // Create new marker visualization
+        const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.01); // Thinner box
+        const material = new THREE.MeshBasicMaterial({
+          color: 0xff0000,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.7
+        });
+        mesh = new THREE.Mesh(geometry, material);
+        
+        // Add axes helper to show orientation
+        const axes = new THREE.AxesHelper(0.15);
+        mesh.add(axes);
+        
+        // Add corner visualization
+        const cornerGeometry = new THREE.SphereGeometry(0.01);
+        const cornerMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        for (let i = 0; i < 4; i++) {
+          const corner = new THREE.Mesh(cornerGeometry, cornerMaterial);
+          mesh.add(corner);
+          corner.name = `corner${i}`;
+        }
+        
+        this.markerMeshes.set(marker.id, mesh);
+        this.scene.add(mesh);
+      }
       
-      this.scene.add(mesh);
-      this.markerMeshes.set(marker.id, mesh);
+      // Update marker position and orientation
+      const videoWidth = this.videoSource.getVideoElement().videoWidth;
+      const videoHeight = this.videoSource.getVideoElement().videoHeight;
+      
+      // Update main marker position
+      const centerX = (marker.center.x / videoWidth) * 2 - 1;
+      const centerY = -(marker.center.y / videoHeight) * 2 + 1;
+      mesh.position.set(centerX, centerY, -0.5);
+      
+      // Update corner positions
+      marker.corners.forEach((corner, i) => {
+        const cornerX = (corner.x / videoWidth) * 2 - 1;
+        const cornerY = -(corner.y / videoHeight) * 2 + 1;
+        const cornerMesh = mesh.getObjectByName(`corner${i}`) as THREE.Mesh;
+        if (cornerMesh) {
+          cornerMesh.position.set(
+            cornerX - centerX,
+            cornerY - centerY,
+            0
+          );
+        }
+      });
     });
   }
 
