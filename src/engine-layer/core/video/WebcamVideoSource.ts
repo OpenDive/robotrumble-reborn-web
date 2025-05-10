@@ -1,25 +1,30 @@
-/**
- * Interface for video sources used in AR system
- */
-export interface VideoSource {
-  initialize(): Promise<void>;
-  start(): Promise<void>;
-  stop(): void;
-  getVideoElement(): HTMLVideoElement;
-  isStreaming(): boolean;
-  getDimensions(): { width: number; height: number };
-}
+import { IVideoSource, VideoStats, VideoConfig, VideoConnectionState } from './types';
 
 /**
  * Implementation of VideoSource using the device's webcam
  */
-export class WebcamVideoSource implements VideoSource {
+export class WebcamVideoSource implements IVideoSource {
   private video: HTMLVideoElement;
   private stream: MediaStream | null;
   private dimensions: { width: number; height: number };
+  private lastFrameTime: number = 0;
+  private fps: number = 0;
+  private connectionState: VideoConnectionState = 'disconnected';
+  private lastError?: string;
   private isActive: boolean;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+
+  private setupFPSCalculation(): void {
+    // Update FPS every second
+    setInterval(() => {
+      const now = performance.now();
+      if (this.lastFrameTime) {
+        this.fps = 1000 / (now - this.lastFrameTime);
+      }
+      this.lastFrameTime = now;
+    }, 1000);
+  }
 
   constructor() {
     // Create video element for THREE.js texture
@@ -56,10 +61,22 @@ export class WebcamVideoSource implements VideoSource {
     // Set initial canvas size
     this.canvas.width = this.dimensions.width;
     this.canvas.height = this.dimensions.height;
+
+    // Setup FPS calculation
+    this.setupFPSCalculation();
   }
 
-  async initialize(): Promise<void> {
+  async initialize(config?: VideoConfig): Promise<void> {
     try {
+      this.connectionState = 'connecting';
+      
+      // Apply config if provided
+      if (config?.webcam) {
+        this.dimensions = {
+          width: config.webcam.width || this.dimensions.width,
+          height: config.webcam.height || this.dimensions.height
+        };
+      }
       console.log('WebcamVideoSource: Starting initialization...');
       console.log('WebcamVideoSource: Requesting camera access...', {
         requested: {
@@ -132,20 +149,28 @@ export class WebcamVideoSource implements VideoSource {
     return this.video;
   }
 
+  // Get current frame for marker detection
   getCurrentFrame(): ImageData | null {
-    if (this.video.readyState === this.video.HAVE_ENOUGH_DATA) {
-      this.ctx.drawImage(this.video, 0, 0);
-      return this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    if (!this.isActive || this.video.readyState !== this.video.HAVE_ENOUGH_DATA) {
+      return null;
     }
-    return null;
+
+    this.ctx.drawImage(this.video, 0, 0);
+    return this.ctx.getImageData(0, 0, this.dimensions.width, this.dimensions.height);
   }
 
+  /**
+   * @deprecated Use getDimensions() instead
+   */
   getWidth(): number {
-    return this.video.videoWidth;
+    return this.dimensions.width;
   }
 
+  /**
+   * @deprecated Use getDimensions() instead
+   */
   getHeight(): number {
-    return this.video.videoHeight;
+    return this.dimensions.height;
   }
 
   async start(): Promise<void> {
@@ -177,7 +202,7 @@ export class WebcamVideoSource implements VideoSource {
     }
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     // Stop all video tracks
     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
@@ -189,9 +214,20 @@ export class WebcamVideoSource implements VideoSource {
     this.isActive = false;
   }
 
-  isStreaming(): boolean {
-    return this.isActive && this.stream !== null && !this.video.paused;
+  isReady(): boolean {
+    return this.isActive && this.connectionState === 'connected';
   }
+
+  getStats(): VideoStats {
+    return {
+      latency: 0, // Local camera has negligible latency
+      fps: this.fps,
+      connectionState: this.connectionState,
+      lastError: this.lastError
+    };
+  }
+
+  // Use isReady() instead of isStreaming() for consistency with IVideoSource interface
 
   getDimensions(): { width: number; height: number } {
     return { ...this.dimensions };
