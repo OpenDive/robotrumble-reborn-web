@@ -99,6 +99,54 @@ videoBackground.initialize(videoElement, {
 
 Tips for configuration:
 - Decrease `distance` to make video appear larger
+
+## Debug Tools
+
+The application includes debug tools to help with development and testing. These tools provide real-time information about video sources, AR marker detection, and system performance.
+
+### Enabling Debug Mode
+
+Debug tools can be enabled in three ways:
+
+1. **Development Mode (Automatic)**
+   - Debug tools are automatically enabled when running in development mode (`npm run dev`)
+
+2. **Environment Variable**
+   - Create a `.env.local` file in the project root:
+     ```
+     VITE_DEBUG_TOOLS_ENABLED=true
+     ```
+   - Or set the variable before running:
+     ```bash
+     VITE_DEBUG_TOOLS_ENABLED=true npm run dev
+     ```
+
+3. **Browser Storage**
+   - Open browser console and run:
+     ```javascript
+     localStorage.setItem('DEBUG_TOOLS_ENABLED', 'true');
+     ```
+   - Refresh the page
+
+### Available Debug Tools
+
+1. **Video Source Debug Panel**
+   - Video source status and controls
+   - Resolution and frame rate information
+   - Source switching options
+
+2. **AR Debug Panel**
+   - Marker detection statistics
+   - Detection FPS counter
+   - Current and total markers detected
+   - Error tracking
+   - Frame skip monitoring
+
+3. **Visual Debugging**
+   - Wireframe marker visualization
+   - Corner point indicators
+   - Axes helpers for orientation
+   - Grid overlay for spatial reference
 - Increase `baseHeight` for larger base size
 - Use `scale` for fine-tuning the final size
 - Keep `distance` > 0.1 to avoid z-fighting
