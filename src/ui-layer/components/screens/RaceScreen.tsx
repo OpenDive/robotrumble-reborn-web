@@ -1,6 +1,8 @@
 import React from 'react';
 import { GameLayout } from '../layout/GameLayout';
 import { engine } from '../../../engine-layer';
+import { VideoSourceDebug } from '../debug/VideoSourceDebug';
+import { isDebugEnabled } from '../../../shared/config/env'
 
 export const RaceScreen: React.FC = () => {
   const handleEngineReady = () => {
@@ -21,11 +23,10 @@ export const RaceScreen: React.FC = () => {
           Lap: 1/3
         </div>
       </div>
-      <div className="absolute bottom-4 left-4 text-white">
-        <div className="bg-black/50 p-2 rounded">
-          Connection: Good
-        </div>
-      </div>
+      {/* Debug Tools */}
+      {isDebugEnabled && (
+        <VideoSourceDebug />
+      )}
     </GameLayout>
   );
 };

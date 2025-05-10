@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { WebcamVideoSource } from '../video/WebcamVideoSource';
+import { VideoSourceFactory } from '../video/VideoSourceFactory';
 import { VideoBackground } from '../renderer/VideoBackground';
+import { IVideoSource, VideoConfig } from '../video/types';
 import { MarkerDetector, Marker } from './MarkerDetector';
 
 export class ARManager {
@@ -9,7 +10,8 @@ export class ARManager {
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
   private renderer!: THREE.WebGLRenderer;
-  private videoSource!: WebcamVideoSource;
+  private videoSource!: IVideoSource;
+  private videoSourceFactory: VideoSourceFactory;
   private videoBackground!: VideoBackground;
   private markerDetector!: MarkerDetector;
   private markerMeshes!: Map<number, THREE.Mesh>;
@@ -18,6 +20,7 @@ export class ARManager {
 
   private constructor() {
     console.log('ARManager: Constructor called');
+    this.videoSourceFactory = VideoSourceFactory.getInstance();
   }
 
   static getInstance(): ARManager {
@@ -111,7 +114,6 @@ export class ARManager {
     this.scene.add(ambientLight);
     
     // Initialize components
-    this.videoSource = new WebcamVideoSource();
     this.videoBackground = new VideoBackground();
     this.markerDetector = new MarkerDetector();
     this.markerMeshes = new Map();
@@ -156,9 +158,14 @@ export class ARManager {
       
       // Initialize video source and marker detector
       console.log('ARManager: Initializing video source...');
-      await this.videoSource.initialize();
-      console.log('ARManager: Video source initialized');
-      
+      const videoConfig: VideoConfig = {
+        sourceType: 'webcam',
+        webcam: {
+          width: 1280,
+          height: 720
+        }
+      };
+      this.videoSource = await this.videoSourceFactory.createSource(videoConfig);
       await this.videoSource.start(); // Start the video stream
       console.log('ARManager: Video stream started', {
         video: {
@@ -307,7 +314,7 @@ export class ARManager {
   /**
    * Get the video source for external use
    */
-  getVideoSource(): WebcamVideoSource {
+  getVideoSource(): IVideoSource {
     return this.videoSource;
   };
   
@@ -326,8 +333,8 @@ export class ARManager {
       
       // Position mesh at marker center
       mesh.position.set(
-        marker.center.x / this.videoSource.getWidth() * 2 - 1,
-        -(marker.center.y / this.videoSource.getHeight() * 2 - 1),
+        marker.center.x / this.videoSource.getDimensions().width * 2 - 1,
+        -(marker.center.y / this.videoSource.getDimensions().height * 2 - 1),
         0
       );
       

@@ -96,16 +96,18 @@ export class WebcamVideoSource implements IVideoSource {
 
       // Set video source
       this.video.srcObject = this.stream;
-      console.log('WebcamVideoSource: Set video srcObject', { stream: this.stream });
-
       console.log('WebcamVideoSource: Camera access granted', {
         tracks: this.stream.getVideoTracks().map(track => ({
           label: track.label,
           settings: track.getSettings()
-        }))
+        })),
+        video: {
+          srcObject: this.video.srcObject ? 'set' : 'null',
+          readyState: this.video.readyState,
+          paused: this.video.paused,
+          currentTime: this.video.currentTime
+        }
       });
-
-      this.video.srcObject = this.stream;
       
       // Wait for video metadata to load
       await new Promise<void>((resolve) => {
@@ -178,27 +180,60 @@ export class WebcamVideoSource implements IVideoSource {
       throw new Error('Video source not initialized');
     }
     try {
-      console.log('Starting video playback...');
-      if (this.video.paused) {
+      this.connectionState = 'connecting';
+      console.log('Starting video playback...', {
+        readyState: this.video.readyState,
+        paused: this.video.paused,
+        currentTime: this.video.currentTime,
+        videoWidth: this.video.videoWidth,
+        videoHeight: this.video.videoHeight
+      });
+
+      // Always try to play, even if not paused (might be in ended state)
+      try {
         await this.video.play();
         console.log('Video playback started');
+      } catch (error: unknown) {
+        const playError = error instanceof Error ? error : new Error('Unknown video playback error');
+        console.error('Failed to start video playback:', playError);
+        this.connectionState = 'error';
+        this.lastError = playError.message;
+        throw playError;
       }
+
       // Wait for the first frame to be available
-      await new Promise<void>((resolve) => {
+      await new Promise<void>((resolve, reject) => {
+        let attempts = 0;
+        const maxAttempts = 50; // 50 frames = ~1 second at 60fps
+
         const checkVideo = () => {
+          attempts++;
           if (this.video.readyState >= 2) { // HAVE_CURRENT_DATA or better
-            console.log('First video frame available');
+            console.log('First video frame available', {
+              readyState: this.video.readyState,
+              videoWidth: this.video.videoWidth,
+              videoHeight: this.video.videoHeight
+            });
             this.isActive = true;
+            this.connectionState = 'connected';
             resolve();
+          } else if (attempts >= maxAttempts) {
+            const error = new Error('Timeout waiting for video frame');
+            this.connectionState = 'error';
+            this.lastError = error.message;
+            reject(error);
           } else {
             requestAnimationFrame(checkVideo);
           }
         };
         checkVideo();
       });
-    } catch (error) {
-      console.error('Failed to start video:', error);
-      throw error;
+    } catch (error: unknown) {
+      const startError = error instanceof Error ? error : new Error('Unknown video start error');
+      console.error('Failed to start video:', startError);
+      this.connectionState = 'error';
+      this.lastError = startError.message;
+      throw startError;
     }
   }
 

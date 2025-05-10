@@ -1,6 +1,8 @@
 import { networkManager } from './core/NetworkManager';
 import { arManager } from './core/ar/ARManager';
 import { detectionManager } from './core/DetectionManager';
+import { VideoSourceFactory } from './core/video/VideoSourceFactory';
+import { VideoConfig } from './core/video/types';
 
 // This will be our main engine class that the UI layer interacts with
 export class GameEngine {
@@ -30,15 +32,29 @@ export class GameEngine {
       }
 
       console.log('Initializing engine...');
-      // Initialize AR system
+
+      // Initialize video source first
+      const videoConfig: VideoConfig = {
+        sourceType: 'webcam',
+        webcam: {
+          width: 1280,
+          height: 720
+        }
+      };
+      const videoSourceFactory = VideoSourceFactory.getInstance();
+      await videoSourceFactory.createSource(videoConfig);
+      
+      // Initialize AR system with video source
       await arManager.initialize(container);
       this.currentContainer = container;
       console.log('AR system initialized');
       
-      // Set up network connections
-      await networkManager.setupVideoStream();
-      await networkManager.setupControlChannel();
-      console.log('Network connections established');
+      // Set up network connections only if using WebRTC
+      if (videoConfig.sourceType === 'webrtc') {
+        await networkManager.setupVideoStream();
+        await networkManager.setupControlChannel();
+        console.log('Network connections established');
+      }
 
       this.initialized = true;
     } catch (error) {
@@ -55,13 +71,14 @@ export class GameEngine {
   async startRace(): Promise<void> {
     try {
       // Ensure video is playing
-      const videoSource = arManager.getVideoSource();
-      if (!videoSource.isStreaming()) {
-        await videoSource.start();
+      const source = arManager.getVideoSource();
+      const isVideoStreaming = source?.getStats().connectionState === 'connected' || false;
+      if (!isVideoStreaming) {
+        await source.start();
       }
 
       // Start marker detection
-      const frame = videoSource.getCurrentFrame();
+      const frame = source.getCurrentFrame();
       if (frame) {
         this.processVideoFrame(frame);
       }

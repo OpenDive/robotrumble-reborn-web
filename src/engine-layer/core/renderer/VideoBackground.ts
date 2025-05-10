@@ -66,14 +66,18 @@ export class VideoBackground {
       playing: !this.videoElement.paused
     });
 
+    // Create video texture with auto-update disabled (we'll handle updates manually)
     this.texture = new THREE.VideoTexture(this.videoElement);
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.magFilter = THREE.LinearFilter;
-    this.texture.format = THREE.RGBAFormat;  // Use RGBA for better compatibility
+    this.texture.format = THREE.RGBFormat;  // Use RGB for video (no alpha needed)
     this.texture.colorSpace = THREE.SRGBColorSpace;  // Use sRGB color space
     this.texture.generateMipmaps = false;  // Not needed for video
     this.texture.wrapS = THREE.ClampToEdgeWrapping;
     this.texture.wrapT = THREE.ClampToEdgeWrapping;
+    
+    // Force initial texture update
+    this.texture.needsUpdate = true;
 
     console.log('VideoBackground: Texture created', {
       format: this.texture.format,
@@ -84,13 +88,32 @@ export class VideoBackground {
       }
     });
     
-    // Update material
+    // Update material with video texture
     this.material.map = this.texture;
     this.material.needsUpdate = true;
-
+    
+    // Set material properties for video display
+    this.material.toneMapped = false; // Preserve video colors
+    this.material.side = THREE.DoubleSide; // Visible from both sides
+    this.material.depthTest = false; // Always render on top
+    this.material.depthWrite = false; // Don't write to depth buffer
+    
     // Calculate plane size to fill view
-    const videoAspect = this.videoElement.videoWidth / this.videoElement.videoHeight;
-    console.log('Video background aspect ratio:', videoAspect);
+    const videoWidth = this.videoElement.videoWidth || 1280; // Fallback if not ready
+    const videoHeight = this.videoElement.videoHeight || 720;
+    const videoAspect = videoWidth / videoHeight;
+    
+    console.log('Video background dimensions:', {
+      width: videoWidth,
+      height: videoHeight,
+      aspect: videoAspect,
+      materialState: {
+        map: this.material.map ? 'set' : 'null',
+        needsUpdate: this.material.needsUpdate,
+        toneMapped: this.material.toneMapped,
+        depthTest: this.material.depthTest
+      }
+    });
 
     // Position plane at configured distance
     this.mesh.position.z = -finalConfig.distance;
@@ -144,12 +167,21 @@ export class VideoBackground {
    * Update the background to match current video frame
    */
   update(): void {
-    if (this.videoElement.readyState >= 2) { // HAVE_CURRENT_DATA or better
+    // Only update texture if we have a valid video frame
+    if (this.videoElement.readyState >= this.videoElement.HAVE_CURRENT_DATA) {
       this.texture.needsUpdate = true;
       console.log('VideoBackground: Updated texture', {
         videoTime: this.videoElement.currentTime,
         readyState: this.videoElement.readyState,
-        playing: !this.videoElement.paused
+        playing: !this.videoElement.paused,
+        width: this.videoElement.videoWidth,
+        height: this.videoElement.videoHeight
+      });
+    } else {
+      console.warn('VideoBackground: Waiting for video data...', {
+        readyState: this.videoElement.readyState,
+        currentTime: this.videoElement.currentTime,
+        paused: this.videoElement.paused
       });
     }
   }
