@@ -37,9 +37,23 @@ export class WebRTCManager {
         return this.videoElement;
     }
     
-    public async connect(signalData: string) {
-        // Handle signaling and connection establishment
-        // This will be implemented based on your signaling server
+    public async connect(signalData: RTCSessionDescriptionInit) {
+        if (!this.peerConnection) return;
+
+        try {
+            // Set the remote description from signaling data
+            await this.peerConnection.setRemoteDescription(new RTCSessionDescription(signalData));
+
+            // Create and set local description
+            const answer = await this.peerConnection.createAnswer();
+            await this.peerConnection.setLocalDescription(answer);
+
+            // Return the answer to be sent back to the signaling server
+            return answer;
+        } catch (error) {
+            console.error('WebRTC connection failed:', error);
+            throw error;
+        }
     }
     
     public dispose() {

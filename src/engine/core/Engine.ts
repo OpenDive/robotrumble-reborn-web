@@ -1,36 +1,24 @@
 import { WebRTCManager } from '../network/WebRTCManager';
 import { ARManager } from '../ar/ARManager';
-import { Scene, PerspectiveCamera, WebGLRenderer } from 'three';
+import { SceneManager } from '../renderer/SceneManager';
+import { CameraManager } from '../renderer/CameraManager';
 
 export class Engine {
-    private scene: Scene;
-    private camera: PerspectiveCamera;
-    private renderer: WebGLRenderer;
+    private sceneManager: SceneManager;
+    private cameraManager: CameraManager;
     private webrtc: WebRTCManager;
     private ar: ARManager;
     private isRunning: boolean = false;
     
     constructor(container: HTMLElement) {
-        // Initialize three.js
-        this.scene = new Scene();
-        this.camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.renderer = new WebGLRenderer({ antialias: true });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        container.appendChild(this.renderer.domElement);
-        
         // Initialize managers
+        this.sceneManager = new SceneManager(container);
+        this.cameraManager = new CameraManager();
         this.webrtc = new WebRTCManager();
-        this.ar = new ARManager(this.scene, this.camera);
-        
-        // Handle window resize
-        window.addEventListener('resize', this.onWindowResize.bind(this));
+        this.ar = new ARManager(this.sceneManager.getScene(), this.cameraManager.getCamera());
     }
     
-    private onWindowResize(): void {
-        this.camera.aspect = window.innerWidth / window.innerHeight;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-    }
+
     
     public start(): void {
         if (!this.isRunning) {
@@ -48,18 +36,19 @@ export class Engine {
         
         requestAnimationFrame(this.animate.bind(this));
         
-        // Update AR tracking
-        this.ar.update();
+        // Update components
+        this.cameraManager.update();
+        this.ar.update(this.webrtc.getVideoElement());
         
         // Render scene
-        this.renderer.render(this.scene, this.camera);
+        this.sceneManager.render(this.cameraManager.getCamera());
     }
     
     public dispose(): void {
         this.stop();
-        window.removeEventListener('resize', this.onWindowResize.bind(this));
         this.webrtc.dispose();
         this.ar.dispose();
-        this.renderer.dispose();
+        this.sceneManager.dispose();
+        this.cameraManager.dispose();
     }
 }
