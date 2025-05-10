@@ -51,14 +51,16 @@ export function VideoSourceDebug() {
           Webcam
         </button>
         <button
-          className={`px-3 py-1 rounded ${currentSource === 'test-video' ? 'bg-blue-600' : 'bg-gray-700'}`}
-          onClick={() => handleSourceChange('test-video')}
+          className={`px-3 py-1 rounded ${currentSource === 'test-video' ? 'bg-blue-600' : 'bg-gray-700'} opacity-50 cursor-not-allowed`}
+          disabled
+          title="Coming soon"
         >
           Test Video
         </button>
         <button
-          className={`px-3 py-1 rounded ${currentSource === 'webrtc' ? 'bg-blue-600' : 'bg-gray-700'}`}
-          onClick={() => handleSourceChange('webrtc')}
+          className={`px-3 py-1 rounded ${currentSource === 'webrtc' ? 'bg-blue-600' : 'bg-gray-700'} opacity-50 cursor-not-allowed`}
+          disabled
+          title="Coming soon"
         >
           WebRTC
         </button>
