@@ -170,13 +170,13 @@ export class VideoBackground {
     // Only update texture if we have a valid video frame
     if (this.videoElement.readyState >= this.videoElement.HAVE_CURRENT_DATA) {
       this.texture.needsUpdate = true;
-      console.log('VideoBackground: Updated texture', {
-        videoTime: this.videoElement.currentTime,
-        readyState: this.videoElement.readyState,
-        playing: !this.videoElement.paused,
-        width: this.videoElement.videoWidth,
-        height: this.videoElement.videoHeight
-      });
+      // console.log('VideoBackground: Updated texture', {
+      //   videoTime: this.videoElement.currentTime,
+      //   readyState: this.videoElement.readyState,
+      //   playing: !this.videoElement.paused,
+      //   width: this.videoElement.videoWidth,
+      //   height: this.videoElement.videoHeight
+      // });
     } else {
       console.warn('VideoBackground: Waiting for video data...', {
         readyState: this.videoElement.readyState,
