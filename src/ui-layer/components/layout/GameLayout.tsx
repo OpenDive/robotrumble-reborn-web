@@ -21,8 +21,16 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
     if (!containerRef.current) return;
 
     // Initialize engine with container
-    engine.initialize(containerRef.current);
-    onEngineReady?.();
+    const initEngine = async () => {
+      try {
+        await engine.initialize(containerRef.current!);
+        onEngineReady?.();
+      } catch (error) {
+        console.error('Failed to initialize engine:', error);
+      }
+    };
+
+    initEngine();
 
     // No cleanup needed as engine is a singleton
   }, [onEngineReady]);

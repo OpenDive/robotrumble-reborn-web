@@ -1,5 +1,4 @@
-import { VideoSource } from '../video/VideoSource';
-import * as jsAruco from 'js-aruco';
+import jsAruco from 'js-aruco';
 
 export interface Marker {
   id: number;
@@ -12,19 +11,10 @@ export interface Marker {
  */
 export class MarkerDetector {
   private detector: jsAruco.Detector;
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
-  private imageData: ImageData;
 
   constructor() {
-    this.canvas = document.createElement('canvas');
-    const ctx = this.canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('Failed to get 2D context');
-    }
-    this.ctx = ctx;
-    this.imageData = new ImageData(1, 1); // Placeholder until initialized
-    this.detector = new jsAruco.Detector(); // Initialize detector in constructor
+    // @ts-ignore - js-aruco types are not properly defined
+    this.detector = new jsAruco.AR.Detector();
   }
 
   async initialize(): Promise<void> {
@@ -35,29 +25,9 @@ export class MarkerDetector {
   /**
    * Detect markers in the current video frame
    */
-  detectMarkers(videoSource: VideoSource): Marker[] {
-    if (!videoSource.isStreaming()) {
-      return [];
-    }
-
-    const video = videoSource.getVideoElement();
-    const { width, height } = videoSource.getDimensions();
-
-    // Resize canvas if needed
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width;
-      this.canvas.height = height;
-      this.imageData = new ImageData(width, height);
-    }
-
-    // Draw current video frame to canvas
-    this.ctx.drawImage(video, 0, 0);
-
-    // Get image data for marker detection
-    this.imageData = this.ctx.getImageData(0, 0, width, height);
-    
-    // Detect markers
-    const markers = this.detector.detect(this.imageData);
+  detectMarkers(imageData: ImageData): Marker[] {
+    // Detect markers directly from the provided ImageData
+    const markers = this.detector.detect(imageData);
 
     // Convert to our marker format
     return markers.map((marker: jsAruco.DetectedMarker) => ({

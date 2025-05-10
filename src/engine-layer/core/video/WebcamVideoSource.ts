@@ -6,12 +6,18 @@ import { VideoSource } from './VideoSource';
 export class WebcamVideoSource implements VideoSource {
   private video: HTMLVideoElement;
   private stream: MediaStream | null = null;
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
   private dimensions = { width: 1280, height: 720 }; // Default HD resolution
 
   constructor() {
     this.video = document.createElement('video');
     this.video.playsInline = true; // Important for iOS
     this.video.muted = true;
+    this.canvas = document.createElement('canvas');
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) throw new Error('Failed to get 2D context');
+    this.ctx = ctx;
   }
 
   async initialize(): Promise<void> {
@@ -34,6 +40,11 @@ export class WebcamVideoSource implements VideoSource {
           resolve();
         };
       });
+      await this.video.play();
+      
+      // Set canvas size to match video
+      this.canvas.width = this.video.videoWidth;
+      this.canvas.height = this.video.videoHeight;
     } catch (error) {
       console.error('Failed to initialize webcam:', error);
       throw error;
@@ -44,11 +55,29 @@ export class WebcamVideoSource implements VideoSource {
     return this.video;
   }
 
+  getCurrentFrame(): ImageData | null {
+    if (this.video.readyState === this.video.HAVE_ENOUGH_DATA) {
+      this.ctx.drawImage(this.video, 0, 0);
+      return this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    }
+    return null;
+  }
+
+  getWidth(): number {
+    return this.video.videoWidth;
+  }
+
+  getHeight(): number {
+    return this.video.videoHeight;
+  }
+
   async start(): Promise<void> {
     if (!this.stream) {
       throw new Error('Video source not initialized');
     }
-    await this.video.play();
+    if (this.video.paused) {
+      await this.video.play();
+    }
   }
 
   stop(): void {

@@ -1,31 +1,38 @@
 import * as THREE from 'three';
-import { VideoSource } from '../video/VideoSource';
 
 /**
  * Handles rendering video as a background in ThreeJS scene
  */
 export class VideoBackground {
   private mesh: THREE.Mesh;
-  private texture: THREE.VideoTexture;
+  private texture!: THREE.VideoTexture;
   private material: THREE.MeshBasicMaterial;
+  private videoElement!: HTMLVideoElement;
 
-  constructor(videoSource: VideoSource) {
-    // Create video texture
-    this.texture = new THREE.VideoTexture(videoSource.getVideoElement());
-    this.texture.minFilter = THREE.LinearFilter;
-    this.texture.magFilter = THREE.LinearFilter;
-
-    // Create material
-    this.material = new THREE.MeshBasicMaterial({
-      map: this.texture,
-      side: THREE.DoubleSide
-    });
-
+  constructor() {
     // Create plane geometry that fills the view
     const geometry = new THREE.PlaneGeometry(2, 2);
     
+    // Create empty material (will be updated in initialize)
+    this.material = new THREE.MeshBasicMaterial({
+      side: THREE.DoubleSide
+    });
+    
     // Create mesh
     this.mesh = new THREE.Mesh(geometry, this.material);
+  }
+
+  initialize(videoElement: HTMLVideoElement): void {
+    this.videoElement = videoElement;
+    
+    // Create video texture
+    this.texture = new THREE.VideoTexture(this.videoElement);
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+    
+    // Update material with texture
+    this.material.map = this.texture;
+    this.material.needsUpdate = true;
   }
 
   /**

@@ -14,13 +14,20 @@ export class GameEngine {
     return GameEngine.instance;
   }
 
-  initialize(container: HTMLElement): void {
-    // Initialize AR system
-    arManager.initialize(container);
-    
-    // Set up network connections
-    networkManager.setupVideoStream();
-    networkManager.setupControlChannel();
+  async initialize(container: HTMLElement): Promise<void> {
+    try {
+      // Initialize AR system
+      await arManager.initialize(container);
+      console.log('AR system initialized');
+      
+      // Set up network connections
+      await networkManager.setupVideoStream();
+      await networkManager.setupControlChannel();
+      console.log('Network connections established');
+    } catch (error) {
+      console.error('Failed to initialize engine:', error);
+      throw error;
+    }
   }
 
   // Control methods that UI can call
@@ -35,7 +42,6 @@ export class GameEngine {
   // Frame processing
   processVideoFrame(frame: ImageData): void {
     detectionManager.processFrame(frame);
-    arManager.updateAROverlay(frame);
   }
 }
 
