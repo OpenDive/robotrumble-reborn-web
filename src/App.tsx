@@ -1,35 +1,67 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { AppLayout } from './components/layout/AppLayout';
+import { WelcomeScreen } from './components/screens/WelcomeScreen';
+import { LobbyScreen } from './components/screens/LobbyScreen';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+function AppContent() {
+  const navigate = useNavigate();
+
+  const handleQuickPlay = () => {
+    navigate('/lobby');
+  };
+
+  const handleCustomGame = () => {
+    navigate('/lobby');
+  };
+
+  const handleSettings = () => {
+    // TODO: Navigate to settings screen once created
+    console.log('Settings clicked');
+  };
+
+  const handleTutorial = () => {
+    // TODO: Navigate to tutorial screen once created
+    console.log('Tutorial clicked');
+  };
+
+  const handleStartRace = () => {
+    // TODO: Navigate to race screen once created
+    console.log('Start race clicked');
+  };
+
+  const handleBackToMenu = () => {
+    navigate('/');
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <AppLayout>
+      <Routes>
+        <Route path="/" element={
+          <WelcomeScreen 
+            onQuickPlay={handleQuickPlay}
+            onCustomGame={handleCustomGame}
+            onSettings={handleSettings}
+            onTutorial={handleTutorial}
+          />
+        } />
+        <Route path="/lobby" element={
+          <LobbyScreen 
+            onStartRace={handleStartRace}
+            onBack={handleBackToMenu}
+          />
+        } />
+      </Routes>
+    </AppLayout>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppContent />
+    </Router>
+  );
 }
 
 export default App
