@@ -1,54 +1,104 @@
-# React + TypeScript + Vite
+# RobotRumble Reborn Web Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A browser-based Mixed Reality (MR) racing game client that allows users to control physical Unmanned Ground Vehicles (UGVs) through an augmented reality interface.
 
-Currently, two official plugins are available:
+## Technology Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Frontend Framework**: React with TypeScript
+- **Build Tool**: Vite
+- **3D Rendering**: three.js
+- **AR Processing**: js-aruco for marker detection
+- **Real-time Communication**: WebRTC, WebSocket
+- **Node Version**: v22.15.0 (LTS)
+- **Package Manager**: npm v10.9.2
 
-## Expanding the ESLint configuration
+## Project Structure
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```
+src/
+├── engine/           # Core game engine (framework-agnostic)
+│   ├── core/         # Main engine coordination
+│   │   └── Engine.ts # Central engine manager
+│   ├── renderer/     # Three.js rendering
+│   │   ├── SceneManager.ts    # Scene and rendering
+│   │   └── CameraManager.ts   # Camera handling
+│   ├── ar/          # Augmented reality
+│   │   └── ARManager.ts       # Marker detection/tracking
+│   └── network/     # Real-time communication
+│       └── WebRTCManager.ts   # Video streaming
+├── components/      # React components (coming soon)
+│   ├── hud/         # In-game overlays
+│   └── ui/          # Menu interfaces
+└── types/           # TypeScript definitions
+    └── js-aruco.d.ts # AR library types
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Core Features
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Rendering Engine
+- Three.js-based scene management
+- Efficient resource handling and cleanup
+- Automatic window resize handling
+- Shadow and lighting support
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+### AR System
+- Real-time marker detection using js-aruco
+- 3D pose estimation from 2D markers
+- Camera calibration support
+- Smooth marker tracking
+
+### Network Stack
+- WebRTC video streaming
+- Peer connection management
+- Signaling protocol support
+- Connection state handling
+
+## Development Setup
+
+1. Ensure you have Node.js installed (preferably using nvm)
+```bash
+nvm install           # Installs Node version from .nvmrc
+nvm use              # Switches to the project's Node version
 ```
+
+2. Install dependencies
+```bash
+npm install
+```
+
+3. Start development server
+```bash
+npm run dev
+```
+
+## Performance Targets
+
+- 30 FPS AR overlay minimum
+- < 200ms control latency
+- Marker detection every 3rd frame
+- Efficient memory management
+- Mobile device optimization
+
+## Browser Support
+
+- Chrome (desktop & mobile)
+- Firefox (desktop & mobile)
+- Safari (desktop & iOS)
+
+## Building for Production
+
+```bash
+npm run build
+```
+
+## Contributing
+
+1. Maintain the hybrid architecture pattern
+2. Keep real-time operations in the core engine
+3. Use React only for non-critical UI
+4. Follow TypeScript best practices
+5. Document performance-critical code
+
+## License
+
+[License information pending]
