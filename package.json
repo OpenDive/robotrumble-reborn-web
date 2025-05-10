@@ -1,0 +1,20 @@
+{
+  "name": "robotrumble-reborn-web",
+  "version": "1.0.0",
+  "description": "A browser-based Mixed Reality (MR) racing game client that allows users to control physical Unmanned Ground Vehicles (UGVs) through an augmented reality interface.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenDive/robotrumble-reborn-web.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/OpenDive/robotrumble-reborn-web/issues"
+  },
+  "homepage": "https://github.com/OpenDive/robotrumble-reborn-web#readme"
+}
