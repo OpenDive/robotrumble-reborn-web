@@ -5,15 +5,17 @@ import { IVideoSource, VideoStats, VideoConfig, VideoConnectionState } from './t
  */
 export class WebcamVideoSource implements IVideoSource {
   private video: HTMLVideoElement;
-  private stream: MediaStream | null;
+  private canvas: HTMLCanvasElement = document.createElement('canvas');
+  private ctx: CanvasRenderingContext2D;
+  private stream: MediaStream | null = null;
   private dimensions: { width: number; height: number };
   private lastFrameTime: number = 0;
   private fps: number = 0;
   private connectionState: VideoConnectionState = 'disconnected';
   private lastError?: string;
   private isActive: boolean;
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  private frameCallback: ((frame: ImageData) => void) | null = null;
+  private frameInterval: number | null = null;
 
   private setupFPSCalculation(): void {
     // Update FPS every second
@@ -27,13 +29,11 @@ export class WebcamVideoSource implements IVideoSource {
   }
 
   constructor() {
-    // Create video element for THREE.js texture
+    // Create video element
     this.video = document.createElement('video');
     this.video.playsInline = true;
     this.video.muted = true;
     this.video.autoplay = true;
-    this.video.style.display = 'none';
-    document.body.appendChild(this.video); // Needed for iOS
     
     console.log('WebcamVideoSource: Created video element', {
       playsInline: this.video.playsInline,
@@ -42,16 +42,22 @@ export class WebcamVideoSource implements IVideoSource {
       inDOM: document.body.contains(this.video)
     });
 
-    // Create canvas and context for frame capture
-    this.canvas = document.createElement('canvas');
-    const ctx = this.canvas.getContext('2d');
-    if (!ctx) throw new Error('Failed to get 2D context');
+    // Initialize canvas with context
+    const ctx = this.canvas.getContext('2d', {
+      willReadFrequently: true
+    });
+    if (!ctx) {
+      throw new Error('Failed to get 2D context');
+    }
     this.ctx = ctx;
-    
+
     console.log('WebcamVideoSource: Created canvas', {
       width: this.canvas.width,
       height: this.canvas.height,
-      context: ctx ? 'available' : 'null'
+      context: this.ctx ? 'available' : 'null',
+      attributes: {
+        willReadFrequently: true
+      }
     });
 
     this.stream = null;

@@ -375,6 +375,21 @@ export class ARManager {
     // Process frame for marker detection every 3rd frame
     if (this.frameCount % 3 === 0) {
       try {
+        console.log('ARManager: Processing frame', {
+          frameCount: this.frameCount,
+          frameData: {
+            width: frame.width,
+            height: frame.height,
+            dataLength: frame.data.length,
+            dataType: frame.data.constructor.name
+          },
+          videoElement: {
+            width: this.videoSource.getVideoElement().videoWidth,
+            height: this.videoSource.getVideoElement().videoHeight,
+            readyState: this.videoSource.getVideoElement().readyState
+          }
+        });
+
         // Update detection stats
         const now = performance.now();
         if (this.markerStats.lastDetectionTime > 0) {
@@ -390,17 +405,44 @@ export class ARManager {
         this.markerStats.markersDetected = markers.length;
         this.markerStats.totalDetections += markers.length;
 
+        // Log marker visualization
+        if (markers.length > 0) {
+          console.log('ARManager: Visualizing markers', {
+            markerCount: markers.length,
+            firstMarker: {
+              id: markers[0].id,
+              center: markers[0].center,
+              corners: markers[0].corners
+            },
+            cameraInfo: {
+              position: this.camera.position.toArray(),
+              fov: this.camera.fov,
+              aspect: this.camera.aspect
+            }
+          });
+        }
+
         // Update visualizations
         this.updateMarkerVisuals(markers);
 
       } catch (error) {
         this.markerStats.errors++;
-        console.error('Error in marker detection:', error);
+        console.error('ARManager: Error in marker detection:', error);
       }
     }
 
     // Always update video background
     this.videoBackground.update();
+    
+    // Log render stats periodically
+    if (this.frameCount % 60 === 0) {
+      console.log('ARManager: Render stats', {
+        fps: this.markerStats.detectionFPS.toFixed(1),
+        totalDetections: this.markerStats.totalDetections,
+        errors: this.markerStats.errors,
+        rendererInfo: this.renderer.info.render
+      });
+    }
     
     // Render scene
     this.renderer.render(this.scene, this.camera);
