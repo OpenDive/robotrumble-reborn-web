@@ -32,6 +32,47 @@ def add_debug_overlay(frame, text_lines, start_y=30, line_height=30):
         cv2.putText(frame, text, (20, y_pos),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
+def get_debug_color(dict_index):
+    """Get a unique color for each dictionary."""
+    colors = [
+        (0, 255, 0),    # Green
+        (255, 0, 0),    # Blue
+        (0, 0, 255),    # Red
+        (255, 255, 0),  # Cyan
+        (255, 0, 255),  # Magenta
+        (0, 255, 255),  # Yellow
+    ]
+    return colors[dict_index % len(colors)]
+
+def create_debug_visualization(frame, corners, ids, rejected, dict_name, dict_index):
+    """Create debug visualization for a single dictionary detection."""
+    debug_frame = frame.copy()
+    
+    # Convert to grayscale for threshold visualization
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    
+    # Apply adaptive threshold (similar to what ArUco detector uses)
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                 cv2.THRESH_BINARY_INV, 23, 7)
+    
+    # Convert threshold back to BGR for visualization
+    thresh_bgr = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+    
+    # Draw detected markers with unique color
+    color = get_debug_color(dict_index)
+    if ids is not None:
+        debug_frame = aruco.drawDetectedMarkers(debug_frame, corners, ids, color)
+    
+    # Draw rejected candidates in red
+    if rejected is not None and len(rejected) > 0:
+        debug_frame = aruco.drawDetectedMarkers(debug_frame, rejected, None, (0, 0, 255))
+    
+    # Add dictionary name
+    cv2.putText(debug_frame, dict_name, (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+    
+    return debug_frame, thresh_bgr
+
 def filter_duplicate_detections(corners, ids, min_distance=10):
     """Filter out duplicate marker detections that are too close to each other."""
     if ids is None or len(ids) == 0:
@@ -119,7 +160,10 @@ def detect_markers_with_params(frame, dictionary, parameters=None):
 def test_all_dictionaries(frame, dictionaries):
     """Test all dictionaries and return results for each."""
     results = []
-    for dict_name, aruco_dict in dictionaries.items():
+    debug_frames = []
+    thresh_frames = []
+    
+    for i, (dict_name, aruco_dict) in enumerate(dictionaries.items()):
         # Get marker size and count from dictionary name
         marker_size, marker_count = get_dictionary_info(dict_name)
         # Create the dictionary
@@ -127,10 +171,16 @@ def test_all_dictionaries(frame, dictionaries):
         # Detect markers with tuned parameters
         corners, ids, rejected = detect_markers_with_params(frame, dictionary)
         
+        # Create debug visualization
+        debug_frame, thresh_frame = create_debug_visualization(
+            frame, corners, ids, rejected, dict_name, i)
+        debug_frames.append(debug_frame)
+        thresh_frames.append(thresh_frame)
+        
         if ids is not None and len(ids) > 0:
             results.append((dict_name, corners, ids))
     
-    return results
+    return results, debug_frames, thresh_frames
 
 def find_first_marker(frame, dictionaries):
     """Find first dictionary that detects any marker."""
@@ -146,6 +196,67 @@ def find_first_marker(frame, dictionaries):
             return corners, ids, dict_name, dictionary
     
     return None, None, None, None
+
+def create_side_by_side_view(frame, corners, ids, dict_name, all_results=None):
+    """Create a side by side view of original frame and threshold."""
+    # Get frame dimensions
+    height, width = frame.shape[:2]
+    
+    # Convert to grayscale for threshold
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    
+    # Apply adaptive threshold
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                 cv2.THRESH_BINARY_INV, 23, 7)
+    
+    # Convert threshold back to BGR for visualization
+    thresh_bgr = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+    
+    # Create the side-by-side view
+    combined = np.zeros((height, width * 2, 3), dtype=np.uint8)
+    
+    # Copy original frame with detections to left side
+    frame_with_markers = frame.copy()
+    
+    if all_results:
+        # Draw markers from all dictionaries with different colors
+        for idx, (dict_name, dict_corners, dict_ids) in enumerate(all_results):
+            color = get_debug_color(idx)
+            if dict_ids is not None:
+                frame_with_markers = aruco.drawDetectedMarkers(frame_with_markers, dict_corners, dict_ids, color)
+    elif ids is not None:
+        frame_with_markers = aruco.drawDetectedMarkers(frame_with_markers, corners, ids)
+    
+    combined[:, :width] = frame_with_markers
+    combined[:, width:] = thresh_bgr
+    
+    # Add labels
+    cv2.putText(combined, "Original + Detections", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    cv2.putText(combined, "Threshold View", (width + 10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    
+    # Add detection info
+    y_offset = 70
+    if all_results:
+        for idx, (dict_name, dict_corners, dict_ids) in enumerate(all_results):
+            color = get_debug_color(idx)
+            if dict_ids is not None and len(dict_ids) > 0:
+                dict_text = f"{dict_name}: {len(dict_ids)} markers - IDs: {', '.join(str(id[0]) for id in dict_ids)}"
+                cv2.putText(combined, dict_text, (10, y_offset),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                y_offset += 30
+    elif ids is not None:
+        cv2.putText(combined, f"{dict_name}: {len(ids)} markers", (10, y_offset),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        id_text = f"IDs: {', '.join(str(id[0]) for id in ids)}"
+        cv2.putText(combined, id_text, (10, y_offset + 40),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    else:
+        cv2.putText(combined, f"No markers found", (10, y_offset),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    
+    return combined
 
 def main():
     # Parse command-line arguments
@@ -183,15 +294,12 @@ def main():
         sys.exit(1)
 
     # Create window
-    cv2.namedWindow('Video Feed', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('ArUco Detector Debug', cv2.WINDOW_NORMAL)
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        
-        debug_lines = []
-        frame_with_markers = frame.copy()
 
         if args.dict:
             # Use specified dictionary
@@ -205,48 +313,18 @@ def main():
             dictionary = aruco.Dictionary(ARUCO_DICTS[args.dict], marker_size)
             corners, ids, rejected = detect_markers_with_params(frame, dictionary)
             
-            if ids is not None and len(ids) > 0:
-                frame_with_markers = aruco.drawDetectedMarkers(frame_with_markers, corners, ids)
-                for corner in corners:
-                    pts = corner.reshape((-1, 1, 2)).astype(np.int32)
-                    cv2.polylines(frame_with_markers, [pts], True, (0, 255, 0), 2)
-                debug_lines.append((f"Dictionary {args.dict}: {len(ids)} markers", (0, 255, 0)))
-                debug_lines.append((f"Marker IDs: {', '.join(str(id[0]) for id in ids)}", (0, 255, 0)))
-            else:
-                debug_lines.append((f"No markers found with {args.dict}", (0, 0, 255)))
-
+            # Create side by side view
+            debug_view = create_side_by_side_view(frame, corners, ids, args.dict)
+            
         elif args.test_all:
             # Test all dictionaries
-            results = test_all_dictionaries(frame, ARUCO_DICTS)
-            if results:
-                debug_lines.append(("Found markers in these dictionaries:", (255, 255, 255)))
-                for dict_name, corners, ids in results:
-                    frame_with_markers = aruco.drawDetectedMarkers(frame_with_markers, corners, ids)
-                    for corner in corners:
-                        pts = corner.reshape((-1, 1, 2)).astype(np.int32)
-                        cv2.polylines(frame_with_markers, [pts], True, (0, 255, 0), 2)
-                    debug_lines.append((f"{dict_name}: {len(ids)} markers - IDs: {', '.join(str(id[0]) for id in ids)}", 
-                                      (0, 255, 0)))
-            else:
-                debug_lines.append(("No markers found in any dictionary", (0, 0, 255)))
-        else:
-            # Find first dictionary with markers
-            corners, ids, current_dict, dictionary = find_first_marker(frame, ARUCO_DICTS)
-            if ids is not None and len(ids) > 0:
-                frame_with_markers = aruco.drawDetectedMarkers(frame_with_markers, corners, ids)
-                for corner in corners:
-                    pts = corner.reshape((-1, 1, 2)).astype(np.int32)
-                    cv2.polylines(frame_with_markers, [pts], True, (0, 255, 0), 2)
-                debug_lines.append((f"Dictionary {current_dict}: {len(ids)} markers", (0, 255, 0)))
-                debug_lines.append((f"Marker IDs: {', '.join(str(id[0]) for id in ids)}", (0, 255, 0)))
-            else:
-                debug_lines.append(("No markers found in any dictionary", (0, 0, 255)))
+            results, debug_frames, thresh_frames = test_all_dictionaries(frame, ARUCO_DICTS)
+            
+            # Create side by side view with all results
+            debug_view = create_side_by_side_view(frame, None, None, None, all_results=results)
 
-        # Add debug overlay
-        add_debug_overlay(frame_with_markers, debug_lines)
-
-        # Show frame
-        cv2.imshow('Video Feed', frame_with_markers)
+        # Show the combined view
+        cv2.imshow('ArUco Detector Debug', debug_view)
 
         # Break loop on 'q' press
         if cv2.waitKey(1) & 0xFF == ord('q'):
