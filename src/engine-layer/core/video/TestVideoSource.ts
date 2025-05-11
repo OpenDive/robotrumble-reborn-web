@@ -48,9 +48,21 @@ export class TestVideoSource implements IVideoSource {
         throw new Error('Video path not provided');
       }
 
-      // Reset video element
-      this.video.src = '';
+      // Reset video element and state
+      this.isActive = false;
+      this.lastError = undefined;
+      
+      // Clean up existing video element
+      this.video.pause();
+      this.video.removeAttribute('src');
       this.video.load();
+      
+      // Remove all event listeners
+      this.video.onloadedmetadata = null;
+      this.video.onloadeddata = null;
+      this.video.onplay = null;
+      this.video.onpause = null;
+      this.video.onerror = null;
 
       // Set up video event listeners before setting source
       const videoReady = new Promise<void>((resolve, reject) => {
@@ -69,9 +81,13 @@ export class TestVideoSource implements IVideoSource {
         };
 
         const handleError = (e: ErrorEvent) => {
-          console.error('TestVideoSource: Video load error', e);
+          const errorMessage = this.video.error?.message || 'Unknown error';
+          console.error('TestVideoSource: Video load error', {
+            error: errorMessage,
+            event: e
+          });
           cleanup();
-          reject(new Error('Failed to load video: ' + (this.video.error?.message || 'Unknown error')));
+          reject(new Error('Failed to load video: ' + errorMessage));
         };
 
         this.video.addEventListener('loadeddata', handleLoadedData);
@@ -79,6 +95,9 @@ export class TestVideoSource implements IVideoSource {
       });
 
       // Set video properties
+      console.log('TestVideoSource: Setting video source...', {
+        path: config.test.videoPath
+      });
       this.video.src = config.test.videoPath;
       this.video.loop = config.test.loop ?? true;
 
@@ -95,7 +114,13 @@ export class TestVideoSource implements IVideoSource {
       console.log('TestVideoSource: Initialization complete', {
         dimensions: this.dimensions,
         loop: this.video.loop,
-        readyState: this.video.readyState
+        readyState: this.video.readyState,
+        videoElement: {
+          src: this.video.src ? 'set' : 'empty',
+          currentTime: this.video.currentTime,
+          paused: this.video.paused,
+          ended: this.video.ended
+        }
       });
 
       this.connectionState = 'connected';
@@ -132,8 +157,9 @@ export class TestVideoSource implements IVideoSource {
           };
 
           const handleError = () => {
+            const errorMessage = this.video.error?.message || 'Unknown error';
             cleanup();
-            reject(new Error('Video failed to load enough data'));
+            reject(new Error('Video failed to load: ' + errorMessage));
           };
 
           this.video.addEventListener('canplay', handleCanPlay);
@@ -142,6 +168,7 @@ export class TestVideoSource implements IVideoSource {
       }
 
       // Start playback and wait for confirmation
+      console.log('TestVideoSource: Attempting to play video...');
       const playPromise = this.video.play();
       if (playPromise) {
         await playPromise;
@@ -168,8 +195,9 @@ export class TestVideoSource implements IVideoSource {
         };
 
         const handleError = () => {
+          const errorMessage = this.video.error?.message || 'Unknown error';
           cleanup();
-          reject(new Error('Video playback failed'));
+          reject(new Error('Video playback failed: ' + errorMessage));
         };
 
         this.video.addEventListener('timeupdate', handleTimeUpdate);
@@ -194,12 +222,28 @@ export class TestVideoSource implements IVideoSource {
 
   async stop(): Promise<void> {
     console.log('TestVideoSource: Stopping...');
+    
+    // Pause video and reset state
     this.video.pause();
     this.video.currentTime = 0;
-    this.video.src = '';
+    
+    // Clean up video element
+    this.video.removeAttribute('src');
     this.video.load();
+    
+    // Remove all event listeners
+    this.video.onloadedmetadata = null;
+    this.video.onloadeddata = null;
+    this.video.onplay = null;
+    this.video.onpause = null;
+    this.video.onerror = null;
+    
+    // Reset state
     this.isActive = false;
     this.connectionState = 'disconnected';
+    this.lastError = undefined;
+    
+    console.log('TestVideoSource: Stopped');
   }
 
   getVideoElement(): HTMLVideoElement {
