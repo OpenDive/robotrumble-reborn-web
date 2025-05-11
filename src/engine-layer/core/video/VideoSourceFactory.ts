@@ -1,4 +1,5 @@
 import { WebcamVideoSource } from './WebcamVideoSource';
+import { TestVideoSource } from './TestVideoSource';
 import type { VideoSourceType } from './types';
 import { IVideoSource, VideoConfig } from './types';
 
@@ -31,8 +32,8 @@ export class VideoSourceFactory {
         break;
         
       case 'test-video':
-        // Will implement TestVideoSource later
-        throw new Error('TestVideoSource not implemented yet');
+        this.currentSource = new TestVideoSource();
+        break;
         
       case 'webrtc':
         // Will implement WebRTCVideoSource later

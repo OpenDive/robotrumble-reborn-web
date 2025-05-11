@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { arManager } from '../../../engine-layer/core/ar/ARManager';
 import { VideoSourceFactory } from '../../../engine-layer/core/video/VideoSourceFactory';
 import { VideoConfig, VideoStats } from '../../../engine-layer/core/video/types';
@@ -7,6 +7,7 @@ export function VideoSourceDebug() {
   const [currentSource, setCurrentSource] = useState<string>('webcam');
   const [stats, setStats] = useState<VideoStats | null>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Update stats and dimensions every second
@@ -22,7 +23,18 @@ export function VideoSourceDebug() {
   }, []);
 
   const handleSourceChange = async (sourceType: string) => {
-    const videoConfig: VideoConfig = {
+    let videoConfig: VideoConfig;
+
+    if (sourceType === 'test-video') {
+      console.log('Test video clicked', { fileInputRef: fileInputRef.current });
+      if (fileInputRef.current) {
+        console.log('Triggering file input click');
+        fileInputRef.current.click();
+      }
+      return;
+    }
+
+    videoConfig = {
       sourceType: sourceType as 'webcam' | 'webrtc' | 'test-video',
       webcam: {
         width: 1280,
@@ -39,8 +51,32 @@ export function VideoSourceDebug() {
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const videoUrl = URL.createObjectURL(file);
+    const videoConfig: VideoConfig = {
+      sourceType: 'test-video',
+      test: {
+        videoPath: videoUrl,
+        loop: true
+      }
+    };
+
+    try {
+      const factory = VideoSourceFactory.getInstance();
+      const source = await factory.switchSource(videoConfig);
+      await source.start();
+      setCurrentSource('test-video');
+    } catch (error) {
+      console.error('Failed to load video file:', error);
+      URL.revokeObjectURL(videoUrl);
+    }
+  };
+
   return (
-    <div className="fixed bottom-4 left-4 bg-gray-900 bg-opacity-90 p-4 rounded-lg text-white">
+    <div className="fixed bottom-4 left-4 bg-gray-900 bg-opacity-90 p-4 rounded-lg text-white z-50 pointer-events-auto">
       <h3 className="text-lg font-semibold mb-2">Video Source Debug</h3>
       
       <div className="space-x-2 mb-4">
@@ -51,9 +87,12 @@ export function VideoSourceDebug() {
           Webcam
         </button>
         <button
-          className={`px-3 py-1 rounded ${currentSource === 'test-video' ? 'bg-blue-600' : 'bg-gray-700'} opacity-50 cursor-not-allowed`}
-          disabled
-          title="Coming soon"
+          className={`px-3 py-1 rounded ${currentSource === 'test-video' ? 'bg-blue-600' : 'bg-gray-700'}`}
+          onClick={() => {
+            if (fileInputRef.current) {
+              fileInputRef.current.click();
+            }
+          }}
         >
           Test Video
         </button>
@@ -64,6 +103,13 @@ export function VideoSourceDebug() {
         >
           WebRTC
         </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
       </div>
 
       {stats && (
