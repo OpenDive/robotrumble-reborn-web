@@ -151,11 +151,37 @@ def calculate_detection_parameters(frame_width, frame_height):
 
 def detect_markers_with_params(frame, dictionary, parameters=None):
     """Detect markers with optional parameter tuning."""
-    height, width = frame.shape[:2]
-    
-    # Calculate optimal parameters based on frame resolution if not provided
     if parameters is None:
-        parameters = calculate_detection_parameters(width, height)
+        parameters = aruco.DetectorParameters()
+    
+    # Strict border detection
+    parameters.maxErroneousBitsInBorderRate = 0.2
+    
+    # Adaptive thresholding parameters
+    parameters.adaptiveThreshWinSizeMin = 23
+    parameters.adaptiveThreshWinSizeMax = 43
+    parameters.adaptiveThreshWinSizeStep = 10
+    parameters.adaptiveThreshConstant = 7
+    
+    # Strict marker shape and size requirements
+    parameters.minMarkerPerimeterRate = 0.05
+    parameters.maxMarkerPerimeterRate = 0.5
+    parameters.polygonalApproxAccuracyRate = 0.02
+    parameters.minCornerDistanceRate = 0.05
+    
+    # Minimum distance between markers
+    parameters.minMarkerDistanceRate = 0.1
+    
+    # Border detection
+    parameters.minDistanceToBorder = 5
+    
+    # Bits extraction parameters
+    parameters.perspectiveRemovePixelPerCell = 8
+    parameters.perspectiveRemoveIgnoredMarginPerCell = 0.4
+    
+    # Conservative error correction
+    parameters.errorCorrectionRate = 0.4
+    parameters.minOtsuStdDev = 5.0
     
     # Create detector with parameters
     detector = aruco.ArucoDetector(dictionary, parameters)
@@ -165,8 +191,7 @@ def detect_markers_with_params(frame, dictionary, parameters=None):
     
     # Filter out duplicate detections
     if corners and ids is not None:
-        corners, ids = filter_duplicate_detections(corners, ids, 
-            min_distance=max(20, int(min(width, height) * 0.02)))
+        corners, ids = filter_duplicate_detections(corners, ids, min_distance=20)
     
     return corners, ids, rejected
 
@@ -291,8 +316,10 @@ def create_side_by_side_view(frame, corners, ids, dict_name, all_results=None):
 
 def main():
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description='ARuco Marker Detection from Video')
-    parser.add_argument('--video', type=str, required=True, help='Path to the video file')
+    parser = argparse.ArgumentParser(description='ARuco Marker Detection from Video or Webcam')
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument('--video', type=str, help='Path to the video file')
+    input_group.add_argument('--camera', type=int, default=0, help='Camera device index (default: 0)')
     parser.add_argument('--dict', type=str, help='ArUco dictionary to use (e.g., DICT_4X4_50)')
     parser.add_argument('--test-all', action='store_true', help='Test all dictionaries and show all detected markers')
     args = parser.parse_args()
@@ -319,50 +346,77 @@ def main():
     }
 
     # Open video capture
-    cap = cv2.VideoCapture(args.video)
-    if not cap.isOpened():
-        print(f"Error: Could not open video file {args.video}")
-        sys.exit(1)
+    if args.video:
+        cap = cv2.VideoCapture(args.video)
+        if not cap.isOpened():
+            print(f"Error: Could not open video file {args.video}")
+            sys.exit(1)
+        print(f"Reading from video file: {args.video}")
+    else:
+        cap = cv2.VideoCapture(args.camera)
+        if not cap.isOpened():
+            print(f"Error: Could not open camera device {args.camera}")
+            sys.exit(1)
+        print(f"Reading from camera device: {args.camera}")
+        # Set camera properties for better quality
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)  # Enable autofocus if available
+        cap.set(cv2.CAP_PROP_FPS, 30)
 
     # Create window
     cv2.namedWindow('ArUco Detector Debug', cv2.WINDOW_NORMAL)
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                if args.video:  # End of video file
+                    break
+                else:  # Camera error
+                    print("Error: Failed to grab frame from camera")
+                    break
 
-        if args.dict:
-            # Use specified dictionary
-            if args.dict not in ARUCO_DICTS:
-                print(f"Error: Unknown dictionary {args.dict}")
-                print(f"Available dictionaries: {', '.join(ARUCO_DICTS.keys())}")
-                sys.exit(1)
-            
-            # Get marker size from dictionary name
-            marker_size, _ = get_dictionary_info(args.dict)
-            dictionary = aruco.Dictionary(ARUCO_DICTS[args.dict], marker_size)
-            corners, ids, rejected = detect_markers_with_params(frame, dictionary)
-            
-            # Create side by side view
-            debug_view = create_side_by_side_view(frame, corners, ids, args.dict)
-            
-        elif args.test_all:
-            # Test all dictionaries
-            results, debug_frames, thresh_frames = test_all_dictionaries(frame, ARUCO_DICTS)
-            
-            # Create side by side view with all results
-            debug_view = create_side_by_side_view(frame, None, None, None, all_results=results)
+            # Flip frame horizontally if using camera (not video file)
+            if not args.video:
+                frame = cv2.flip(frame, 1)  # 1 means horizontal flip
 
-        # Show the combined view
-        cv2.imshow('ArUco Detector Debug', debug_view)
+            if args.dict:
+                # Use specified dictionary
+                if args.dict not in ARUCO_DICTS:
+                    print(f"Error: Unknown dictionary {args.dict}")
+                    print(f"Available dictionaries: {', '.join(ARUCO_DICTS.keys())}")
+                    break
+                
+                # Get marker size from dictionary name
+                marker_size, _ = get_dictionary_info(args.dict)
+                dictionary = aruco.Dictionary(ARUCO_DICTS[args.dict], marker_size)
+                corners, ids, rejected = detect_markers_with_params(frame, dictionary)
+                
+                # Create side by side view
+                debug_view = create_side_by_side_view(frame, corners, ids, args.dict)
+                
+            elif args.test_all:
+                # Test all dictionaries
+                results, debug_frames, thresh_frames = test_all_dictionaries(frame, ARUCO_DICTS)
+                
+                # Create side by side view with all results
+                debug_view = create_side_by_side_view(frame, None, None, None, all_results=results)
 
-        # Break loop on 'q' press
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            # Show the combined view
+            cv2.imshow('ArUco Detector Debug', debug_view)
 
-    cap.release()
-    cv2.destroyAllWindows()
+            # Break loop on 'q' press or ESC
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q') or key == 27:  # 27 is ESC key
+                break
+
+    except KeyboardInterrupt:
+        print("\nStopped by user")
+    finally:
+        # Clean up
+        cap.release()
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main() 
