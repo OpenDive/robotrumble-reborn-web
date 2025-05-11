@@ -14,6 +14,20 @@ def get_dictionary_info(dict_name):
     count = int(parts[2])    # Extract count (50,100,250,etc)
     return size, count
 
+def add_debug_overlay(frame, text_lines, start_y=30, line_height=30):
+    """Add debug information as overlay on the frame."""
+    # Add semi-transparent black background for better text visibility
+    overlay = frame.copy()
+    bg_height = (len(text_lines) + 1) * line_height
+    cv2.rectangle(overlay, (10, 10), (400, 10 + bg_height), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+
+    # Add text lines
+    for i, (text, color) in enumerate(text_lines):
+        y_pos = start_y + (i * line_height)
+        cv2.putText(frame, text, (20, y_pos),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
 def find_marker_in_dictionaries(frame, dictionaries):
     """Try to detect markers using different ArUco dictionaries."""
     for dict_name, aruco_dict in dictionaries.items():
@@ -69,16 +83,13 @@ def main():
         print(f"Error: Could not open video file {args.video}")
         sys.exit(1)
 
-    # Create windows
+    # Create window
     cv2.namedWindow('Video Feed', cv2.WINDOW_NORMAL)
-    cv2.namedWindow('Debug Info', cv2.WINDOW_NORMAL)
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-
-        debug_frame = np.zeros((200, 400, 3), dtype=np.uint8)  # Debug window
         
         if args.dict:
             # Use specified dictionary
@@ -98,8 +109,8 @@ def main():
             # Try all dictionaries
             corners, ids, current_dict, dictionary = find_marker_in_dictionaries(frame, ARUCO_DICTS)
 
-        # Update debug window
-        debug_frame.fill(0)
+        # Prepare debug information
+        debug_lines = []
         if ids is not None:
             # Draw markers on the frame
             frame = aruco.drawDetectedMarkers(frame, corners, ids)
@@ -109,20 +120,23 @@ def main():
                 pts = corner.reshape((-1, 1, 2)).astype(np.int32)
                 cv2.polylines(frame, [pts], True, (0, 255, 0), 2)
 
-            # Update debug info
-            cv2.putText(debug_frame, f"Markers Found: {len(ids)}", (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(debug_frame, f"Dictionary: {current_dict}", (10, 60),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # Add debug information
+            debug_lines.append((f"Markers Found: {len(ids)}", (0, 255, 0)))
+            debug_lines.append((f"Dictionary: {current_dict}", (0, 255, 0)))
+            
+            # Add marker IDs
+            id_text = f"Marker IDs: {', '.join(str(id[0]) for id in ids)}"
+            debug_lines.append((id_text, (0, 255, 0)))
         else:
-            cv2.putText(debug_frame, "No Markers Found", (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            cv2.putText(debug_frame, f"Dictionary: {current_dict if current_dict else 'Searching...'}", 
-                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            debug_lines.append(("No Markers Found", (0, 0, 255)))
+            debug_lines.append((f"Dictionary: {current_dict if current_dict else 'Searching...'}", 
+                              (0, 0, 255)))
 
-        # Show frames
+        # Add debug overlay
+        add_debug_overlay(frame, debug_lines)
+
+        # Show frame
         cv2.imshow('Video Feed', frame)
-        cv2.imshow('Debug Info', debug_frame)
 
         # Break loop on 'q' press
         if cv2.waitKey(1) & 0xFF == ord('q'):
