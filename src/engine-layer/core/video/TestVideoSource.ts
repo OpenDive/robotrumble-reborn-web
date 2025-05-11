@@ -16,6 +16,7 @@ export class TestVideoSource implements IVideoSource {
     this.video.playsInline = true;
     this.video.muted = true;
     this.video.autoplay = false;
+    this.video.preload = 'auto';
 
     this.canvas = document.createElement('canvas');
     const ctx = this.canvas.getContext('2d', { willReadFrequently: true });
@@ -41,30 +42,65 @@ export class TestVideoSource implements IVideoSource {
   async initialize(config?: VideoConfig): Promise<void> {
     try {
       this.connectionState = 'connecting';
+      console.log('TestVideoSource: Initializing...', config);
 
-      if (config?.test?.videoPath) {
-        this.video.src = config.test.videoPath;
-        if (config.test.loop !== undefined) {
-          this.video.loop = config.test.loop;
-        }
-      } else {
+      if (!config?.test?.videoPath) {
         throw new Error('Video path not provided');
       }
 
-      // Wait for video metadata to load
-      await new Promise<void>((resolve, reject) => {
-        this.video.onloadedmetadata = () => {
-          this.dimensions.width = this.video.videoWidth;
-          this.dimensions.height = this.video.videoHeight;
-          this.canvas.width = this.video.videoWidth;
-          this.canvas.height = this.video.videoHeight;
+      // Reset video element
+      this.video.src = '';
+      this.video.load();
+
+      // Set up video event listeners before setting source
+      const videoReady = new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          this.video.removeEventListener('loadeddata', handleLoadedData);
+          this.video.removeEventListener('error', handleError);
+        };
+
+        const handleLoadedData = () => {
+          console.log('TestVideoSource: Video data loaded', {
+            readyState: this.video.readyState,
+            size: { width: this.video.videoWidth, height: this.video.videoHeight }
+          });
+          cleanup();
           resolve();
         };
-        this.video.onerror = () => reject(new Error('Failed to load video'));
+
+        const handleError = (e: ErrorEvent) => {
+          console.error('TestVideoSource: Video load error', e);
+          cleanup();
+          reject(new Error('Failed to load video: ' + (this.video.error?.message || 'Unknown error')));
+        };
+
+        this.video.addEventListener('loadeddata', handleLoadedData);
+        this.video.addEventListener('error', handleError);
+      });
+
+      // Set video properties
+      this.video.src = config.test.videoPath;
+      this.video.loop = config.test.loop ?? true;
+
+      // Wait for video to be ready
+      console.log('TestVideoSource: Waiting for video to load...');
+      await videoReady;
+
+      // Update dimensions
+      this.dimensions.width = this.video.videoWidth;
+      this.dimensions.height = this.video.videoHeight;
+      this.canvas.width = this.video.videoWidth;
+      this.canvas.height = this.video.videoHeight;
+
+      console.log('TestVideoSource: Initialization complete', {
+        dimensions: this.dimensions,
+        loop: this.video.loop,
+        readyState: this.video.readyState
       });
 
       this.connectionState = 'connected';
     } catch (error) {
+      console.error('TestVideoSource: Initialization failed', error);
       this.connectionState = 'error';
       this.lastError = error instanceof Error ? error.message : 'Unknown error';
       throw error;
@@ -73,9 +109,83 @@ export class TestVideoSource implements IVideoSource {
 
   async start(): Promise<void> {
     try {
-      await this.video.play();
+      console.log('TestVideoSource: Starting playback...');
+      
+      // Ensure video is ready to play
+      if (this.video.readyState < this.video.HAVE_ENOUGH_DATA) {
+        console.log('TestVideoSource: Waiting for enough data...');
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            cleanup();
+            reject(new Error('Timeout waiting for video data'));
+          }, 5000); // 5 second timeout
+
+          const cleanup = () => {
+            clearTimeout(timeout);
+            this.video.removeEventListener('canplay', handleCanPlay);
+            this.video.removeEventListener('error', handleError);
+          };
+
+          const handleCanPlay = () => {
+            cleanup();
+            resolve();
+          };
+
+          const handleError = () => {
+            cleanup();
+            reject(new Error('Video failed to load enough data'));
+          };
+
+          this.video.addEventListener('canplay', handleCanPlay);
+          this.video.addEventListener('error', handleError);
+        });
+      }
+
+      // Start playback and wait for confirmation
+      const playPromise = this.video.play();
+      if (playPromise) {
+        await playPromise;
+      }
+
+      // Wait for the first frame to be actually playing
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('Timeout waiting for video playback'));
+        }, 5000); // 5 second timeout
+
+        const cleanup = () => {
+          clearTimeout(timeout);
+          this.video.removeEventListener('timeupdate', handleTimeUpdate);
+          this.video.removeEventListener('error', handleError);
+        };
+
+        const handleTimeUpdate = () => {
+          if (this.video.currentTime > 0) {
+            cleanup();
+            resolve();
+          }
+        };
+
+        const handleError = () => {
+          cleanup();
+          reject(new Error('Video playback failed'));
+        };
+
+        this.video.addEventListener('timeupdate', handleTimeUpdate);
+        this.video.addEventListener('error', handleError);
+      });
+      
       this.isActive = true;
+      console.log('TestVideoSource: Playback started successfully', {
+        readyState: this.video.readyState,
+        currentTime: this.video.currentTime,
+        paused: this.video.paused,
+        videoWidth: this.video.videoWidth,
+        videoHeight: this.video.videoHeight
+      });
     } catch (error) {
+      console.error('TestVideoSource: Failed to start playback', error);
       this.connectionState = 'error';
       this.lastError = error instanceof Error ? error.message : 'Failed to start video';
       throw error;
@@ -83,8 +193,11 @@ export class TestVideoSource implements IVideoSource {
   }
 
   async stop(): Promise<void> {
+    console.log('TestVideoSource: Stopping...');
     this.video.pause();
     this.video.currentTime = 0;
+    this.video.src = '';
+    this.video.load();
     this.isActive = false;
     this.connectionState = 'disconnected';
   }

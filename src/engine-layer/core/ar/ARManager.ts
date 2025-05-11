@@ -46,6 +46,45 @@ export class ARManager {
     container.appendChild(this.renderer.domElement);
   }
 
+  /**
+   * Update video source and reinitialize video background
+   */
+  async updateVideoSource(newSource: IVideoSource): Promise<void> {
+    console.log('ARManager: Updating video source...');
+    
+    // Store the new source
+    this.videoSource = newSource;
+    
+    // Wait for video element to be ready
+    const videoElement = this.videoSource.getVideoElement();
+    if (videoElement.readyState < videoElement.HAVE_METADATA) {
+      console.log('ARManager: Waiting for video metadata...');
+      await new Promise<void>((resolve) => {
+        const handleMetadata = () => {
+          videoElement.removeEventListener('loadedmetadata', handleMetadata);
+          resolve();
+        };
+        videoElement.addEventListener('loadedmetadata', handleMetadata);
+      });
+    }
+    
+    // Reinitialize video background with new source
+    console.log('ARManager: Reinitializing video background...');
+    this.videoBackground.initialize(videoElement, {
+      distance: 0.1,
+      baseHeight: 2.0,
+      scale: 1.5
+    });
+    
+    console.log('ARManager: Video source updated', {
+      readyState: videoElement.readyState,
+      size: {
+        width: videoElement.videoWidth,
+        height: videoElement.videoHeight
+      }
+    });
+  }
+
   public async initialize(container: HTMLElement): Promise<void> {
     // Store container reference
     this.container = container;

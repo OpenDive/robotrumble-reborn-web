@@ -2,6 +2,7 @@ import { WebcamVideoSource } from './WebcamVideoSource';
 import { TestVideoSource } from './TestVideoSource';
 import type { VideoSourceType } from './types';
 import { IVideoSource, VideoConfig } from './types';
+import { arManager } from '../ar/ARManager';
 
 /**
  * Factory for creating and managing video sources
@@ -45,6 +46,12 @@ export class VideoSourceFactory {
 
     // Initialize the new source
     await this.currentSource.initialize(config);
+    
+    // Update ARManager with new source if it's already initialized
+    if (arManager.getVideoSource()) {
+      await arManager.updateVideoSource(this.currentSource);
+    }
+    
     return this.currentSource;
   }
 
