@@ -45,22 +45,35 @@ export class VideoBackground {
     this.mesh.renderOrder = -1;  // Render first
   }
 
+  /**
+   * Reset the video background, cleaning up all resources
+   */
+  reset(): void {
+    console.log('VideoBackground: Resetting...');
+    // Dispose of old resources
+    if (this.texture) {
+      this.texture.dispose();
+      this.material.map = null;
+    }
+    if (this.material) {
+      this.material.needsUpdate = true;
+    }
+    this.lastVideoTime = -1;
+    this.isInitialized = false;
+    console.log('VideoBackground: Reset complete');
+  }
+
   initialize(videoElement: HTMLVideoElement, config?: VideoPlaneConfig): void {
-    const defaultConfig: Required<VideoPlaneConfig> = {
-      distance: 0.1,    // Close to camera
-      baseHeight: 4.0,  // Moderate base height
-      scale: 1.0       // No additional scaling
-    };
-    
-    // Merge provided config with defaults
-    const finalConfig = { ...defaultConfig, ...config };
-    console.log('Initializing video background...', {
+    console.log('VideoBackground: Initializing...', {
       videoReady: videoElement.readyState,
       videoDimensions: {
         width: videoElement.videoWidth,
         height: videoElement.videoHeight
       }
     });
+
+    // Reset existing resources
+    this.reset();
     
     this.videoElement = videoElement;
     
@@ -78,6 +91,32 @@ export class VideoBackground {
     this.material.map = this.texture;
     this.material.needsUpdate = true;
     this.material.toneMapped = false;
+
+    // Calculate and update plane size
+    this.updatePlaneSize(config);
+    
+    this.isInitialized = true;
+    
+    console.log('VideoBackground: Initialization complete', {
+      position: this.mesh.position.toArray(),
+      texture: {
+        size: { 
+          width: this.videoElement.videoWidth,
+          height: this.videoElement.videoHeight
+        }
+      }
+    });
+  }
+
+  private updatePlaneSize(config?: VideoPlaneConfig): void {
+    const defaultConfig: Required<VideoPlaneConfig> = {
+      distance: 0.1,    // Close to camera
+      baseHeight: 4.0,  // Moderate base height
+      scale: 1.0       // No additional scaling
+    };
+    
+    // Merge provided config with defaults
+    const finalConfig = { ...defaultConfig, ...config };
     
     // Calculate plane size to fill view
     const videoWidth = this.videoElement.videoWidth || 1280;
@@ -92,6 +131,7 @@ export class VideoBackground {
     const height = finalConfig.baseHeight;
     
     // Create plane geometry with calculated size
+    this.mesh.geometry.dispose();
     this.mesh.geometry = new THREE.PlaneGeometry(width, height);
     
     // Apply configured scale and flip horizontally to correct mirroring
@@ -99,19 +139,6 @@ export class VideoBackground {
     
     // Ensure plane faces camera
     this.mesh.lookAt(0, 0, 0);
-
-    this.isInitialized = true;
-    
-    console.log('Video background initialized', {
-      position: this.mesh.position.toArray(),
-      dimensions: { width, height },
-      texture: {
-        size: { 
-          width: this.videoElement.videoWidth,
-          height: this.videoElement.videoHeight
-        }
-      }
-    });
   }
 
   /**
@@ -151,19 +178,17 @@ export class VideoBackground {
     }
   }
 
-  /**
-   * Clean up ThreeJS resources
-   */
   dispose(): void {
-    if (this.texture) {
-      this.texture.dispose();
-    }
-    if (this.material) {
-      this.material.dispose();
-    }
+    this.reset();
     if (this.mesh.geometry) {
       this.mesh.geometry.dispose();
     }
-    this.isInitialized = false;
+    if (this.wireframeMesh.geometry) {
+      this.wireframeMesh.geometry.dispose();
+    }
+    if (this.wireframeMesh.material) {
+      (this.wireframeMesh.material as THREE.Material).dispose();
+    }
+    this.material.dispose();
   }
 }

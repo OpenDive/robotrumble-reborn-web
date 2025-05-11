@@ -57,6 +57,8 @@ export class ARManager {
     
     // Wait for video element to be ready
     const videoElement = this.videoSource.getVideoElement();
+    
+    // Wait for video to be ready for playback
     if (videoElement.readyState < videoElement.HAVE_METADATA) {
       console.log('ARManager: Waiting for video metadata...');
       await new Promise<void>((resolve) => {
@@ -65,6 +67,18 @@ export class ARManager {
           resolve();
         };
         videoElement.addEventListener('loadedmetadata', handleMetadata);
+      });
+    }
+
+    // Wait for actual video data
+    if (videoElement.readyState < videoElement.HAVE_CURRENT_DATA) {
+      console.log('ARManager: Waiting for video data...');
+      await new Promise<void>((resolve) => {
+        const handleData = () => {
+          videoElement.removeEventListener('loadeddata', handleData);
+          resolve();
+        };
+        videoElement.addEventListener('loadeddata', handleData);
       });
     }
     
@@ -76,12 +90,24 @@ export class ARManager {
       scale: 1.5
     });
     
+    // Ensure video is playing
+    try {
+      if (videoElement.paused) {
+        console.log('ARManager: Starting video playback...');
+        await videoElement.play();
+      }
+    } catch (error) {
+      console.error('ARManager: Failed to start video playback:', error);
+      throw error;
+    }
+    
     console.log('ARManager: Video source updated', {
       readyState: videoElement.readyState,
       size: {
         width: videoElement.videoWidth,
         height: videoElement.videoHeight
-      }
+      },
+      playing: !videoElement.paused
     });
   }
 

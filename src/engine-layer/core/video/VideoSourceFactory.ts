@@ -24,6 +24,8 @@ export class VideoSourceFactory {
    * Create a video source of specified type
    */
   async createSource(config: VideoConfig): Promise<IVideoSource> {
+    console.log('VideoSourceFactory: Creating new source...', { type: config.sourceType });
+    
     // Cleanup existing source if any
     await this.cleanup();
 
@@ -45,13 +47,16 @@ export class VideoSourceFactory {
     }
 
     // Initialize the new source
+    console.log('VideoSourceFactory: Initializing new source...');
     await this.currentSource.initialize(config);
     
     // Update ARManager with new source if it's already initialized
     if (arManager.getVideoSource()) {
+      console.log('VideoSourceFactory: Updating ARManager with new source...');
       await arManager.updateVideoSource(this.currentSource);
     }
     
+    console.log('VideoSourceFactory: Source creation complete');
     return this.currentSource;
   }
 
@@ -66,6 +71,10 @@ export class VideoSourceFactory {
    * Switch to a different video source
    */
   async switchSource(config: VideoConfig): Promise<IVideoSource> {
+    console.log('VideoSourceFactory: Switching source...', { 
+      from: this.currentSource?.constructor.name,
+      to: config.sourceType 
+    });
     return this.createSource(config);
   }
 
@@ -74,8 +83,32 @@ export class VideoSourceFactory {
    */
   private async cleanup(): Promise<void> {
     if (this.currentSource) {
+      console.log('VideoSourceFactory: Cleaning up current source...');
+      
+      // Get video element before stopping
+      const videoElement = this.currentSource.getVideoElement();
+      
+      // Stop the source
       await this.currentSource.stop();
+      
+      // Clean up video element
+      if (videoElement) {
+        console.log('VideoSourceFactory: Cleaning up video element...');
+        videoElement.pause();
+        videoElement.srcObject = null;
+        videoElement.src = '';
+        videoElement.load(); // Reset video element state
+        
+        // Remove any event listeners (source should handle this, but just in case)
+        videoElement.onloadedmetadata = null;
+        videoElement.onloadeddata = null;
+        videoElement.onplay = null;
+        videoElement.onpause = null;
+        videoElement.onerror = null;
+      }
+      
       this.currentSource = null;
+      console.log('VideoSourceFactory: Cleanup complete');
     }
   }
 }
