@@ -6,9 +6,12 @@ A Python script for detecting ARuco markers in video files with real-time visual
 
 - Real-time ARuco marker detection from video files
 - Support for multiple ARuco dictionary types (4x4, 5x5, 6x6, 7x7)
-- Automatic dictionary detection mode
+- Three operation modes:
+  - Single dictionary detection
+  - Automatic dictionary detection
+  - Comprehensive testing of all dictionaries
 - Real-time visualization of detected markers
-- Debug window showing detection status
+- On-screen debug information overlay
 - Command-line interface for easy usage
 - Visual feedback with marker highlighting
 
@@ -39,57 +42,72 @@ A Python script for detecting ARuco markers in video files with real-time visual
 
 ## Usage
 
-The script can be run in two modes:
+The script can be run in three different modes:
 
-### 1. Automatic Dictionary Detection Mode
-
-```bash
-python aruco_detector.py --video path/to/your/video.mp4
-```
-
-In this mode, the script will automatically try different ARuco dictionaries to find markers in each frame.
-
-### 2. Specific Dictionary Mode
-
+### 1. Single Dictionary Mode
+Use this when you know which dictionary your markers belong to:
 ```bash
 python aruco_detector.py --video path/to/your/video.mp4 --dict DICT_4X4_50
 ```
 
+### 2. Automatic Detection Mode (Default)
+Use this to find the first dictionary that successfully detects markers:
+```bash
+python aruco_detector.py --video path/to/your/video.mp4
+```
+
+### 3. Comprehensive Testing Mode
+Use this to test all available dictionaries and see which markers are detected by each:
+```bash
+python aruco_detector.py --video path/to/your/video.mp4 --test-all
+```
+
 Available dictionary options:
-- `DICT_4X4_50`: 4x4 markers, dictionary of 50 markers
-- `DICT_4X4_100`: 4x4 markers, dictionary of 100 markers
-- `DICT_5X5_50`: 5x5 markers, dictionary of 50 markers
-- `DICT_5X5_100`: 5x5 markers, dictionary of 100 markers
-- `DICT_6X6_50`: 6x6 markers, dictionary of 50 markers
-- `DICT_6X6_100`: 6x6 markers, dictionary of 100 markers
-- `DICT_7X7_50`: 7x7 markers, dictionary of 50 markers
-- `DICT_7X7_100`: 7x7 markers, dictionary of 100 markers
+- 4x4 Markers:
+  - `DICT_4X4_50`: 50 markers
+  - `DICT_4X4_100`: 100 markers
+  - `DICT_4X4_250`: 250 markers
+  - `DICT_4X4_1000`: 1000 markers
+- 5x5 Markers:
+  - `DICT_5X5_50`: 50 markers
+  - `DICT_5X5_100`: 100 markers
+  - `DICT_5X5_250`: 250 markers
+  - `DICT_5X5_1000`: 1000 markers
+- 6x6 Markers:
+  - `DICT_6X6_50`: 50 markers
+  - `DICT_6X6_100`: 100 markers
+  - `DICT_6X6_250`: 250 markers
+  - `DICT_6X6_1000`: 1000 markers
+- 7x7 Markers:
+  - `DICT_7X7_50`: 50 markers
+  - `DICT_7X7_100`: 100 markers
+  - `DICT_7X7_250`: 250 markers
+  - `DICT_7X7_1000`: 1000 markers
+- Original ArUco:
+  - `DICT_ARUCO_ORIGINAL`: Original ArUco markers (6x6)
 
 ## Interface
 
-The script displays two windows:
+The script displays a single window with:
 
-1. **Video Feed Window**
+1. **Video Feed with Overlay**
    - Shows the processed video stream
    - Detected markers are highlighted with green rectangles
    - Marker IDs are displayed on the markers
+   - Debug information is overlaid in the top-left corner
 
-2. **Debug Info Window**
-   - Shows the number of markers currently detected
-   - Displays the current dictionary being used
-   - Shows detection status (found/not found)
+## Debug Information
+
+The overlay shows:
+- Number of markers detected
+- Current dictionary being used
+- Marker IDs found
+- In --test-all mode: results from all dictionaries that found markers
 
 ## Controls
 
 - Press 'q' to quit the application
-- Windows can be resized as needed (they are created with WINDOW_NORMAL flag)
-
-## Visual Feedback
-
-- Green rectangles indicate detected markers
-- Marker IDs are displayed on the markers
-- Red text in debug window indicates no markers found
-- Green text indicates successful detection
+- Window can be resized as needed (created with WINDOW_NORMAL flag)
 
 ## Tips
 
@@ -98,15 +116,19 @@ The script displays two windows:
    - Markers are clearly visible and not too small
    - Video resolution is sufficient to detect markers
 
-2. If markers are not being detected:
-   - Try different dictionary types
-   - Check if the markers in your video match the dictionary type
-   - Ensure the video quality is good enough for detection
+2. When to use each mode:
+   - Use `--dict` when you know your marker's dictionary
+   - Use default mode for quick detection
+   - Use `--test-all` when:
+     - You're unsure which dictionary your markers use
+     - You have multiple marker types in the scene
+     - You want to verify marker detection across dictionaries
 
 3. Performance considerations:
    - The script processes frames in real-time
    - Higher resolution videos may impact performance
-   - Automatic dictionary detection mode may be slower than specific dictionary mode
+   - `--test-all` mode is slower as it checks all dictionaries
+   - Default mode stops at first successful detection
 
 ## Troubleshooting
 
@@ -116,7 +138,7 @@ The script displays two windows:
    - Verify that OpenCV supports the video format
 
 2. If markers aren't detected:
-   - Try different dictionary types
+   - Try using `--test-all` to check all dictionaries
    - Verify that your markers match the dictionary specification
    - Check video quality and lighting
 
