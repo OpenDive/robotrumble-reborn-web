@@ -113,37 +113,49 @@ def filter_duplicate_detections(corners, ids, min_distance=10):
     
     return filtered_corners, filtered_ids
 
-def detect_markers_with_params(frame, dictionary, parameters=None):
-    """Detect markers with optional parameter tuning."""
-    if parameters is None:
-        parameters = aruco.DetectorParameters()
+def calculate_detection_parameters(frame_width, frame_height):
+    """Calculate optimal detection parameters based on frame resolution."""
+    # Base minimum marker size on frame dimensions
+    min_marker_perimeter = min(frame_width, frame_height) * 0.03
     
-    # Tune detection parameters for better pattern recognition
-    parameters.adaptiveThreshWinSizeMin = 7  # Increased from 3
-    parameters.adaptiveThreshWinSizeMax = 23
-    parameters.adaptiveThreshWinSizeStep = 4  # Decreased for finer control
+    parameters = aruco.DetectorParameters()
+    
+    # Adaptive threshold parameters scaled to resolution
+    base_window_size = max(7, int(min(frame_width, frame_height) * 0.01))
+    parameters.adaptiveThreshWinSizeMin = base_window_size
+    parameters.adaptiveThreshWinSizeMax = base_window_size * 3
+    parameters.adaptiveThreshWinSizeStep = max(2, base_window_size // 3)
     parameters.adaptiveThreshConstant = 7
     
-    # Make the detector more strict about marker shape and size
-    parameters.minMarkerPerimeterRate = 0.05  # Increased minimum size
-    parameters.maxMarkerPerimeterRate = 0.5   # Allow larger markers
-    parameters.polygonalApproxAccuracyRate = 0.05  # More strict corner detection
+    # Marker size parameters relative to frame
+    parameters.minMarkerPerimeterRate = 0.03  # At least 3% of frame dimension
+    parameters.maxMarkerPerimeterRate = 0.3   # At most 30% of frame dimension
+    parameters.polygonalApproxAccuracyRate = 0.03
     parameters.minCornerDistanceRate = 0.05
     
-    # Increase minimum distance between markers to avoid detecting parts of the same marker
+    # Minimum distance between markers as percentage of min marker perimeter
     parameters.minMarkerDistanceRate = 0.1
     
-    # More strict border detection
-    parameters.minDistanceToBorder = 5
+    # Border parameters
+    parameters.minDistanceToBorder = max(3, int(min_marker_perimeter * 0.02))
     
-    # Make the detector more strict about the black border around markers
+    # Perspective removal parameters
     parameters.perspectiveRemovePixelPerCell = 8
     parameters.perspectiveRemoveIgnoredMarginPerCell = 0.4
     
-    # Increase accuracy requirements
-    parameters.errorCorrectionRate = 0.6  # Require more accurate bit reading
-    parameters.minOtsuStdDev = 5.0  # Minimum standard deviation for adaptive thresholding
-    parameters.minMarkerDistanceRate = 0.1  # Minimum distance between markers
+    # Bit extraction parameters
+    parameters.errorCorrectionRate = 0.6
+    parameters.minOtsuStdDev = 5.0
+    
+    return parameters
+
+def detect_markers_with_params(frame, dictionary, parameters=None):
+    """Detect markers with optional parameter tuning."""
+    height, width = frame.shape[:2]
+    
+    # Calculate optimal parameters based on frame resolution if not provided
+    if parameters is None:
+        parameters = calculate_detection_parameters(width, height)
     
     # Create detector with parameters
     detector = aruco.ArucoDetector(dictionary, parameters)
@@ -153,7 +165,8 @@ def detect_markers_with_params(frame, dictionary, parameters=None):
     
     # Filter out duplicate detections
     if corners and ids is not None:
-        corners, ids = filter_duplicate_detections(corners, ids, min_distance=20)  # Increased min_distance
+        corners, ids = filter_duplicate_detections(corners, ids, 
+            min_distance=max(20, int(min(width, height) * 0.02)))
     
     return corners, ids, rejected
 
@@ -201,6 +214,9 @@ def create_side_by_side_view(frame, corners, ids, dict_name, all_results=None):
     """Create a side by side view of original frame and threshold."""
     # Get frame dimensions
     height, width = frame.shape[:2]
+    
+    # Add resolution information to debug overlay
+    resolution_text = f"Frame Resolution: {width}x{height}"
     
     # Convert to grayscale for threshold
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -255,6 +271,21 @@ def create_side_by_side_view(frame, corners, ids, dict_name, all_results=None):
     else:
         cv2.putText(combined, f"No markers found", (10, y_offset),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    
+    # Add resolution info to the debug overlay
+    cv2.putText(combined, resolution_text, (10, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    y_offset += 30
+    
+    # If markers were detected, show their sizes
+    if ids is not None and len(corners) > 0:
+        for i, corner in enumerate(corners):
+            # Calculate marker perimeter
+            perimeter = cv2.arcLength(corner[0], True)
+            size_text = f"Marker {ids[i][0]} size: {int(perimeter)} pixels"
+            cv2.putText(combined, size_text, (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            y_offset += 30
     
     return combined
 
