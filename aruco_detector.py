@@ -51,9 +51,19 @@ def create_debug_visualization(frame, corners, ids, rejected, dict_name, dict_in
     # Convert to grayscale for threshold visualization
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    # Apply adaptive threshold (similar to what ArUco detector uses)
+    # Use the same parameters as the detector
+    parameters = aruco.DetectorParameters()
+    parameters.adaptiveThreshWinSizeMin = 23
+    parameters.adaptiveThreshWinSizeMax = 43
+    parameters.adaptiveThreshWinSizeStep = 10
+    parameters.adaptiveThreshConstant = 7
+    
+    # Calculate the window size based on detector parameters
+    win_size = parameters.adaptiveThreshWinSizeMin
+    
+    # Apply threshold using detector's parameters
     thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-                                 cv2.THRESH_BINARY_INV, 23, 7)
+                                 cv2.THRESH_BINARY_INV, win_size, parameters.adaptiveThreshConstant)
     
     # Convert threshold back to BGR for visualization
     thresh_bgr = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
@@ -246,9 +256,19 @@ def create_side_by_side_view(frame, corners, ids, dict_name, all_results=None):
     # Convert to grayscale for threshold
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    # Apply adaptive threshold
+    # Use the same parameters as the detector
+    parameters = aruco.DetectorParameters()
+    parameters.adaptiveThreshWinSizeMin = 23
+    parameters.adaptiveThreshWinSizeMax = 43
+    parameters.adaptiveThreshWinSizeStep = 10
+    parameters.adaptiveThreshConstant = 7
+    
+    # Calculate the window size based on detector parameters
+    win_size = parameters.adaptiveThreshWinSizeMin
+    
+    # Apply threshold using detector's parameters
     thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-                                 cv2.THRESH_BINARY_INV, 23, 7)
+                                 cv2.THRESH_BINARY_INV, win_size, parameters.adaptiveThreshConstant)
     
     # Convert threshold back to BGR for visualization
     thresh_bgr = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
