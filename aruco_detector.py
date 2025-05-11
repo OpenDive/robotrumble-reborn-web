@@ -48,25 +48,11 @@ def create_debug_visualization(frame, corners, ids, rejected, dict_name, dict_in
     """Create debug visualization for a single dictionary detection."""
     debug_frame = frame.copy()
     
-    # Convert to grayscale for threshold visualization
+    # Convert to grayscale - this is what the detector actually processes
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    # Use the same parameters as the detector
-    parameters = aruco.DetectorParameters()
-    parameters.adaptiveThreshWinSizeMin = 23
-    parameters.adaptiveThreshWinSizeMax = 43
-    parameters.adaptiveThreshWinSizeStep = 10
-    parameters.adaptiveThreshConstant = 7
-    
-    # Calculate the window size based on detector parameters
-    win_size = parameters.adaptiveThreshWinSizeMin
-    
-    # Apply threshold using detector's parameters
-    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-                                 cv2.THRESH_BINARY_INV, win_size, parameters.adaptiveThreshConstant)
-    
-    # Convert threshold back to BGR for visualization
-    thresh_bgr = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+    # Convert grayscale back to BGR for visualization
+    gray_bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     
     # Draw detected markers with unique color
     color = get_debug_color(dict_index)
@@ -81,7 +67,7 @@ def create_debug_visualization(frame, corners, ids, rejected, dict_name, dict_in
     cv2.putText(debug_frame, dict_name, (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
     
-    return debug_frame, thresh_bgr
+    return debug_frame, gray_bgr
 
 def filter_duplicate_detections(corners, ids, min_distance=10):
     """Filter out duplicate marker detections that are too close to each other."""
@@ -159,47 +145,21 @@ def calculate_detection_parameters(frame_width, frame_height):
     
     return parameters
 
-def detect_markers_with_params(frame, dictionary, parameters=None):
-    """Detect markers with optional parameter tuning."""
+def detect_markers_with_params(frame, aruco_dict, parameters=None):
+    """Detect markers using OpenCV's ArUco detector."""
     if parameters is None:
         parameters = aruco.DetectorParameters()
     
-    # Strict border detection
-    parameters.maxErroneousBitsInBorderRate = 0.2
+    # Convert to grayscale
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    # Adaptive thresholding parameters
-    parameters.adaptiveThreshWinSizeMin = 23
-    parameters.adaptiveThreshWinSizeMax = 43
-    parameters.adaptiveThreshWinSizeStep = 10
-    parameters.adaptiveThreshConstant = 7
-    
-    # Strict marker shape and size requirements
-    parameters.minMarkerPerimeterRate = 0.05
-    parameters.maxMarkerPerimeterRate = 0.5
-    parameters.polygonalApproxAccuracyRate = 0.02
-    parameters.minCornerDistanceRate = 0.05
-    
-    # Minimum distance between markers
-    parameters.minMarkerDistanceRate = 0.1
-    
-    # Border detection
-    parameters.minDistanceToBorder = 5
-    
-    # Bits extraction parameters
-    parameters.perspectiveRemovePixelPerCell = 8
-    parameters.perspectiveRemoveIgnoredMarginPerCell = 0.4
-    
-    # Conservative error correction
-    parameters.errorCorrectionRate = 0.4
-    parameters.minOtsuStdDev = 5.0
-    
-    # Create detector with parameters
-    detector = aruco.ArucoDetector(dictionary, parameters)
+    # Create detector with minimal parameter tuning
+    detector = aruco.ArucoDetector(aruco_dict, parameters)
     
     # Detect markers
-    corners, ids, rejected = detector.detectMarkers(frame)
+    corners, ids, rejected = detector.detectMarkers(gray)
     
-    # Filter out duplicate detections
+    # Filter out duplicate detections if any markers were found
     if corners and ids is not None:
         corners, ids = filter_duplicate_detections(corners, ids, min_distance=20)
     
@@ -246,32 +206,18 @@ def find_first_marker(frame, dictionaries):
     return None, None, None, None
 
 def create_side_by_side_view(frame, corners, ids, dict_name, all_results=None):
-    """Create a side by side view of original frame and threshold."""
+    """Create a side by side view of original frame and grayscale."""
     # Get frame dimensions
     height, width = frame.shape[:2]
     
     # Add resolution information to debug overlay
     resolution_text = f"Frame Resolution: {width}x{height}"
     
-    # Convert to grayscale for threshold
+    # Convert to grayscale - this is what the detector processes
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    # Use the same parameters as the detector
-    parameters = aruco.DetectorParameters()
-    parameters.adaptiveThreshWinSizeMin = 23
-    parameters.adaptiveThreshWinSizeMax = 43
-    parameters.adaptiveThreshWinSizeStep = 10
-    parameters.adaptiveThreshConstant = 7
-    
-    # Calculate the window size based on detector parameters
-    win_size = parameters.adaptiveThreshWinSizeMin
-    
-    # Apply threshold using detector's parameters
-    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-                                 cv2.THRESH_BINARY_INV, win_size, parameters.adaptiveThreshConstant)
-    
-    # Convert threshold back to BGR for visualization
-    thresh_bgr = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+    # Convert grayscale back to BGR for visualization
+    gray_bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     
     # Create the side-by-side view
     combined = np.zeros((height, width * 2, 3), dtype=np.uint8)
@@ -289,12 +235,12 @@ def create_side_by_side_view(frame, corners, ids, dict_name, all_results=None):
         frame_with_markers = aruco.drawDetectedMarkers(frame_with_markers, corners, ids)
     
     combined[:, :width] = frame_with_markers
-    combined[:, width:] = thresh_bgr
+    combined[:, width:] = gray_bgr
     
     # Add labels
     cv2.putText(combined, "Original + Detections", (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    cv2.putText(combined, "Threshold View", (width + 10, 30),
+    cv2.putText(combined, "Grayscale View", (width + 10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
     
     # Add detection info
@@ -318,9 +264,8 @@ def create_side_by_side_view(frame, corners, ids, dict_name, all_results=None):
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
     
     # Add resolution info to the debug overlay
-    cv2.putText(combined, resolution_text, (10, y_offset),
+    cv2.putText(combined, resolution_text, (10, height - 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    y_offset += 30
     
     # If markers were detected, show their sizes
     if ids is not None and len(corners) > 0:
@@ -328,9 +273,8 @@ def create_side_by_side_view(frame, corners, ids, dict_name, all_results=None):
             # Calculate marker perimeter
             perimeter = cv2.arcLength(corner[0], True)
             size_text = f"Marker {ids[i][0]} size: {int(perimeter)} pixels"
-            cv2.putText(combined, size_text, (10, y_offset),
+            cv2.putText(combined, size_text, (10, height - (60 + i * 30)),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            y_offset += 30
     
     return combined
 
@@ -381,7 +325,7 @@ def main():
         # Set camera properties for better quality
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)  # Enable autofocus if available
+        cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
         cap.set(cv2.CAP_PROP_FPS, 30)
 
     # Create window
@@ -397,9 +341,9 @@ def main():
                     print("Error: Failed to grab frame from camera")
                     break
 
-            # Flip frame horizontally if using camera (not video file)
+            # Flip frame horizontally if using camera
             if not args.video:
-                frame = cv2.flip(frame, 1)  # 1 means horizontal flip
+                frame = cv2.flip(frame, 1)
 
             if args.dict:
                 # Use specified dictionary
@@ -408,9 +352,8 @@ def main():
                     print(f"Available dictionaries: {', '.join(ARUCO_DICTS.keys())}")
                     break
                 
-                # Get marker size from dictionary name
-                marker_size, _ = get_dictionary_info(args.dict)
-                dictionary = aruco.Dictionary(ARUCO_DICTS[args.dict], marker_size)
+                # Get predefined dictionary
+                dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICTS[args.dict])
                 corners, ids, rejected = detect_markers_with_params(frame, dictionary)
                 
                 # Create side by side view
@@ -418,7 +361,12 @@ def main():
                 
             elif args.test_all:
                 # Test all dictionaries
-                results, debug_frames, thresh_frames = test_all_dictionaries(frame, ARUCO_DICTS)
+                results = []
+                for dict_name, dict_id in ARUCO_DICTS.items():
+                    dictionary = cv2.aruco.getPredefinedDictionary(dict_id)
+                    corners, ids, rejected = detect_markers_with_params(frame, dictionary)
+                    if ids is not None and len(ids) > 0:
+                        results.append((dict_name, corners, ids))
                 
                 # Create side by side view with all results
                 debug_view = create_side_by_side_view(frame, None, None, None, all_results=results)
