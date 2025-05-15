@@ -13,7 +13,7 @@ export class VideoBackground {
   private mesh: THREE.Mesh;
   private texture!: THREE.VideoTexture;
   private material: THREE.MeshBasicMaterial;
-  private wireframeMesh: THREE.Mesh;
+  // private wireframeMesh: THREE.Mesh;
   private videoElement!: HTMLVideoElement;
   private lastVideoTime: number = -1;
   private isInitialized: boolean = false;
@@ -33,16 +33,16 @@ export class VideoBackground {
     // Create mesh for the video plane
     this.mesh = new THREE.Mesh(geometry, this.material);
 
-    // Add wireframe outline to debug video plane bounds
-    const wireGeometry = new THREE.PlaneGeometry(1, 1);
-    const wireMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff0000,
-      wireframe: true,
-      depthTest: false
-    });
-    this.wireframeMesh = new THREE.Mesh(wireGeometry, wireMaterial);
-    this.mesh.add(this.wireframeMesh); // Add as child to follow transforms
-    this.mesh.renderOrder = -1;  // Render first
+    // // Add wireframe outline to debug video plane bounds
+    // const wireGeometry = new THREE.PlaneGeometry(1, 1);
+    // const wireMaterial = new THREE.MeshBasicMaterial({
+    //   color: 0xff0000,
+    //   wireframe: true,
+    //   depthTest: false
+    // });
+    // this.wireframeMesh = new THREE.Mesh(wireGeometry, wireMaterial);
+    // this.mesh.add(this.wireframeMesh); // Add as child to follow transforms
+    // this.mesh.renderOrder = -1;  // Render first
   }
 
   /**
@@ -183,12 +183,12 @@ export class VideoBackground {
     if (this.mesh.geometry) {
       this.mesh.geometry.dispose();
     }
-    if (this.wireframeMesh.geometry) {
-      this.wireframeMesh.geometry.dispose();
-    }
-    if (this.wireframeMesh.material) {
-      (this.wireframeMesh.material as THREE.Material).dispose();
-    }
+    // if (this.wireframeMesh.geometry) {
+    //   this.wireframeMesh.geometry.dispose();
+    // }
+    // if (this.wireframeMesh.material) {
+    //   (this.wireframeMesh.material as THREE.Material).dispose();
+    // }
     this.material.dispose();
   }
 }

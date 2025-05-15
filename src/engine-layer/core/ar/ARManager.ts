@@ -163,24 +163,24 @@ export class ARManager {
     this.renderer.setSize(width, height, false); // false to not set canvas style
     
     // Add debug grid and axes
-    const grid = new THREE.GridHelper(2, 20, 0x444444, 0x444444);
-    grid.rotation.x = Math.PI / 2;
-    this.scene.add(grid);
+    // const grid = new THREE.GridHelper(2, 20, 0x444444, 0x444444);
+    // grid.rotation.x = Math.PI / 2;
+    // this.scene.add(grid);
     
-    const axes = new THREE.AxesHelper(1);
-    this.scene.add(axes);
+    // const axes = new THREE.AxesHelper(1);
+    // this.scene.add(axes);
     
     // Add debug cube
-    const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-    const material = new THREE.MeshBasicMaterial({ 
-      color: 0x00ff00,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.5
-    });
-    this.debugCube = new THREE.Mesh(geometry, material);
-    this.debugCube.position.set(0.3, 0.3, -0.5);
-    this.scene.add(this.debugCube);
+    // const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    // const material = new THREE.MeshBasicMaterial({ 
+    //   color: 0x00ff00,
+    //   wireframe: true,
+    //   transparent: true,
+    //   opacity: 0.5
+    // });
+    // this.debugCube = new THREE.Mesh(geometry, material);
+    // this.debugCube.position.set(0.3, 0.3, -0.5);
+    // this.scene.add(this.debugCube);
     
     // Add lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
@@ -270,17 +270,17 @@ export class ARManager {
       
       // Set up basic scene
       this.setupScene();
-      console.log('ARManager: Scene setup complete', {
-        camera: {
-          position: this.camera.position.toArray(),
-          fov: (this.camera as THREE.PerspectiveCamera).fov,
-          aspect: (this.camera as THREE.PerspectiveCamera).aspect
-        },
-        debugCube: {
-          position: this.debugCube.position.toArray(),
-          visible: this.debugCube.visible
-        }
-      });
+      // console.log('ARManager: Scene setup complete', {
+      //   camera: {
+      //     position: this.camera.position.toArray(),
+      //     fov: (this.camera as THREE.PerspectiveCamera).fov,
+      //     aspect: (this.camera as THREE.PerspectiveCamera).aspect
+      //   },
+      //   debugCube: {
+      //     position: this.debugCube.position.toArray(),
+      //     visible: this.debugCube.visible
+      //   }
+      // });
       
       // Start render loop
       this.animate();
@@ -347,8 +347,8 @@ export class ARManager {
     requestAnimationFrame(this.animate);
     
     // Rotate debug cube
-    this.debugCube.rotation.x += 0.01;
-    this.debugCube.rotation.y += 0.01;
+    // this.debugCube.rotation.x += 0.01;
+    // this.debugCube.rotation.y += 0.01;
     
     // Update video background
     this.videoBackground.update();
@@ -578,8 +578,6 @@ export class ARManager {
       });
     });
   }
-
-
 }
 
 // Export singleton instance
