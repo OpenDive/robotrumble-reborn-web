@@ -377,13 +377,8 @@ export class ARManager {
           this.markerStats.lastDetectionTime = now;
           this.markerStats.lastProcessedFrame = this.frameCount;
 
-          // Detect markers
-          const imageData = new ImageData(
-            new Uint8ClampedArray(frame.data.buffer),
-            frame.width,
-            frame.height
-          );
-          const markers = this.markerDetector.detectMarkers(imageData);
+          // Detect markers - use frame directly since it's already an ImageData
+          const markers = this.markerDetector.detectMarkers(frame);
           
           // Update stats
           this.markerStats.markersDetected = markers.length;

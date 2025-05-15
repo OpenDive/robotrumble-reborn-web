@@ -16,6 +16,7 @@ export class WebcamVideoSource implements IVideoSource {
   private isActive: boolean;
   private frameCallback: ((frame: ImageData) => void) | null = null;
   private frameInterval: number | null = null;
+  private reusableImageData: ImageData | null = null;
 
   private setupFPSCalculation(): void {
     // Update FPS every second
@@ -91,6 +92,12 @@ export class WebcamVideoSource implements IVideoSource {
         }
       });
 
+      // Create reusable ImageData buffer
+      this.reusableImageData = this.ctx.createImageData(
+        this.dimensions.width,
+        this.dimensions.height
+      );
+
       // Get camera stream
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -163,8 +170,20 @@ export class WebcamVideoSource implements IVideoSource {
       return null;
     }
 
-    this.ctx.drawImage(this.video, 0, 0);
-    return this.ctx.getImageData(0, 0, this.dimensions.width, this.dimensions.height);
+    // First draw the video frame
+    this.ctx.save();
+    // Flip horizontally
+    this.ctx.scale(-1, 1);
+    this.ctx.drawImage(this.video, -this.dimensions.width, 0, this.dimensions.width, this.dimensions.height);
+    this.ctx.restore();
+
+    // Use getImageData to write directly into our reusable buffer
+    const frame = this.ctx.getImageData(0, 0, this.dimensions.width, this.dimensions.height);
+    
+    // Copy the frame data into our reusable buffer
+    this.reusableImageData!.data.set(frame.data);
+    
+    return this.reusableImageData;
   }
 
   /**
