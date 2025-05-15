@@ -27,7 +27,13 @@ export class ARManager {
     processingTime: 0,
     totalProcessingTime: 0,
     frameCount: 0,
-    avgProcessingTime: 0
+    avgProcessingTime: 0,
+    memoryStats: {
+      jsHeapSizeLimit: 0,
+      totalJSHeapSize: 0,
+      usedJSHeapSize: 0,
+      lastGCTime: 0
+    }
   };
 
   private constructor() {
@@ -366,7 +372,18 @@ export class ARManager {
           this.markerStats.lastDetectionTime = now;
           this.markerStats.lastProcessedFrame = this.frameCount;
 
-          // Use frame directly from video source - it's already an ImageData
+          // Update memory stats if performance.memory is available
+          if ((performance as any).memory) {
+            const memory = (performance as any).memory;
+            this.markerStats.memoryStats = {
+              jsHeapSizeLimit: memory.jsHeapSizeLimit,
+              totalJSHeapSize: memory.totalJSHeapSize,
+              usedJSHeapSize: memory.usedJSHeapSize,
+              lastGCTime: now
+            };
+          }
+
+          // Use frame directly from video source
           const markers = this.markerDetector.detectMarkers(frame);
           
           // Update stats
@@ -378,12 +395,26 @@ export class ARManager {
 
           // Log stats periodically
           if (this.frameCount % 60 === 0) {
-            console.log('Marker detection stats:', {
-              fps: this.markerStats.detectionFPS.toFixed(1),
-              currentMarkers: this.markerStats.markersDetected,
-              totalDetections: this.markerStats.totalDetections,
-              errors: this.markerStats.errors,
-              frameSkip: this.frameCount - this.markerStats.lastProcessedFrame
+            const memStats = this.markerStats.memoryStats;
+            console.log('System Stats:', {
+              performance: {
+                fps: this.markerStats.detectionFPS.toFixed(1),
+                currentMarkers: this.markerStats.markersDetected,
+                totalDetections: this.markerStats.totalDetections,
+                errors: this.markerStats.errors,
+                frameSkip: this.frameCount - this.markerStats.lastProcessedFrame
+              },
+              memory: {
+                heapUsed: (memStats.usedJSHeapSize / 1024 / 1024).toFixed(2) + ' MB',
+                heapTotal: (memStats.totalJSHeapSize / 1024 / 1024).toFixed(2) + ' MB',
+                heapLimit: (memStats.jsHeapSizeLimit / 1024 / 1024).toFixed(2) + ' MB',
+                heapUsage: ((memStats.usedJSHeapSize / memStats.totalJSHeapSize) * 100).toFixed(1) + '%'
+              },
+              renderer: this.renderer.info.render,
+              scene: {
+                objects: this.scene.children.length,
+                markers: this.markerMeshes.size
+              }
             });
           }
         } catch (error) {
@@ -409,7 +440,13 @@ export class ARManager {
     return {
       ...this.markerStats,
       fps: this.markerStats.detectionFPS.toFixed(1),
-      frameSkip: this.frameCount - this.markerStats.lastProcessedFrame
+      frameSkip: this.frameCount - this.markerStats.lastProcessedFrame,
+      memoryStats: (performance as any).memory ? {
+        jsHeapSizeLimit: (performance as any).memory.jsHeapSizeLimit,
+        totalJSHeapSize: (performance as any).memory.totalJSHeapSize,
+        usedJSHeapSize: (performance as any).memory.usedJSHeapSize,
+        lastGCTime: performance.now()
+      } : null
     };
   }
   

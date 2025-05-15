@@ -7,6 +7,12 @@ interface MarkerStats {
   totalDetections: number;
   errors: number;
   frameSkip: number;
+  memoryStats: {
+    jsHeapSizeLimit: number;
+    totalJSHeapSize: number;
+    usedJSHeapSize: number;
+    lastGCTime: number;
+  };
 }
 
 export const ARDebugPanel: React.FC = () => {
@@ -21,6 +27,10 @@ export const ARDebugPanel: React.FC = () => {
   }, []);
 
   if (!stats) return null;
+
+  const formatMemory = (bytes: number) => {
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  };
 
   return (
     <div className="fixed top-4 right-4 bg-black/80 text-white p-4 rounded-lg font-mono text-sm">
@@ -47,6 +57,33 @@ export const ARDebugPanel: React.FC = () => {
             <td className="pr-4 text-gray-400">Frame Skip:</td>
             <td className="text-right">{stats.frameSkip}</td>
           </tr>
+          {stats.memoryStats && (
+            <>
+              <tr>
+                <td colSpan={2} className="pt-2 pb-1 text-gray-400 border-t border-gray-700">
+                  Memory Usage
+                </td>
+              </tr>
+              <tr>
+                <td className="pr-4 text-gray-400">Used:</td>
+                <td className="text-right">{formatMemory(stats.memoryStats.usedJSHeapSize)}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 text-gray-400">Total:</td>
+                <td className="text-right">{formatMemory(stats.memoryStats.totalJSHeapSize)}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 text-gray-400">Limit:</td>
+                <td className="text-right">{formatMemory(stats.memoryStats.jsHeapSizeLimit)}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 text-gray-400">Usage:</td>
+                <td className="text-right">
+                  {((stats.memoryStats.usedJSHeapSize / stats.memoryStats.totalJSHeapSize) * 100).toFixed(1)}%
+                </td>
+              </tr>
+            </>
+          )}
         </tbody>
       </table>
     </div>
