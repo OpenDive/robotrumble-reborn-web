@@ -23,7 +23,11 @@ export class ARManager {
     markersDetected: 0,
     lastProcessedFrame: 0,
     totalDetections: 0,
-    errors: 0
+    errors: 0,
+    processingTime: 0,
+    totalProcessingTime: 0,
+    frameCount: 0,
+    avgProcessingTime: 0
   };
 
   private constructor() {
@@ -346,23 +350,8 @@ export class ARManager {
   private animate = (): void => {
     requestAnimationFrame(this.animate);
     
-    // Rotate debug cube
-    // this.debugCube.rotation.x += 0.01;
-    // this.debugCube.rotation.y += 0.01;
-    
     // Update video background
     this.videoBackground.update();
-    
-    // Log scene state periodically (every 60 frames)
-    if (this.frameCount % 60 === 0) {
-      console.log('ARManager: Scene state', {
-        frame: this.frameCount,
-        sceneObjects: this.scene.children.length,
-        videoPlaying: !this.videoSource.getVideoElement().paused,
-        videoReadyState: this.videoSource.getVideoElement().readyState,
-        rendererInfo: this.renderer.info.render
-      });
-    }
     
     // Detect markers every 3rd frame for performance
     if (this.frameCount % 3 === 0) {
@@ -377,7 +366,7 @@ export class ARManager {
           this.markerStats.lastDetectionTime = now;
           this.markerStats.lastProcessedFrame = this.frameCount;
 
-          // Detect markers - use frame directly since it's already an ImageData
+          // Use frame directly from video source - it's already an ImageData
           const markers = this.markerDetector.detectMarkers(frame);
           
           // Update stats

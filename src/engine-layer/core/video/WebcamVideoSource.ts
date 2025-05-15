@@ -17,6 +17,12 @@ export class WebcamVideoSource implements IVideoSource {
   private frameCallback: ((frame: ImageData) => void) | null = null;
   private frameInterval: number | null = null;
   private reusableImageData: ImageData | null = null;
+  private frameStats = {
+    captureTime: 0,
+    frameCount: 0,
+    totalCaptureTime: 0,
+    avgCaptureTime: 0
+  };
 
   private setupFPSCalculation(): void {
     // Update FPS every second
@@ -170,6 +176,8 @@ export class WebcamVideoSource implements IVideoSource {
       return null;
     }
 
+    const startTime = performance.now();
+
     // First draw the video frame
     this.ctx.save();
     // Flip horizontally
@@ -177,11 +185,28 @@ export class WebcamVideoSource implements IVideoSource {
     this.ctx.drawImage(this.video, -this.dimensions.width, 0, this.dimensions.width, this.dimensions.height);
     this.ctx.restore();
 
-    // Use getImageData to write directly into our reusable buffer
+    // Get the frame data
     const frame = this.ctx.getImageData(0, 0, this.dimensions.width, this.dimensions.height);
     
-    // Copy the frame data into our reusable buffer
+    // Copy into our reusable buffer
     this.reusableImageData!.data.set(frame.data);
+    
+    // Update performance stats
+    const endTime = performance.now();
+    this.frameStats.captureTime = endTime - startTime;
+    this.frameStats.totalCaptureTime += this.frameStats.captureTime;
+    this.frameStats.frameCount++;
+    this.frameStats.avgCaptureTime = this.frameStats.totalCaptureTime / this.frameStats.frameCount;
+
+    // Log stats periodically
+    if (this.frameStats.frameCount % 60 === 0) {
+      console.log('Frame capture stats:', {
+        lastCaptureTime: this.frameStats.captureTime.toFixed(2) + 'ms',
+        avgCaptureTime: this.frameStats.avgCaptureTime.toFixed(2) + 'ms',
+        totalFrames: this.frameStats.frameCount,
+        fps: this.fps.toFixed(1)
+      });
+    }
     
     return this.reusableImageData;
   }
