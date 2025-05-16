@@ -697,13 +697,14 @@ export class ARManager {
         const zScale = 0.0001; // Small scale factor for millimeter to scene units
         markerGroup.position.z = -Math.abs(marker.pose.bestTranslation[2] * zScale);
 
-        // Convert pose rotation matrix to THREE.js matrix
+        // Convert pose rotation matrix to THREE.js matrix with coordinate system correction
         const rotationMatrix = new THREE.Matrix4();
+        const r = marker.pose.bestRotation; // Shorthand for readability
         rotationMatrix.set(
-          marker.pose.bestRotation[0][0], marker.pose.bestRotation[0][1], marker.pose.bestRotation[0][2], 0,
-          marker.pose.bestRotation[1][0], marker.pose.bestRotation[1][1], marker.pose.bestRotation[1][2], 0,
-          marker.pose.bestRotation[2][0], marker.pose.bestRotation[2][1], marker.pose.bestRotation[2][2], 0,
-          0, 0, 0, 1
+          r[0][0],  -r[0][1],  -r[0][2],  0,
+          -r[1][0],  r[1][1],   r[1][2],  0,
+          -r[2][0],  r[2][1],   r[2][2],  0,
+          0,        0,         0,         1
         );
 
         // Apply rotation to group
