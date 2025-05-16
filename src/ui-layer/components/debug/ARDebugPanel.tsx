@@ -1,18 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { arManager } from '../../../engine-layer/core/ar/ARManager';
+import { Stats } from '../../../engine-layer/core/ar/StatsService';
 
-interface MarkerStats {
+interface MarkerStats extends Stats {
   fps: string;
+  frameSkip: number;
   markersDetected: number;
   totalDetections: number;
   errors: number;
-  frameSkip: number;
-  memoryStats: {
-    jsHeapSizeLimit: number;
-    totalJSHeapSize: number;
-    usedJSHeapSize: number;
-    lastGCTime: number;
-  };
 }
 
 export const ARDebugPanel: React.FC = () => {
@@ -20,7 +15,7 @@ export const ARDebugPanel: React.FC = () => {
 
   useEffect(() => {
     const updateInterval = setInterval(() => {
-      setStats(arManager.getMarkerStats());
+      setStats(arManager.getStats() as MarkerStats);
     }, 100); // Update every 100ms
 
     return () => clearInterval(updateInterval);

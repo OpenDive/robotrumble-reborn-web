@@ -4,6 +4,7 @@ import { VideoBackground } from '../renderer/VideoBackground';
 import { IVideoSource, VideoConfig } from '../video/types';
 import { MarkerDetector, Marker } from './MarkerDetector';
 import { MarkerVisualizer } from './MarkerVisualizer';
+import { StatsService } from './StatsService';
 
 export class ARManager {
   private container!: HTMLElement;
@@ -16,29 +17,13 @@ export class ARManager {
   private videoBackground!: VideoBackground;
   private markerDetector!: MarkerDetector;
   private markerVisualizer!: MarkerVisualizer;
+  private statsService: StatsService;
   private frameCount: number = 0;
-  private markerStats = {
-    lastDetectionTime: 0,
-    detectionFPS: 0,
-    markersDetected: 0,
-    lastProcessedFrame: 0,
-    totalDetections: 0,
-    errors: 0,
-    processingTime: 0,
-    totalProcessingTime: 0,
-    frameCount: 0,
-    avgProcessingTime: 0,
-    memoryStats: {
-      jsHeapSizeLimit: 0,
-      totalJSHeapSize: 0,
-      usedJSHeapSize: 0,
-      lastGCTime: 0
-    }
-  };
 
   private constructor() {
     console.log('ARManager: Constructor called');
     this.videoSourceFactory = VideoSourceFactory.getInstance();
+    this.statsService = StatsService.getInstance();
   }
 
   static getInstance(): ARManager {
@@ -363,6 +348,10 @@ export class ARManager {
   private animate = (): void => {
     requestAnimationFrame(this.animate);
     
+    // Update frame count in StatsService
+    this.frameCount++;
+    this.statsService.updateFrameCount(this.frameCount);
+    
     // Update video background
     this.videoBackground.update();
     
@@ -371,52 +360,22 @@ export class ARManager {
       const frame = this.videoSource.getCurrentFrame();
       if (frame) {
         try {
-          // Update detection stats
-          const now = performance.now();
-          if (this.markerStats.lastDetectionTime > 0) {
-            this.markerStats.detectionFPS = 1000 / (now - this.markerStats.lastDetectionTime);
-          }
-          this.markerStats.lastDetectionTime = now;
-          this.markerStats.lastProcessedFrame = this.frameCount;
-
-          // Update memory stats if performance.memory is available
-          if ((performance as any).memory) {
-            const memory = (performance as any).memory;
-            this.markerStats.memoryStats = {
-              jsHeapSizeLimit: memory.jsHeapSizeLimit,
-              totalJSHeapSize: memory.totalJSHeapSize,
-              usedJSHeapSize: memory.usedJSHeapSize,
-              lastGCTime: now
-            };
-          }
+          // Update memory stats
+          this.statsService.updateMemoryStats();
 
           // Use frame directly from video source
           const markers = this.markerDetector.detectMarkers(frame);
           
-          // Update stats
-          this.markerStats.markersDetected = markers.length;
-          this.markerStats.totalDetections += markers.length;
+          // Update detection stats
+          this.statsService.updateDetectionStats(markers.length);
 
           // Update visualizations
           this.markerVisualizer.updateVisuals(markers);
 
           // Log stats periodically
           if (this.frameCount % 60 === 0) {
-            const memStats = this.markerStats.memoryStats;
             console.log('System Stats:', {
-              performance: {
-                fps: this.markerStats.detectionFPS.toFixed(1),
-                currentMarkers: this.markerStats.markersDetected,
-                totalDetections: this.markerStats.totalDetections,
-                errors: this.markerStats.errors,
-                frameSkip: this.frameCount - this.markerStats.lastProcessedFrame
-              },
-              memory: {
-                heapUsed: (memStats.usedJSHeapSize / 1024 / 1024).toFixed(2) + ' MB',
-                heapTotal: (memStats.totalJSHeapSize / 1024 / 1024).toFixed(2) + ' MB',
-                heapLimit: (memStats.jsHeapSizeLimit / 1024 / 1024).toFixed(2) + ' MB',
-                heapUsage: ((memStats.usedJSHeapSize / memStats.totalJSHeapSize) * 100).toFixed(1) + '%'
-              },
+              ...this.statsService.getFormattedStats(),
               renderer: this.renderer.info.render,
               scene: {
                 objects: this.scene.children.length
@@ -424,12 +383,11 @@ export class ARManager {
             });
           }
         } catch (error) {
-          this.markerStats.errors++;
+          this.statsService.recordError();
           console.error('Error in marker detection:', error);
         }
       }
     }
-    this.frameCount++;
     
     // Render scene
     this.renderer.render(this.scene, this.camera);
@@ -442,18 +400,8 @@ export class ARManager {
     return this.videoSource;
   }
 
-  getMarkerStats() {
-    return {
-      ...this.markerStats,
-      fps: this.markerStats.detectionFPS.toFixed(1),
-      frameSkip: this.frameCount - this.markerStats.lastProcessedFrame,
-      memoryStats: (performance as any).memory ? {
-        jsHeapSizeLimit: (performance as any).memory.jsHeapSizeLimit,
-        totalJSHeapSize: (performance as any).memory.totalJSHeapSize,
-        usedJSHeapSize: (performance as any).memory.usedJSHeapSize,
-        lastGCTime: performance.now()
-      } : null
-    };
+  getStats() {
+    return this.statsService.getStats();
   }
   
   /**
@@ -463,6 +411,7 @@ export class ARManager {
   processFrame(frame: ImageData): void {
     // Update frame count
     this.frameCount++;
+    this.statsService.updateFrameCount(this.frameCount);
 
     // Process frame for marker detection every 3rd frame
     if (this.frameCount % 3 === 0) {
@@ -482,20 +431,14 @@ export class ARManager {
           }
         });
 
-        // Update detection stats
-        const now = performance.now();
-        if (this.markerStats.lastDetectionTime > 0) {
-          this.markerStats.detectionFPS = 1000 / (now - this.markerStats.lastDetectionTime);
-        }
-        this.markerStats.lastDetectionTime = now;
-        this.markerStats.lastProcessedFrame = this.frameCount;
+        // Update stats
+        this.statsService.updateMemoryStats();
 
         // Detect markers
         const markers = this.markerDetector.detectMarkers(frame);
         
-        // Update stats
-        this.markerStats.markersDetected = markers.length;
-        this.markerStats.totalDetections += markers.length;
+        // Update detection stats
+        this.statsService.updateDetectionStats(markers.length);
 
         // Log marker visualization
         if (markers.length > 0) {
@@ -518,7 +461,7 @@ export class ARManager {
         this.markerVisualizer.updateVisuals(markers);
 
       } catch (error) {
-        this.markerStats.errors++;
+        this.statsService.recordError();
         console.error('ARManager: Error in marker detection:', error);
       }
     }
@@ -529,9 +472,7 @@ export class ARManager {
     // Log render stats periodically
     if (this.frameCount % 60 === 0) {
       console.log('ARManager: Render stats', {
-        fps: this.markerStats.detectionFPS.toFixed(1),
-        totalDetections: this.markerStats.totalDetections,
-        errors: this.markerStats.errors,
+        ...this.statsService.getFormattedStats(),
         rendererInfo: this.renderer.info.render
       });
     }
