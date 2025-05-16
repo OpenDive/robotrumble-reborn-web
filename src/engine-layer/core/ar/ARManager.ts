@@ -687,12 +687,16 @@ export class ARManager {
       const centerX = ((marker.center.x / videoWidth) - 0.5) * 2 * scaleX * VIDEO_SCALE;
       const centerY = (0.5 - (marker.center.y / videoHeight)) * 2 * scaleY * VIDEO_SCALE;
       const centerPos = new THREE.Vector3(centerX, centerY, -Z_DISTANCE);
-      
-      // Set group position to center
+
+      // Set base position using video coordinates
       markerGroup.position.copy(centerPos);
 
-      // If we have pose information, use it for rotation
+      // If we have pose information, use it for rotation and Z-depth
       if (marker.pose) {
+        // Add Z-translation for depth perception
+        const zScale = 0.0001; // Small scale factor for millimeter to scene units
+        markerGroup.position.z = -Math.abs(marker.pose.bestTranslation[2] * zScale);
+
         // Convert pose rotation matrix to THREE.js matrix
         const rotationMatrix = new THREE.Matrix4();
         rotationMatrix.set(
@@ -704,14 +708,6 @@ export class ARManager {
 
         // Apply rotation to group
         markerGroup.setRotationFromMatrix(rotationMatrix);
-
-        // Scale translation to match our scene scale
-        const translationScale = VIDEO_SCALE * 0.001; // Convert mm to scene units
-        markerGroup.position.set(
-          marker.pose.bestTranslation[0] * translationScale,
-          marker.pose.bestTranslation[1] * translationScale,
-          -marker.pose.bestTranslation[2] * translationScale
-        );
 
         // Update corner positions in local space
         transformedCorners.forEach((worldCorner, i) => {
