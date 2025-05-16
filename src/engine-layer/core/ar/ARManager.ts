@@ -3,6 +3,7 @@ import { VideoSourceFactory } from '../video/VideoSourceFactory';
 import { VideoBackground } from '../renderer/VideoBackground';
 import { IVideoSource, VideoConfig } from '../video/types';
 import { MarkerDetector, Marker } from './MarkerDetector';
+import { MarkerVisualizer } from './MarkerVisualizer';
 
 export class ARManager {
   private container!: HTMLElement;
@@ -14,9 +15,8 @@ export class ARManager {
   private videoSourceFactory: VideoSourceFactory;
   private videoBackground!: VideoBackground;
   private markerDetector!: MarkerDetector;
-  private markerMeshes: Map<number, THREE.Group> = new Map();
+  private markerVisualizer!: MarkerVisualizer;
   private frameCount: number = 0;
-  private debugCube!: THREE.Mesh;
   private markerStats = {
     lastDetectionTime: 0,
     detectionFPS: 0,
@@ -277,6 +277,14 @@ export class ARManager {
         }
       });
       
+      // Initialize marker visualizer
+      this.markerVisualizer = new MarkerVisualizer(this.videoSource, {
+        videoScale: 1.5,
+        baseHeight: 2.0,
+        zDistance: 0.1
+      });
+      this.markerVisualizer.attachToScene(this.scene);
+      
       // Set up basic scene
       this.setupScene();
       // console.log('ARManager: Scene setup complete', {
@@ -390,7 +398,7 @@ export class ARManager {
           this.markerStats.totalDetections += markers.length;
 
           // Update visualizations
-          this.updateMarkerVisuals(markers);
+          this.markerVisualizer.updateVisuals(markers);
 
           // Log stats periodically
           if (this.frameCount % 60 === 0) {
@@ -411,8 +419,7 @@ export class ARManager {
               },
               renderer: this.renderer.info.render,
               scene: {
-                objects: this.scene.children.length,
-                markers: this.markerMeshes.size
+                objects: this.scene.children.length
               }
             });
           }
@@ -508,7 +515,7 @@ export class ARManager {
         }
 
         // Update visualizations
-        this.updateMarkerVisuals(markers);
+        this.markerVisualizer.updateVisuals(markers);
 
       } catch (error) {
         this.markerStats.errors++;
@@ -533,226 +540,16 @@ export class ARManager {
     this.renderer.render(this.scene, this.camera);
   }
   
-  private updateMarkerVisuals(markers: Marker[]): void {
-    // Remove old marker meshes that are no longer detected
-    for (const [id, group] of this.markerMeshes) {
-      if (!markers.find(m => m.id === id)) {
-        this.scene.remove(group);
-        this.markerMeshes.delete(id);
-      }
+  dispose(): void {
+    if (this.markerVisualizer) {
+      this.markerVisualizer.dispose();
     }
-    
-    // Video background configuration constants - match VideoBackground settings
-    const VIDEO_SCALE = 1.5;
-    const BASE_HEIGHT = 2.0;
-    const Z_DISTANCE = 0.1;
-    
-    // Marker visualization sizes - adjusted for better visibility
-    const BOX_SIZE = 0.2 * VIDEO_SCALE;
-    const AXES_SIZE = 0.3 * VIDEO_SCALE;
-    const CORNER_SIZE = 0.015 * VIDEO_SCALE;
-    
-    // Update or create marker visualizations
-    markers.forEach((marker) => {
-      let markerGroup = this.markerMeshes.get(marker.id);
-      
-      if (!markerGroup) {
-        // Create new marker visualization group
-        markerGroup = new THREE.Group();
-        
-        // Create cube with colored faces
-        const cubeSize = BOX_SIZE;
-        const cubeGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
-        
-        // Create materials for each face
-        const materials = [
-          new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.6 }), // Right - Red
-          new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.6 }), // Left - Blue
-          new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.6 }), // Top - Green
-          new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.6 }), // Bottom - Yellow
-          new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.6 }), // Front - Magenta
-          new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.6 })  // Back - Cyan
-        ];
-        
-        // Create cube mesh with materials
-        const cubeMesh = new THREE.Mesh(cubeGeometry, materials);
-        
-        // Add wireframe overlay
-        const wireframeGeometry = new THREE.BoxGeometry(cubeSize * 1.001, cubeSize * 1.001, cubeSize * 1.001);
-        const wireframeMaterial = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          wireframe: true,
-          transparent: true,
-          opacity: 0.2
-        });
-        const wireframeMesh = new THREE.Mesh(wireframeGeometry, wireframeMaterial);
-        
-        // Add cube and wireframe to group
-        markerGroup.add(cubeMesh);
-        markerGroup.add(wireframeMesh);
-        
-        // Create custom axes with labels and arrows
-        const axesGroup = new THREE.Group();
-        
-        // X-axis (red)
-        const xAxis = new THREE.ArrowHelper(
-          new THREE.Vector3(1, 0, 0),
-          new THREE.Vector3(0, 0, 0),
-          AXES_SIZE,
-          0xff0000,
-          AXES_SIZE * 0.2,  // Head length
-          AXES_SIZE * 0.1   // Head width
-        );
-        const xLabel = this.createAxisLabel('X', 0xff0000);
-        xLabel.position.set(AXES_SIZE + 0.05, 0, 0);
-        axesGroup.add(xAxis);
-        axesGroup.add(xLabel);
-        
-        // Y-axis (green)
-        const yAxis = new THREE.ArrowHelper(
-          new THREE.Vector3(0, 1, 0),
-          new THREE.Vector3(0, 0, 0),
-          AXES_SIZE,
-          0x00ff00,
-          AXES_SIZE * 0.2,
-          AXES_SIZE * 0.1
-        );
-        const yLabel = this.createAxisLabel('Y', 0x00ff00);
-        yLabel.position.set(0, AXES_SIZE + 0.05, 0);
-        axesGroup.add(yAxis);
-        axesGroup.add(yLabel);
-        
-        // Z-axis (blue)
-        const zAxis = new THREE.ArrowHelper(
-          new THREE.Vector3(0, 0, 1),
-          new THREE.Vector3(0, 0, 0),
-          AXES_SIZE,
-          0x0000ff,
-          AXES_SIZE * 0.2,
-          AXES_SIZE * 0.1
-        );
-        const zLabel = this.createAxisLabel('Z', 0x0000ff);
-        zLabel.position.set(0, 0, AXES_SIZE + 0.05);
-        axesGroup.add(zAxis);
-        axesGroup.add(zLabel);
-        
-        markerGroup.add(axesGroup);
-        
-        // Add corner visualization with improved materials
-        const cornerGeometry = new THREE.SphereGeometry(CORNER_SIZE);
-        const cornerMaterial = new THREE.MeshBasicMaterial({ 
-          color: 0xffff00,
-          transparent: true,
-          opacity: 0.8
-        });
-        
-        // Add numbered corners for better tracking
-        for (let i = 0; i < 4; i++) {
-          const cornerGroup = new THREE.Group();
-          const corner = new THREE.Mesh(cornerGeometry, cornerMaterial);
-          cornerGroup.add(corner);
-          
-          // Add corner number label
-          const label = this.createAxisLabel(String(i), 0xffff00);
-          label.scale.set(0.5, 0.5, 0.5);
-          label.position.set(CORNER_SIZE * 2, CORNER_SIZE * 2, 0);
-          cornerGroup.add(label);
-          
-          cornerGroup.name = `corner${i}`;
-          markerGroup.add(cornerGroup);
-        }
-        
-        this.markerMeshes.set(marker.id, markerGroup);
-        this.scene.add(markerGroup);
-      }
-      
-      // At this point markerGroup is guaranteed to exist
-      const videoElement = this.videoSource.getVideoElement();
-      const videoWidth = videoElement.videoWidth;
-      const videoHeight = videoElement.videoHeight;
-      
-      // Calculate video aspect ratio and scale factors
-      const videoAspect = videoWidth / videoHeight;
-      const scaleY = BASE_HEIGHT / 2;
-      const scaleX = scaleY * videoAspect;
-      
-      // Transform marker corners to scene space
-      const transformedCorners = marker.corners.map(corner => {
-        const x = ((corner.x / videoWidth) - 0.5) * 2 * scaleX * VIDEO_SCALE;
-        const y = (0.5 - (corner.y / videoHeight)) * 2 * scaleY * VIDEO_SCALE;
-        return new THREE.Vector3(x, y, -Z_DISTANCE);
-      });
-      
-      // Calculate marker center in scene space
-      const centerX = ((marker.center.x / videoWidth) - 0.5) * 2 * scaleX * VIDEO_SCALE;
-      const centerY = (0.5 - (marker.center.y / videoHeight)) * 2 * scaleY * VIDEO_SCALE;
-      const centerPos = new THREE.Vector3(centerX, centerY, -Z_DISTANCE);
-
-      // Set base position using video coordinates
-      markerGroup.position.copy(centerPos);
-
-      // If we have pose information, use it for rotation and Z-depth
-      if (marker.pose) {
-        // Add Z-translation for depth perception
-        const zScale = 0.0001; // Small scale factor for millimeter to scene units
-        const zDistance = Math.abs(marker.pose.bestTranslation[2] * zScale);
-        markerGroup.position.z = -zDistance;
-
-        // Calculate scale compensation based on Z-distance
-        // We use 0.1 as our reference distance (matching Z_DISTANCE)
-        const baseDistance = Z_DISTANCE;
-        const compensationScale = zDistance / baseDistance;
-        markerGroup.scale.setScalar(1 / compensationScale);
-
-        // Convert pose rotation matrix to THREE.js matrix with coordinate system correction
-        const rotationMatrix = new THREE.Matrix4();
-        const r = marker.pose.bestRotation; // Shorthand for readability
-        rotationMatrix.set(
-          r[0][0],   r[0][1],  -r[0][2],  0,
-          r[1][0],   r[1][1],  -r[1][2],  0,
-          -r[2][0], -r[2][1],   r[2][2],  0,
-          0,        0,          0,         1
-        );
-
-        // Apply rotation to group
-        markerGroup.setRotationFromMatrix(rotationMatrix);
-
-        // Update corner positions in local space
-        transformedCorners.forEach((worldCorner, i) => {
-          const cornerGroup = markerGroup.getObjectByName(`corner${i}`) as THREE.Group | undefined;
-          if (cornerGroup) {
-            // Convert world corner to local space relative to marker center
-            const localCorner = worldCorner.clone()
-              .sub(centerPos)
-              .applyMatrix4(new THREE.Matrix4().copy(rotationMatrix).invert());
-            
-            cornerGroup.position.copy(localCorner);
-          }
-        });
-      }
-    });
-  }
-
-  private createAxisLabel(text: string, color: number): THREE.Sprite {
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
-    
-    const context = canvas.getContext('2d');
-    if (context) {
-      context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
-      context.font = 'bold 48px Arial';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(text, 32, 32);
+    if (this.videoBackground) {
+      this.videoBackground.dispose();
     }
-    
-    const texture = new THREE.CanvasTexture(canvas);
-    const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-    const sprite = new THREE.Sprite(spriteMaterial);
-    sprite.scale.set(0.1, 0.1, 1);
-    
-    return sprite;
+    if (this.renderer) {
+      this.renderer.dispose();
+    }
   }
 }
 
