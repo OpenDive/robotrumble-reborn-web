@@ -626,56 +626,69 @@ export class ARManager {
       const videoWidth = videoElement.videoWidth;
       const videoHeight = videoElement.videoHeight;
       
-      // Calculate video aspect ratio
+      // Calculate video aspect ratio and scale factors
       const videoAspect = videoWidth / videoHeight;
-      
-      // Calculate scale factors based on BASE_HEIGHT
       const scaleY = BASE_HEIGHT / 2;
       const scaleX = scaleY * videoAspect;
       
-      // Transform center coordinates
+      // Transform marker corners to scene space first
+      const transformedCorners = marker.corners.map(corner => {
+        const x = ((corner.x / videoWidth) - 0.5) * 2 * scaleX * VIDEO_SCALE;
+        const y = (0.5 - (corner.y / videoHeight)) * 2 * scaleY * VIDEO_SCALE;
+        return new THREE.Vector3(x, y, -Z_DISTANCE);
+      });
+      
+      // Calculate marker center in scene space
       const centerX = ((marker.center.x / videoWidth) - 0.5) * 2 * scaleX * VIDEO_SCALE;
       const centerY = (0.5 - (marker.center.y / videoHeight)) * 2 * scaleY * VIDEO_SCALE;
-      mesh.position.set(centerX, centerY, -Z_DISTANCE);
+      const centerPos = new THREE.Vector3(centerX, centerY, -Z_DISTANCE);
       
-      // Calculate marker orientation
-      const corners = marker.corners;
-      if (corners.length === 4) {
-        // Calculate vectors for marker orientation
-        const v1 = new THREE.Vector3(
-          corners[1].x - corners[0].x,
-          corners[1].y - corners[0].y,
-          0
-        ).normalize();
+      // Set mesh position
+      mesh.position.copy(centerPos);
+      
+      // Calculate marker orientation using transformed coordinates
+      if (transformedCorners.length === 4) {
+        // Calculate orthonormal basis
+        const center = new THREE.Vector3().addVectors(
+          transformedCorners[0],
+          transformedCorners[2]
+        ).multiplyScalar(0.5);
         
-        const v2 = new THREE.Vector3(
-          corners[3].x - corners[0].x,
-          corners[3].y - corners[0].y,
-          0
-        ).normalize();
+        // X axis: from center to midpoint of right edge
+        const rightMid = new THREE.Vector3().addVectors(
+          transformedCorners[1],
+          transformedCorners[2]
+        ).multiplyScalar(0.5);
+        const xAxis = new THREE.Vector3().subVectors(rightMid, center).normalize();
         
-        const normal = new THREE.Vector3().crossVectors(v1, v2).normalize();
+        // Y axis: from center to midpoint of top edge
+        const topMid = new THREE.Vector3().addVectors(
+          transformedCorners[0],
+          transformedCorners[1]
+        ).multiplyScalar(0.5);
+        const yAxis = new THREE.Vector3().subVectors(topMid, center).normalize();
         
-        // Create rotation matrix
-        const rotationMatrix = new THREE.Matrix4();
-        rotationMatrix.makeBasis(v1, v2, normal);
+        // Z axis: cross product of X and Y
+        const zAxis = new THREE.Vector3().crossVectors(xAxis, yAxis).normalize();
         
-        // Apply rotation to mesh
+        // Ensure Y is orthogonal to X and Z
+        yAxis.crossVectors(zAxis, xAxis).normalize();
+        
+        // Create and apply rotation matrix
+        const rotationMatrix = new THREE.Matrix4().makeBasis(
+          xAxis,
+          yAxis,
+          zAxis
+        );
         mesh.setRotationFromMatrix(rotationMatrix);
       }
       
-      // Update corner positions using the same transformation
-      marker.corners.forEach((corner, i) => {
-        const cornerX = ((corner.x / videoWidth) - 0.5) * 2 * scaleX * VIDEO_SCALE;
-        const cornerY = (0.5 - (corner.y / videoHeight)) * 2 * scaleY * VIDEO_SCALE;
-        
+      // Update corner positions in local space relative to center
+      transformedCorners.forEach((corner, i) => {
         const cornerMesh = mesh.getObjectByName(`corner${i}`) as THREE.Mesh;
         if (cornerMesh) {
-          cornerMesh.position.set(
-            cornerX - centerX,
-            cornerY - centerY,
-            0.01
-          );
+          const localPos = corner.clone().sub(centerPos);
+          cornerMesh.position.copy(localPos);
         }
       });
     });
