@@ -695,7 +695,14 @@ export class ARManager {
       if (marker.pose) {
         // Add Z-translation for depth perception
         const zScale = 0.0001; // Small scale factor for millimeter to scene units
-        markerGroup.position.z = -Math.abs(marker.pose.bestTranslation[2] * zScale);
+        const zDistance = Math.abs(marker.pose.bestTranslation[2] * zScale);
+        markerGroup.position.z = -zDistance;
+
+        // Calculate scale compensation based on Z-distance
+        // We use 0.1 as our reference distance (matching Z_DISTANCE)
+        const baseDistance = Z_DISTANCE;
+        const compensationScale = zDistance / baseDistance;
+        markerGroup.scale.setScalar(1 / compensationScale);
 
         // Convert pose rotation matrix to THREE.js matrix with coordinate system correction
         const rotationMatrix = new THREE.Matrix4();
