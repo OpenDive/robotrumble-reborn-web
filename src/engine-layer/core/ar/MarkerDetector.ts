@@ -4,6 +4,14 @@ export interface Marker {
   id: number;
   corners: { x: number; y: number }[];
   center: { x: number; y: number };
+  pose?: {
+    bestError: number;
+    bestRotation: number[][];
+    bestTranslation: number[];
+    alternativeError: number;
+    alternativeRotation: number[][];
+    alternativeTranslation: number[];
+  };
 }
 
 /**
@@ -11,8 +19,10 @@ export interface Marker {
  */
 export class MarkerDetector {
   private detector: jsAruco.AR.Detector;
+  private posit: any; // jsAruco.POS1.Posit
   private debugCanvas: HTMLCanvasElement | null = null;
   private debugCtx: CanvasRenderingContext2D | null = null;
+  private readonly MARKER_SIZE_MM = 50; // Physical marker size in millimeters
 
   constructor() {
     console.log('MarkerDetector: Initializing...', { jsAruco: !!jsAruco, AR: !!(jsAruco?.AR) });
@@ -20,6 +30,12 @@ export class MarkerDetector {
       // @ts-ignore - js-aruco types are not properly defined
       this.detector = new jsAruco.AR.Detector();
       console.log('MarkerDetector: Successfully created detector');
+      
+      // Initialize POSIT with marker size and default focal length
+      // We'll update the focal length when we get the actual video dimensions
+      // @ts-ignore - js-aruco types are not properly defined
+      this.posit = new jsAruco.POS1.Posit(this.MARKER_SIZE_MM, 640);
+      console.log('MarkerDetector: Successfully created POSIT estimator');
       
       // Create debug canvas
       this.debugCanvas = document.createElement('canvas');
@@ -57,6 +73,10 @@ export class MarkerDetector {
         firstPixels: Array.from(imageData.data.slice(0, 16)), // Show first few pixels
         dataType: imageData.data.constructor.name
       });
+
+      // Update POSIT focal length based on image width
+      // @ts-ignore - js-aruco types are not properly defined
+      this.posit = new jsAruco.POS1.Posit(this.MARKER_SIZE_MM, imageData.width);
 
       // Debug visualization
       if (this.debugCtx && this.debugCanvas) {
@@ -126,18 +146,43 @@ export class MarkerDetector {
         } : null
       });
 
-      // Convert to our marker format
-      return markers.map((marker: jsAruco.DetectedMarker) => ({
-        id: marker.id,
-        corners: marker.corners.map((corner: jsAruco.MarkerCorners) => ({
+      // Convert to our marker format and calculate pose
+      return markers.map((marker: jsAruco.DetectedMarker) => {
+        const corners = marker.corners.map((corner: jsAruco.MarkerCorners) => ({
           x: corner.x,
           y: corner.y
-        })),
-        center: {
-          x: marker.corners.reduce((sum: number, corner: jsAruco.MarkerCorners) => sum + corner.x, 0) / 4,
-          y: marker.corners.reduce((sum: number, corner: jsAruco.MarkerCorners) => sum + corner.y, 0) / 4
+        }));
+
+        // Center the corners for POSIT
+        const centeredCorners = corners.map(corner => ({
+          x: corner.x - (imageData.width / 2),
+          y: (imageData.height / 2) - corner.y
+        }));
+
+        // Calculate pose using POSIT
+        let pose;
+        try {
+          pose = this.posit.pose(centeredCorners);
+          console.log('MarkerDetector: Pose calculated', {
+            markerId: marker.id,
+            bestError: pose.bestError,
+            bestTranslation: pose.bestTranslation,
+            bestRotation: pose.bestRotation
+          });
+        } catch (error) {
+          console.error('MarkerDetector: Failed to calculate pose:', error);
         }
-      }));
+
+        return {
+          id: marker.id,
+          corners: corners,
+          center: {
+            x: corners.reduce((sum, corner) => sum + corner.x, 0) / 4,
+            y: corners.reduce((sum, corner) => sum + corner.y, 0) / 4
+          },
+          pose: pose
+        };
+      });
     } catch (error) {
       console.error('MarkerDetector: Detection failed:', error);
       return [];
