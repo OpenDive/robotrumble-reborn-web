@@ -701,10 +701,10 @@ export class ARManager {
         const rotationMatrix = new THREE.Matrix4();
         const r = marker.pose.bestRotation; // Shorthand for readability
         rotationMatrix.set(
-          r[0][0],  -r[0][1],  -r[0][2],  0,
-          -r[1][0],  r[1][1],   r[1][2],  0,
-          -r[2][0],  r[2][1],   r[2][2],  0,
-          0,        0,         0,         1
+          r[0][0],   r[0][1],  -r[0][2],  0,
+          r[1][0],   r[1][1],  -r[1][2],  0,
+          -r[2][0], -r[2][1],   r[2][2],  0,
+          0,        0,          0,         1
         );
 
         // Apply rotation to group
