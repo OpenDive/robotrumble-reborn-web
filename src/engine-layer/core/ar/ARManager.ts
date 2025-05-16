@@ -548,13 +548,18 @@ export class ARManager {
     const BASE_HEIGHT = 2.0;
     const Z_DISTANCE = 0.1;
     
+    // Marker visualization sizes
+    const BOX_SIZE = 0.2 * VIDEO_SCALE;
+    const AXES_SIZE = 0.3 * VIDEO_SCALE;
+    const CORNER_SIZE = 0.015 * VIDEO_SCALE;
+    
     // Update or create marker visualizations
     markers.forEach((marker) => {
       let mesh = this.markerMeshes.get(marker.id);
       
       if (!mesh) {
         // Create new marker visualization - scale the geometry to match video scale
-        const geometry = new THREE.BoxGeometry(0.1 * VIDEO_SCALE, 0.1 * VIDEO_SCALE, 0.01);
+        const geometry = new THREE.BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE * 0.1);
         const material = new THREE.MeshBasicMaterial({
           color: 0xff0000,
           wireframe: true,
@@ -563,12 +568,49 @@ export class ARManager {
         });
         mesh = new THREE.Mesh(geometry, material);
         
-        // Scale the axes helper to match
-        const axes = new THREE.AxesHelper(0.15 * VIDEO_SCALE);
-        mesh.add(axes);
+        // Create custom axes with labels
+        const axesGroup = new THREE.Group();
+        
+        // X-axis (red)
+        const xAxis = new THREE.ArrowHelper(
+          new THREE.Vector3(1, 0, 0),
+          new THREE.Vector3(0, 0, 0),
+          AXES_SIZE,
+          0xff0000
+        );
+        const xLabel = this.createAxisLabel('X', 0xff0000);
+        xLabel.position.set(AXES_SIZE + 0.05, 0, 0);
+        axesGroup.add(xAxis);
+        axesGroup.add(xLabel);
+        
+        // Y-axis (green)
+        const yAxis = new THREE.ArrowHelper(
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3(0, 0, 0),
+          AXES_SIZE,
+          0x00ff00
+        );
+        const yLabel = this.createAxisLabel('Y', 0x00ff00);
+        yLabel.position.set(0, AXES_SIZE + 0.05, 0);
+        axesGroup.add(yAxis);
+        axesGroup.add(yLabel);
+        
+        // Z-axis (blue)
+        const zAxis = new THREE.ArrowHelper(
+          new THREE.Vector3(0, 0, 1),
+          new THREE.Vector3(0, 0, 0),
+          AXES_SIZE,
+          0x0000ff
+        );
+        const zLabel = this.createAxisLabel('Z', 0x0000ff);
+        zLabel.position.set(0, 0, AXES_SIZE + 0.05);
+        axesGroup.add(zAxis);
+        axesGroup.add(zLabel);
+        
+        mesh.add(axesGroup);
         
         // Add corner visualization
-        const cornerGeometry = new THREE.SphereGeometry(0.01 * VIDEO_SCALE);
+        const cornerGeometry = new THREE.SphereGeometry(CORNER_SIZE);
         const cornerMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
         for (let i = 0; i < 4; i++) {
           const corner = new THREE.Mesh(cornerGeometry, cornerMaterial);
@@ -596,6 +638,32 @@ export class ARManager {
       const centerY = (0.5 - (marker.center.y / videoHeight)) * 2 * scaleY * VIDEO_SCALE;
       mesh.position.set(centerX, centerY, -Z_DISTANCE);
       
+      // Calculate marker orientation
+      const corners = marker.corners;
+      if (corners.length === 4) {
+        // Calculate vectors for marker orientation
+        const v1 = new THREE.Vector3(
+          corners[1].x - corners[0].x,
+          corners[1].y - corners[0].y,
+          0
+        ).normalize();
+        
+        const v2 = new THREE.Vector3(
+          corners[3].x - corners[0].x,
+          corners[3].y - corners[0].y,
+          0
+        ).normalize();
+        
+        const normal = new THREE.Vector3().crossVectors(v1, v2).normalize();
+        
+        // Create rotation matrix
+        const rotationMatrix = new THREE.Matrix4();
+        rotationMatrix.makeBasis(v1, v2, normal);
+        
+        // Apply rotation to mesh
+        mesh.setRotationFromMatrix(rotationMatrix);
+      }
+      
       // Update corner positions using the same transformation
       marker.corners.forEach((corner, i) => {
         const cornerX = ((corner.x / videoWidth) - 0.5) * 2 * scaleX * VIDEO_SCALE;
@@ -611,6 +679,28 @@ export class ARManager {
         }
       });
     });
+  }
+
+  private createAxisLabel(text: string, color: number): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    
+    const context = canvas.getContext('2d');
+    if (context) {
+      context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+      context.font = 'bold 48px Arial';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(text, 32, 32);
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.scale.set(0.1, 0.1, 1);
+    
+    return sprite;
   }
 }
 
