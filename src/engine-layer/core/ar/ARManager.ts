@@ -16,7 +16,7 @@ export class ARManager {
   private markerDetector!: MarkerDetector;
   private markerMeshes!: Map<number, THREE.Mesh>;
   private frameCount: number = 0;
-  private debugCube!: THREE.Mesh;
+  private debugCube!: THREE.Mesh | null;
   private markerStats = {
     lastDetectionTime: 0,
     detectionFPS: 0,
@@ -534,13 +534,54 @@ export class ARManager {
     this.renderer.render(this.scene, this.camera);
   }
   
+  private disposeMesh(mesh: THREE.Mesh): void {
+    // Remove from scene first
+    this.scene.remove(mesh);
+    
+    // Dispose geometry
+    if (mesh.geometry) {
+        mesh.geometry.dispose();
+    }
+    
+    // Dispose material(s)
+    if (Array.isArray(mesh.material)) {
+        mesh.material.forEach(material => material.dispose());
+    } else if (mesh.material) {
+        mesh.material.dispose();
+    }
+    
+    // Dispose child meshes (corners and axes)
+    mesh.children.forEach(child => {
+        if (child instanceof THREE.Mesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(m => m.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        }
+        if (child instanceof THREE.AxesHelper) {
+            child.geometry.dispose();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(m => m.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        }
+    });
+  }
+
   private updateMarkerVisuals(markers: Marker[]): void {
     // Remove old marker meshes that are no longer detected
     for (const [id, mesh] of this.markerMeshes) {
-      if (!markers.find(m => m.id === id)) {
-        this.scene.remove(mesh);
-        this.markerMeshes.delete(id);
-      }
+        if (!markers.find(m => m.id === id)) {
+            this.disposeMesh(mesh);
+            this.markerMeshes.delete(id);
+        }
     }
     
     // Update or create marker visualizations
@@ -598,6 +639,37 @@ export class ARManager {
         }
       });
     });
+  }
+
+  public async stop(): Promise<void> {
+    // Cleanup all marker meshes
+    for (const [id, mesh] of this.markerMeshes) {
+        this.disposeMesh(mesh);
+    }
+    this.markerMeshes.clear();
+    
+    // Cleanup video background if it exists
+    if (this.videoBackground) {
+        const mesh = this.videoBackground.getMesh();
+        if (mesh) {
+            this.disposeMesh(mesh);
+        }
+    }
+    
+    // Dispose debug cube if it exists
+    if (this.debugCube) {
+        this.disposeMesh(this.debugCube);
+        this.debugCube = null;
+    }
+    
+    // Clear scene
+    while(this.scene.children.length > 0) { 
+        const child = this.scene.children[0];
+        if (child instanceof THREE.Mesh) {
+            this.disposeMesh(child);
+        }
+        this.scene.remove(child);
+    }
   }
 }
 
