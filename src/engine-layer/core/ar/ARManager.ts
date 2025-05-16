@@ -674,23 +674,32 @@ export class ARManager {
         // Ensure Y is orthogonal to X and Z
         yAxis.crossVectors(zAxis, xAxis).normalize();
         
-        // Create and apply rotation matrix
+        // Create rotation matrix
         const rotationMatrix = new THREE.Matrix4().makeBasis(
           xAxis,
           yAxis,
           zAxis
         );
+
+        // Get the inverse rotation to transform corners to local space
+        const inverseRotation = new THREE.Matrix4().copy(rotationMatrix).invert();
+        
+        // Update corner positions
+        transformedCorners.forEach((worldCorner, i) => {
+          const cornerMesh = mesh.getObjectByName(`corner${i}`) as THREE.Mesh;
+          if (cornerMesh) {
+            // Convert world corner to local space relative to marker center
+            const localCorner = worldCorner.clone()
+              .sub(centerPos)
+              .applyMatrix4(inverseRotation);
+            
+            cornerMesh.position.copy(localCorner);
+          }
+        });
+
+        // Apply rotation to mesh after setting corner positions
         mesh.setRotationFromMatrix(rotationMatrix);
       }
-      
-      // Update corner positions in local space relative to center
-      transformedCorners.forEach((corner, i) => {
-        const cornerMesh = mesh.getObjectByName(`corner${i}`) as THREE.Mesh;
-        if (cornerMesh) {
-          const localPos = corner.clone().sub(centerPos);
-          cornerMesh.position.copy(localPos);
-        }
-      });
     });
   }
 
