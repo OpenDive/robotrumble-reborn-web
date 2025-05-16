@@ -543,13 +543,18 @@ export class ARManager {
       }
     }
     
+    // Video background configuration constants - match VideoBackground settings
+    const VIDEO_SCALE = 1.5;
+    const BASE_HEIGHT = 2.0;
+    const Z_DISTANCE = 0.1;
+    
     // Update or create marker visualizations
     markers.forEach((marker) => {
       let mesh = this.markerMeshes.get(marker.id);
       
       if (!mesh) {
-        // Create new marker visualization
-        const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.01); // Thinner box
+        // Create new marker visualization - scale the geometry to match video scale
+        const geometry = new THREE.BoxGeometry(0.1 * VIDEO_SCALE, 0.1 * VIDEO_SCALE, 0.01);
         const material = new THREE.MeshBasicMaterial({
           color: 0xff0000,
           wireframe: true,
@@ -558,42 +563,50 @@ export class ARManager {
         });
         mesh = new THREE.Mesh(geometry, material);
         
-        // Add axes helper to show orientation
-        const axes = new THREE.AxesHelper(0.15);
+        // Scale the axes helper to match
+        const axes = new THREE.AxesHelper(0.15 * VIDEO_SCALE);
         mesh.add(axes);
         
         // Add corner visualization
-        const cornerGeometry = new THREE.SphereGeometry(0.01);
+        const cornerGeometry = new THREE.SphereGeometry(0.01 * VIDEO_SCALE);
         const cornerMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
         for (let i = 0; i < 4; i++) {
           const corner = new THREE.Mesh(cornerGeometry, cornerMaterial);
-          mesh.add(corner);
           corner.name = `corner${i}`;
+          mesh.add(corner);
         }
         
         this.markerMeshes.set(marker.id, mesh);
         this.scene.add(mesh);
       }
       
-      // Update marker position and orientation
-      const videoWidth = this.videoSource.getVideoElement().videoWidth;
-      const videoHeight = this.videoSource.getVideoElement().videoHeight;
+      const videoElement = this.videoSource.getVideoElement();
+      const videoWidth = videoElement.videoWidth;
+      const videoHeight = videoElement.videoHeight;
       
-      // Update main marker position
-      const centerX = (marker.center.x / videoWidth) * 2 - 1;
-      const centerY = -(marker.center.y / videoHeight) * 2 + 1;
-      mesh.position.set(centerX, centerY, -0.5);
+      // Calculate video aspect ratio
+      const videoAspect = videoWidth / videoHeight;
       
-      // Update corner positions
+      // Calculate scale factors based on BASE_HEIGHT
+      const scaleY = BASE_HEIGHT / 2;
+      const scaleX = scaleY * videoAspect;
+      
+      // Transform center coordinates
+      const centerX = ((marker.center.x / videoWidth) - 0.5) * 2 * scaleX * VIDEO_SCALE;
+      const centerY = (0.5 - (marker.center.y / videoHeight)) * 2 * scaleY * VIDEO_SCALE;
+      mesh.position.set(centerX, centerY, -Z_DISTANCE);
+      
+      // Update corner positions using the same transformation
       marker.corners.forEach((corner, i) => {
-        const cornerX = (corner.x / videoWidth) * 2 - 1;
-        const cornerY = -(corner.y / videoHeight) * 2 + 1;
+        const cornerX = ((corner.x / videoWidth) - 0.5) * 2 * scaleX * VIDEO_SCALE;
+        const cornerY = (0.5 - (corner.y / videoHeight)) * 2 * scaleY * VIDEO_SCALE;
+        
         const cornerMesh = mesh.getObjectByName(`corner${i}`) as THREE.Mesh;
         if (cornerMesh) {
           cornerMesh.position.set(
             cornerX - centerX,
             cornerY - centerY,
-            0
+            0.01
           );
         }
       });
