@@ -34,115 +34,69 @@ export class ARManager {
   }
 
   updateContainer(container: HTMLElement): void {
-    // Move renderer to new container
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.remove();
     }
     container.appendChild(this.renderer.domElement);
   }
 
-  /**
-   * Update video source and reinitialize video background
-   */
   async updateVideoSource(newSource: IVideoSource): Promise<void> {
     console.log('ARManager: Updating video source...');
-    
-    // Store the new source
     this.videoSource = newSource;
     
-    // Wait for video element to be ready
     const videoElement = this.videoSource.getVideoElement();
     
-    // Wait for video to be ready for playback
     if (videoElement.readyState < videoElement.HAVE_METADATA) {
-      console.log('ARManager: Waiting for video metadata...');
       await new Promise<void>((resolve) => {
-        const handleMetadata = () => {
-          videoElement.removeEventListener('loadedmetadata', handleMetadata);
-          resolve();
-        };
-        videoElement.addEventListener('loadedmetadata', handleMetadata);
+        videoElement.addEventListener('loadedmetadata', () => resolve(), { once: true });
       });
     }
 
-    // Wait for actual video data
     if (videoElement.readyState < videoElement.HAVE_CURRENT_DATA) {
-      console.log('ARManager: Waiting for video data...');
       await new Promise<void>((resolve) => {
-        const handleData = () => {
-          videoElement.removeEventListener('loadeddata', handleData);
-          resolve();
-        };
-        videoElement.addEventListener('loadeddata', handleData);
+        videoElement.addEventListener('loadeddata', () => resolve(), { once: true });
       });
     }
     
-    // Reinitialize video background with new source
-    console.log('ARManager: Reinitializing video background...');
     this.videoBackground.initialize(videoElement, {
       distance: 0.1,
       baseHeight: 2.0,
       scale: 1.5
     });
     
-    // Ensure video is playing
     try {
       if (videoElement.paused) {
-        console.log('ARManager: Starting video playback...');
         await videoElement.play();
       }
     } catch (error) {
       console.error('ARManager: Failed to start video playback:', error);
       throw error;
     }
-    
-    console.log('ARManager: Video source updated', {
-      readyState: videoElement.readyState,
-      size: {
-        width: videoElement.videoWidth,
-        height: videoElement.videoHeight
-      },
-      playing: !videoElement.paused
-    });
   }
 
   public async initialize(container: HTMLElement): Promise<void> {
-    // Store container reference
     this.container = container;
-
-    // Create scene
     this.scene = new THREE.Scene();
     
-    // Create camera with standard FOV
     this.camera = new THREE.PerspectiveCamera(
-      60, // Standard FOV
+      60,
       this.container.clientWidth / this.container.clientHeight,
       0.1,
       1000
     );
     
-    // Position camera to see full video plane
-    this.camera.position.z = 0.5; // Close to video plane
+    this.camera.position.z = 0.5;
     this.camera.lookAt(0, 0, -1);
-    
-    console.log('Camera configured:', {
-      fov: this.camera.fov,
-      aspect: this.camera.aspect,
-      position: this.camera.position.toArray()
-    });
 
-    // Create renderer
     this.renderer = new THREE.WebGLRenderer({ 
       antialias: true,
       alpha: false,
       preserveDrawingBuffer: true
     });
     
-    // Configure renderer
-    this.renderer.setClearColor(0x0000ff, 1); // Blue for debugging
+    this.renderer.setClearColor(0x0000ff, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     
-    // Set canvas style for proper sizing
     const canvas = this.renderer.domElement;
     canvas.style.width = '100%';
     canvas.style.height = '100%';
@@ -150,81 +104,21 @@ export class ARManager {
     canvas.style.left = '0';
     canvas.style.top = '0';
     
-    // Set size with pixel ratio
     const pixelRatio = window.devicePixelRatio;
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
     this.renderer.setPixelRatio(pixelRatio);
-    this.renderer.setSize(width, height, false); // false to not set canvas style
+    this.renderer.setSize(width, height, false);
     
-    // Add debug grid and axes
-    // const grid = new THREE.GridHelper(2, 20, 0x444444, 0x444444);
-    // grid.rotation.x = Math.PI / 2;
-    // this.scene.add(grid);
-    
-    // const axes = new THREE.AxesHelper(1);
-    // this.scene.add(axes);
-    
-    // Add debug cube
-    // const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-    // const material = new THREE.MeshBasicMaterial({ 
-    //   color: 0x00ff00,
-    //   wireframe: true,
-    //   transparent: true,
-    //   opacity: 0.5
-    // });
-    // this.debugCube = new THREE.Mesh(geometry, material);
-    // this.debugCube.position.set(0.3, 0.3, -0.5);
-    // this.scene.add(this.debugCube);
-    
-    // Add lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
     this.scene.add(ambientLight);
     
-    // Initialize components
     this.videoBackground = new VideoBackground();
     this.markerDetector = new MarkerDetector();
     
-    // Add renderer to container
     this.container.appendChild(this.renderer.domElement);
-    
-    // Debug logging
-    console.log('ARManager: Scene initialized', {
-      container: {
-        width: this.container.clientWidth,
-        height: this.container.clientHeight
-      },
-      renderer: {
-        size: {
-          width: this.renderer.domElement.width,
-          height: this.renderer.domElement.height
-        },
-        pixelRatio: this.renderer.getPixelRatio()
-      }
-    });
-    try {
-      console.log('ARManager: Starting initialization...', {
-        container: {
-          width: container.clientWidth,
-          height: container.clientHeight,
-          inDOM: document.body.contains(container)
-        }
-      });
 
-      // Add renderer to container
-      container.appendChild(this.renderer.domElement);
-      console.log('ARManager: Renderer added to container', {
-        renderer: {
-          size: this.renderer.getSize(new THREE.Vector2()),
-          domElement: {
-            width: this.renderer.domElement.clientWidth,
-            height: this.renderer.domElement.clientHeight
-          }
-        }
-      });
-      
-      // Initialize video source and marker detector
-      console.log('ARManager: Initializing video source...');
+    try {
       const videoConfig: VideoConfig = {
         sourceType: 'webcam',
         webcam: {
@@ -233,36 +127,16 @@ export class ARManager {
         }
       };
       this.videoSource = await this.videoSourceFactory.createSource(videoConfig);
-      await this.videoSource.start(); // Start the video stream
-      console.log('ARManager: Video stream started', {
-        video: {
-          readyState: this.videoSource.getVideoElement().readyState,
-          size: {
-            width: this.videoSource.getVideoElement().videoWidth,
-            height: this.videoSource.getVideoElement().videoHeight
-          }
-        }
-      });
-      
+      await this.videoSource.start();
       await this.markerDetector.initialize();
-      console.log('ARManager: Marker detector initialized');
       
-      // Set up video background with configuration
-      console.log('ARManager: Setting up video background...');
       this.videoBackground.initialize(this.videoSource.getVideoElement(), {
-        distance: 0.1,     // Close to camera
-        baseHeight: 2.0,   // Moderate height
-        scale: 1.5        // Slight scale up
+        distance: 0.1,
+        baseHeight: 2.0,
+        scale: 1.5
       });
       this.scene.add(this.videoBackground.getMesh());
-      console.log('ARManager: Video background added to scene', {
-        mesh: {
-          position: this.videoBackground.getMesh().position.toArray(),
-          visible: this.videoBackground.getMesh().visible
-        }
-      });
       
-      // Initialize marker visualizer
       this.markerVisualizer = new MarkerVisualizer(this.videoSource, {
         videoScale: 1.5,
         baseHeight: 2.0,
@@ -270,60 +144,23 @@ export class ARManager {
       });
       this.markerVisualizer.attachToScene(this.scene);
       
-      // Set up basic scene
       this.setupScene();
-      // console.log('ARManager: Scene setup complete', {
-      //   camera: {
-      //     position: this.camera.position.toArray(),
-      //     fov: (this.camera as THREE.PerspectiveCamera).fov,
-      //     aspect: (this.camera as THREE.PerspectiveCamera).aspect
-      //   },
-      //   debugCube: {
-      //     position: this.debugCube.position.toArray(),
-      //     visible: this.debugCube.visible
-      //   }
-      // });
-      
-      // Start render loop
       this.animate();
-      console.log('ARManager: Animation loop started');
       
-      // Set up resize handler
-      const handleResize = () => {
+      window.addEventListener('resize', () => {
         if (!this.container) return;
         
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
         const pixelRatio = window.devicePixelRatio;
         
-        // Update camera
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         
-        // Update renderer size without updating style
         this.renderer.setSize(width, height, false);
         this.renderer.setPixelRatio(pixelRatio);
-        
-        console.log('ARManager: Resized', {
-          container: { width, height },
-          canvas: {
-            style: {
-              width: this.renderer.domElement.style.width,
-              height: this.renderer.domElement.style.height
-            },
-            actual: {
-              width: this.renderer.domElement.width,
-              height: this.renderer.domElement.height
-            }
-          },
-          pixelRatio
-        });
-      };
+      });
       
-      window.addEventListener('resize', handleResize);
-      handleResize(); // Initial sizing
-      
-      console.log('ARManager: Initialization complete');
     } catch (error) {
       console.error('Failed to initialize AR system:', error);
       throw error;
@@ -331,55 +168,36 @@ export class ARManager {
   }
 
   private setupScene(): void {
-    // Position camera for proper view
     this.camera.position.z = 5;
-    
-    // Set initial renderer size
     const width = window.innerWidth;
     const height = window.innerHeight;
     this.renderer.setSize(width, height);
-    
-    // Update camera aspect
-    const camera = this.camera as THREE.PerspectiveCamera;
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
   }
 
   private animate = (): void => {
     requestAnimationFrame(this.animate);
     
-    // Update frame count in StatsService
     this.frameCount++;
     this.statsService.updateFrameCount(this.frameCount);
     
-    // Update video background
     this.videoBackground.update();
     
-    // Detect markers every 3rd frame for performance
     if (this.frameCount % 3 === 0) {
       const frame = this.videoSource.getCurrentFrame();
       if (frame) {
         try {
-          // Update memory stats
           this.statsService.updateMemoryStats();
-
-          // Use frame directly from video source
           const markers = this.markerDetector.detectMarkers(frame);
-          
-          // Update detection stats
           this.statsService.updateDetectionStats(markers.length);
-
-          // Update visualizations
           this.markerVisualizer.updateVisuals(markers);
 
-          // Log stats periodically
           if (this.frameCount % 60 === 0) {
             console.log('System Stats:', {
               ...this.statsService.getFormattedStats(),
               renderer: this.renderer.info.render,
-              scene: {
-                objects: this.scene.children.length
-              }
+              scene: { objects: this.scene.children.length }
             });
           }
         } catch (error) {
@@ -389,13 +207,9 @@ export class ARManager {
       }
     }
     
-    // Render scene
     this.renderer.render(this.scene, this.camera);
   }
 
-  /**
-   * Get the video source for external use
-   */
   getVideoSource(): IVideoSource {
     return this.videoSource;
   }
@@ -404,43 +218,16 @@ export class ARManager {
     return this.statsService.getStats();
   }
   
-  /**
-   * Process a video frame for marker detection and visualization
-   * @param frame The video frame to process
-   */
   processFrame(frame: ImageData): void {
-    // Update frame count
     this.frameCount++;
     this.statsService.updateFrameCount(this.frameCount);
 
-    // Process frame for marker detection every 3rd frame
     if (this.frameCount % 3 === 0) {
       try {
-        console.log('ARManager: Processing frame', {
-          frameCount: this.frameCount,
-          frameData: {
-            width: frame.width,
-            height: frame.height,
-            dataLength: frame.data.length,
-            dataType: frame.data.constructor.name
-          },
-          videoElement: {
-            width: this.videoSource.getVideoElement().videoWidth,
-            height: this.videoSource.getVideoElement().videoHeight,
-            readyState: this.videoSource.getVideoElement().readyState
-          }
-        });
-
-        // Update stats
         this.statsService.updateMemoryStats();
-
-        // Detect markers
         const markers = this.markerDetector.detectMarkers(frame);
-        
-        // Update detection stats
         this.statsService.updateDetectionStats(markers.length);
 
-        // Log marker visualization
         if (markers.length > 0) {
           console.log('ARManager: Visualizing markers', {
             markerCount: markers.length,
@@ -457,19 +244,15 @@ export class ARManager {
           });
         }
 
-        // Update visualizations
         this.markerVisualizer.updateVisuals(markers);
-
       } catch (error) {
         this.statsService.recordError();
         console.error('ARManager: Error in marker detection:', error);
       }
     }
 
-    // Always update video background
     this.videoBackground.update();
     
-    // Log render stats periodically
     if (this.frameCount % 60 === 0) {
       console.log('ARManager: Render stats', {
         ...this.statsService.getFormattedStats(),
@@ -477,7 +260,6 @@ export class ARManager {
       });
     }
     
-    // Render scene
     this.renderer.render(this.scene, this.camera);
   }
   
@@ -494,7 +276,5 @@ export class ARManager {
   }
 }
 
-// Export singleton instance
 export const arManager = ARManager.getInstance();
-// Initialize it immediately
 arManager;
