@@ -14,7 +14,7 @@ export interface Stats {
   errors: number;
   processingTime: number;
   totalProcessingTime: number;
-  frameCount: number;
+  frameCount: number;  // The current frame number, used for frame skip calculations
   avgProcessingTime: number;
   memoryStats: MemoryStats;
 }
@@ -22,7 +22,6 @@ export interface Stats {
 export class StatsService {
   private static instance: StatsService;
   private stats: Stats;
-  private currentFrameCount: number = 0;
 
   private constructor() {
     this.stats = {
@@ -52,20 +51,17 @@ export class StatsService {
     return StatsService.instance;
   }
 
-  // New method to update frame count
   updateFrameCount(frameCount: number): void {
-    this.currentFrameCount = frameCount;
     this.stats.frameCount = frameCount;
   }
 
-  // Modified to separate frame counting from marker detection
   updateDetectionStats(markersCount: number): void {
     const now = performance.now();
     if (this.stats.lastDetectionTime > 0) {
       this.stats.detectionFPS = 1000 / (now - this.stats.lastDetectionTime);
     }
     this.stats.lastDetectionTime = now;
-    this.stats.lastProcessedFrame = this.currentFrameCount;
+    this.stats.lastProcessedFrame = this.stats.frameCount;
     this.stats.markersDetected = markersCount;
     this.stats.totalDetections += markersCount;
   }
@@ -90,7 +86,7 @@ export class StatsService {
     return {
       ...this.stats,
       fps: this.stats.detectionFPS.toFixed(1),
-      frameSkip: this.currentFrameCount - this.stats.lastProcessedFrame
+      frameSkip: this.stats.frameCount - this.stats.lastProcessedFrame
     };
   }
 
@@ -116,7 +112,7 @@ export class StatsService {
         currentMarkers: this.stats.markersDetected,
         totalDetections: this.stats.totalDetections,
         errors: this.stats.errors,
-        frameSkip: this.currentFrameCount - this.stats.lastProcessedFrame
+        frameSkip: this.stats.frameCount - this.stats.lastProcessedFrame
       },
       memory: {
         heapUsed: (memStats.usedJSHeapSize / 1024 / 1024).toFixed(2) + ' MB',
@@ -126,6 +122,4 @@ export class StatsService {
       }
     };
   }
-
-  // Remove individual getters/setters as they're no longer needed
 } 
