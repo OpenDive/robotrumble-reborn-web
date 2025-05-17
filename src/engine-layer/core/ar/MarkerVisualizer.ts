@@ -46,6 +46,13 @@ export class MarkerVisualizer {
     }
   }
 
+  updateVideoSource(newSource: IVideoSource): void {
+    console.log('MarkerVisualizer: Updating video source');
+    this.videoSource = newSource;
+    // Clear all existing marker meshes
+    this.removeInactiveMarkers([]);
+  }
+
   updateVisuals(markers: Marker[]): void {
     if (!this.scene) {
       console.warn('MarkerVisualizer: No scene attached');
@@ -72,6 +79,21 @@ export class MarkerVisualizer {
     const videoElement = this.videoSource.getVideoElement();
     const videoWidth = videoElement.videoWidth;
     const videoHeight = videoElement.videoHeight;
+    
+    console.log('MarkerVisualizer: Updating markers', {
+      markersCount: markers.length,
+      videoElement: {
+        width: videoWidth,
+        height: videoHeight,
+        readyState: videoElement.readyState
+      },
+      firstMarker: markers[0] ? {
+        id: markers[0].id,
+        center: markers[0].center,
+        corners: markers[0].corners,
+        pose: markers[0].pose ? 'available' : 'missing'
+      } : 'none'
+    });
     
     // Calculate video aspect ratio and scale factors
     const videoAspect = videoWidth / videoHeight;

@@ -64,6 +64,8 @@ export class ARManager {
       scale: 1.5
     });
     
+    this.markerVisualizer.updateVideoSource(newSource);
+    
     try {
       if (videoElement.paused) {
         await videoElement.play();
