@@ -44,12 +44,10 @@ function AppContent() {
         />
       } />
       <Route path="/lobby" element={
-        <div className="min-h-screen bg-gradient-to-b from-game-900 to-game-800 text-white">
-          <LobbyScreen 
-            onStartRace={handleStartRace}
-            onBack={handleBackToMenu}
-          />
-        </div>
+        <LobbyScreen 
+          onStartRace={handleStartRace}
+          onBack={handleBackToMenu}
+        />
       } />
       <Route path="/race" element={<RaceScreen />} />
     </Routes>

@@ -6,13 +6,8 @@ import App from './ui-layer/App';
 // Import Tailwind styles
 import './ui-layer/styles/index.css';
 
-// Create container for React UI
-const uiContainer = document.createElement('div');
-uiContainer.id = 'root';
-document.body.appendChild(uiContainer);
-
 // Initialize React UI
-createRoot(uiContainer).render(
+createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>
