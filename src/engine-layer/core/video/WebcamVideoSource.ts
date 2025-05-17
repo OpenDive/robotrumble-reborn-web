@@ -317,4 +317,8 @@ export class WebcamVideoSource implements IVideoSource {
   getDimensions(): { width: number; height: number } {
     return { ...this.dimensions };
   }
+
+  shouldMirrorDisplay(): boolean {
+    return true;
+  }
 }

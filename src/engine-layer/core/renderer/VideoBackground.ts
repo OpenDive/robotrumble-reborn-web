@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { IVideoSource } from '../video/types';
 
 /**
  * Handles rendering video as a background in ThreeJS scene
@@ -13,10 +14,10 @@ export class VideoBackground {
   private mesh: THREE.Mesh;
   private texture!: THREE.VideoTexture;
   private material: THREE.MeshBasicMaterial;
-  // private wireframeMesh: THREE.Mesh;
   private videoElement!: HTMLVideoElement;
   private lastVideoTime: number = -1;
   private isInitialized: boolean = false;
+  private videoSource: IVideoSource | null = null;
 
   constructor() {
     // Create initial plane geometry (will be resized in initialize)
@@ -32,17 +33,6 @@ export class VideoBackground {
     
     // Create mesh for the video plane
     this.mesh = new THREE.Mesh(geometry, this.material);
-
-    // // Add wireframe outline to debug video plane bounds
-    // const wireGeometry = new THREE.PlaneGeometry(1, 1);
-    // const wireMaterial = new THREE.MeshBasicMaterial({
-    //   color: 0xff0000,
-    //   wireframe: true,
-    //   depthTest: false
-    // });
-    // this.wireframeMesh = new THREE.Mesh(wireGeometry, wireMaterial);
-    // this.mesh.add(this.wireframeMesh); // Add as child to follow transforms
-    // this.mesh.renderOrder = -1;  // Render first
   }
 
   /**
@@ -53,7 +43,9 @@ export class VideoBackground {
     // Dispose of old resources
     if (this.texture) {
       this.texture.dispose();
-      this.material.map = null;
+      if (this.material) {
+        this.material.map = null;
+      }
     }
     if (this.material) {
       this.material.needsUpdate = true;
@@ -63,7 +55,7 @@ export class VideoBackground {
     console.log('VideoBackground: Reset complete');
   }
 
-  initialize(videoElement: HTMLVideoElement, config?: VideoPlaneConfig): void {
+  initialize(videoElement: HTMLVideoElement, config?: VideoPlaneConfig, videoSource?: IVideoSource): void {
     console.log('VideoBackground: Initializing...', {
       videoReady: videoElement.readyState,
       videoDimensions: {
@@ -76,13 +68,14 @@ export class VideoBackground {
     this.reset();
     
     this.videoElement = videoElement;
+    this.videoSource = videoSource || null;
     
     // Create and configure video texture
     this.texture = new THREE.VideoTexture(this.videoElement);
+    this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.magFilter = THREE.LinearFilter;
     this.texture.format = THREE.RGBFormat;
-    this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.generateMipmaps = false;
     this.texture.wrapS = THREE.ClampToEdgeWrapping;
     this.texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -94,7 +87,7 @@ export class VideoBackground {
 
     // Calculate and update plane size
     this.updatePlaneSize(config);
-    
+
     this.isInitialized = true;
     
     console.log('VideoBackground: Initialization complete', {
@@ -134,8 +127,9 @@ export class VideoBackground {
     this.mesh.geometry.dispose();
     this.mesh.geometry = new THREE.PlaneGeometry(width, height);
     
-    // Apply configured scale and flip horizontally to correct mirroring
-    this.mesh.scale.set(-finalConfig.scale, finalConfig.scale, 1);
+    // Apply configured scale and flip horizontally if needed
+    const scaleX = this.videoSource?.shouldMirrorDisplay() ? -finalConfig.scale : finalConfig.scale;
+    this.mesh.scale.set(scaleX, finalConfig.scale, 1);
     
     // Ensure plane faces camera
     this.mesh.lookAt(0, 0, 0);
@@ -183,12 +177,6 @@ export class VideoBackground {
     if (this.mesh.geometry) {
       this.mesh.geometry.dispose();
     }
-    // if (this.wireframeMesh.geometry) {
-    //   this.wireframeMesh.geometry.dispose();
-    // }
-    // if (this.wireframeMesh.material) {
-    //   (this.wireframeMesh.material as THREE.Material).dispose();
-    // }
     this.material.dispose();
   }
 }

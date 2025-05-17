@@ -62,7 +62,7 @@ export class ARManager {
       distance: 0.1,
       baseHeight: 2.0,
       scale: 1.5
-    });
+    }, newSource);
     
     this.markerVisualizer.updateVideoSource(newSource);
     
@@ -136,7 +136,7 @@ export class ARManager {
         distance: 0.1,
         baseHeight: 2.0,
         scale: 1.5
-      });
+      }, this.videoSource);
       this.scene.add(this.videoBackground.getMesh());
       
       this.markerVisualizer = new MarkerVisualizer(this.videoSource, {

@@ -275,4 +275,8 @@ export class TestVideoSource implements IVideoSource {
   getDimensions(): { width: number; height: number } {
     return { ...this.dimensions };
   }
+
+  shouldMirrorDisplay(): boolean {
+    return false;
+  }
 } 

@@ -78,4 +78,9 @@ export interface IVideoSource {
    * Get video dimensions
    */
   getDimensions(): { width: number; height: number };
+
+  /**
+   * Check if the video source should mirror the display
+   */
+  shouldMirrorDisplay(): boolean;
 }
