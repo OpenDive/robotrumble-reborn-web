@@ -10,6 +10,7 @@ export class TestVideoSource implements IVideoSource {
   private lastError?: string;
   private fps: number = 0;
   private lastFrameTime: number = 0;
+  private controlsContainer: HTMLDivElement | null = null;
 
   constructor() {
     this.video = document.createElement('video');
@@ -37,6 +38,96 @@ export class TestVideoSource implements IVideoSource {
       }
       this.lastFrameTime = now;
     }, 1000);
+  }
+
+  private setupControls() {
+    // Create a container for controls
+    this.controlsContainer = document.createElement('div');
+    this.controlsContainer.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 50%;
+      min-width: 300px;
+      height: 40px;
+      z-index: 9999;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      overflow: hidden;
+      opacity: 0.8;
+      transition: opacity 0.2s, background-color 0.2s;
+      backdrop-filter: blur(4px);
+    `;
+
+    // Create a clone of video element for controls
+    const controlsVideo = document.createElement('video');
+    controlsVideo.style.cssText = `
+      width: 100%;
+      height: 100%;
+    `;
+    controlsVideo.controls = true;
+    controlsVideo.muted = false;
+
+    // Initial sync
+    controlsVideo.src = this.video.src;
+    controlsVideo.currentTime = this.video.currentTime;
+
+    // Track user interaction state
+    let isUserInteracting = false;
+
+    // Handle user interaction with the video controls
+    controlsVideo.addEventListener('mousedown', () => {
+      isUserInteracting = true;
+    });
+
+    controlsVideo.addEventListener('mouseup', () => {
+      isUserInteracting = false;
+    });
+
+    // Handle touch events for mobile
+    controlsVideo.addEventListener('touchstart', () => {
+      isUserInteracting = true;
+    });
+
+    controlsVideo.addEventListener('touchend', () => {
+      isUserInteracting = false;
+    });
+
+    // Handle seeking - only update main video when user is interacting
+    controlsVideo.addEventListener('seeked', () => {
+      if (isUserInteracting) {
+        this.video.currentTime = controlsVideo.currentTime;
+      }
+    });
+
+    // Update control video position based on main video progress
+    this.video.addEventListener('timeupdate', () => {
+      if (!isUserInteracting) {
+        // Update without triggering events
+        const timeDiff = Math.abs(controlsVideo.currentTime - this.video.currentTime);
+        if (timeDiff > 0.1) { // Small threshold to prevent unnecessary updates
+          controlsVideo.currentTime = this.video.currentTime;
+        }
+      }
+    });
+
+    // Handle play/pause
+    controlsVideo.addEventListener('play', () => this.video.play());
+    controlsVideo.addEventListener('pause', () => this.video.pause());
+
+    // Add hover effects
+    this.controlsContainer.addEventListener('mouseover', () => {
+      this.controlsContainer!.style.opacity = '1';
+      this.controlsContainer!.style.background = 'rgba(0, 0, 0, 0.5)';
+    });
+    this.controlsContainer.addEventListener('mouseout', () => {
+      this.controlsContainer!.style.opacity = '0.8';
+      this.controlsContainer!.style.background = 'rgba(0, 0, 0, 0.3)';
+    });
+
+    this.controlsContainer.appendChild(controlsVideo);
+    document.body.appendChild(this.controlsContainer);
   }
 
   async initialize(config?: VideoConfig): Promise<void> {
@@ -110,6 +201,9 @@ export class TestVideoSource implements IVideoSource {
       this.dimensions.height = this.video.videoHeight;
       this.canvas.width = this.video.videoWidth;
       this.canvas.height = this.video.videoHeight;
+
+      // Setup controls after video is loaded
+      this.setupControls();
 
       console.log('TestVideoSource: Initialization complete', {
         dimensions: this.dimensions,
@@ -222,6 +316,18 @@ export class TestVideoSource implements IVideoSource {
 
   async stop(): Promise<void> {
     console.log('TestVideoSource: Stopping...');
+    
+    // Remove controls container and clean up event listeners
+    if (this.controlsContainer) {
+      const controlsVideo = this.controlsContainer.querySelector('video');
+      if (controlsVideo) {
+        controlsVideo.pause();
+        controlsVideo.removeAttribute('src');
+        controlsVideo.load();
+      }
+      this.controlsContainer.remove();
+      this.controlsContainer = null;
+    }
     
     // Pause video and reset state
     this.video.pause();
