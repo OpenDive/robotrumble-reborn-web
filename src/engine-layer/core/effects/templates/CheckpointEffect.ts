@@ -17,6 +17,8 @@ export interface CheckpointConfig extends EffectConfig {
   checkpointNumber: number;
   isFinalLap: boolean;
   height: number;
+  numberColor?: THREE.Color | string | number; // Optional color for the number
+  numberGlowColor?: THREE.Color | string | number; // Optional glow color
 }
 
 export class CheckpointEffect extends BaseEffect {
@@ -106,15 +108,23 @@ export class CheckpointEffect extends BaseEffect {
     scene.add(numberDisplay);
     this.numberDisplay = numberDisplay;
 
+    // Convert color inputs to THREE.Color
+    const baseColor = new THREE.Color(
+      config.numberColor || (config.isFinalLap ? 0xffd700 : 0x00ccff)
+    );
+    const glowColor = new THREE.Color(
+      config.numberGlowColor || (config.isFinalLap ? 0xffa500 : 0x00ffff)
+    );
+
     // Create number material with glow effect
     const numberMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        glowColor: { value: config.isFinalLap ? 
-          new THREE.Vector3(1.0, 0.8, 0.0) :  // Gold for final lap
-          new THREE.Vector3(0.0, 0.8, 1.0)    // Blue for normal checkpoint
-        },
+        baseColor: { value: new THREE.Vector3(baseColor.r, baseColor.g, baseColor.b) },
+        glowColor: { value: new THREE.Vector3(glowColor.r, glowColor.g, glowColor.b) },
         opacity: { value: 1.0 },
-        time: { value: 0 }
+        time: { value: 0 },
+        glowStrength: { value: 0.5 },  // Configurable glow strength
+        solidOpacity: { value: 1.0 }    // Solid part opacity
       },
       vertexShader: numberVertexShader,
       fragmentShader: numberFragmentShader,

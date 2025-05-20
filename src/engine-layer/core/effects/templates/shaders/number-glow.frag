@@ -1,6 +1,9 @@
+uniform vec3 baseColor;
 uniform vec3 glowColor;
 uniform float opacity;
 uniform float time;
+uniform float glowStrength;
+uniform float solidOpacity;
 
 varying vec2 vUv;
 varying vec3 vNormal;
@@ -15,9 +18,14 @@ void main() {
     // Pulsing effect
     float pulse = (sin(time * 3.0) * 0.5 + 0.5) * 0.3 + 0.7;
     
-    // Combine effects
-    float glowIntensity = fresnel * pulse;
-    vec3 finalColor = glowColor * (glowIntensity + 0.5);
+    // Combine effects for glow
+    float glowIntensity = fresnel * pulse * glowStrength;
     
-    gl_FragColor = vec4(finalColor, opacity * glowIntensity);
+    // Mix solid color with glow
+    vec3 finalColor = mix(baseColor, glowColor, glowIntensity);
+    
+    // Final color with opacity
+    float finalOpacity = mix(solidOpacity, opacity * glowIntensity, glowIntensity);
+    
+    gl_FragColor = vec4(finalColor, finalOpacity);
 }

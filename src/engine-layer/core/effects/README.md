@@ -42,6 +42,47 @@ This directory contains the particle effects system for RobotRumble Reborn. The 
 - Visible from 2+ units away with good depth perception
 - Useful for: collisions, power-ups, victory effects
 
+### Checkpoint Effect
+**Activation**: Automatic when passing through checkpoint
+
+**Visual Characteristics**:
+- Three-part effect combining beam, ring, and number display
+- Beam Effect:
+  - Holographic cylinder with pulsing glow
+  - Color varies by checkpoint type (blue: normal, gold: final lap)
+  - Height configurable via config
+- Ring Effect:
+  - Expanding ring from center
+  - Matches beam color
+  - Fades out as it expands
+- Number Display:
+  - 3D text showing checkpoint number
+  - Configurable colors for both base and glow
+  - Camera-facing with slight upward tilt
+  - Gentle floating animation
+  - Default colors:
+    - Normal: Blue base (#00CCFF) with cyan glow (#00FFFF)
+    - Final Lap: Gold base (#FFD700) with orange glow (#FFA500)
+
+**Configuration Options**:
+```typescript
+interface CheckpointConfig {
+  checkpointNumber: number;     // Number to display
+  isFinalLap: boolean;         // Affects color scheme
+  height: number;              // Beam height
+  numberColor?: THREE.Color;    // Custom number color
+  numberGlowColor?: THREE.Color; // Custom glow color
+}
+```
+
+**Expected Experience**:
+- Clear visual indicator of checkpoint position
+- Easily readable checkpoint number
+- Distinctive appearance for final lap checkpoints
+- Smooth animations for all components
+- Visible from multiple angles
+- Useful for: race checkpoints, lap markers, course navigation
+
 ### Boost Trail Effect
 **Activation**: Press 'B' key (for testing)
 
