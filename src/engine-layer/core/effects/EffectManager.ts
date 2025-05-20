@@ -42,11 +42,10 @@ export class EffectManager {
       endColor: new THREE.Color(0x0066ff),
       emitShape: 'point',
       emitShapeParams: { radius: 0.1 },
-      // Required by EffectConfig
-      velocityBase: new THREE.Vector3(0, 1, 0),
-      velocitySpread: new THREE.Vector3(0.2, 0.2, 0.2),
-      positionSpread: new THREE.Vector3(0.1, 0.1, 0.1),
-      acceleration: new THREE.Vector3(0, -0.5, 0)
+      startSpeed: [0.8, 1.2], // Random speed between 0.8 and 1.2
+      gravity: new THREE.Vector3(0, -0.5, 0),
+      drag: 0.1,
+      turbulence: 0.2
     };
     
     this.effects.set('checkpoint', new CheckpointEffect(scene, checkpointConfig));
