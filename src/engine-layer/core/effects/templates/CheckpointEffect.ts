@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { BaseEffect } from './BaseEffect';
 import { EffectConfig } from './EffectConfig';
 import { ParticleSystem } from '../particles/ParticleSystem';
+import vertexShader from '../shaders/checkpoint-beam.vert';
+import fragmentShader from '../shaders/checkpoint-beam.frag';
 
 interface CheckpointConfig extends EffectConfig {
   checkpointNumber: number;
@@ -12,7 +14,6 @@ interface CheckpointConfig extends EffectConfig {
 export class CheckpointEffect extends BaseEffect {
   private beam: THREE.Mesh;
   private ring: THREE.Mesh;
-  private numberMesh: THREE.Mesh;
   private flashParticles: ParticleSystem;
   private beamMaterial: THREE.ShaderMaterial;
   private ringMaterial: THREE.MeshBasicMaterial;
@@ -21,6 +22,8 @@ export class CheckpointEffect extends BaseEffect {
   private readonly EFFECT_DURATION: number = 0.5;
   private readonly BEAM_RADIUS: number = 1.5;
   private readonly RING_EXPAND_SPEED: number = 3.0;
+
+
 
   constructor(scene: THREE.Scene, config: CheckpointConfig) {
     super(scene, config);
@@ -45,30 +48,8 @@ export class CheckpointEffect extends BaseEffect {
         },
         opacity: { value: 0.5 }
       },
-      vertexShader: \`
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      \`,
-      fragmentShader: \`
-        uniform float time;
-        uniform vec3 baseColor;
-        uniform float opacity;
-        varying vec2 vUv;
-        
-        void main() {
-          float wave = sin(vUv.y * 20.0 + time * 2.0) * 0.5 + 0.5;
-          float scan = mod(vUv.y - time * 0.5, 1.0);
-          scan = smoothstep(0.0, 0.1, scan) * smoothstep(1.0, 0.9, scan);
-          
-          vec3 color = baseColor * (wave * 0.3 + 0.7);
-          color += baseColor * scan * 0.5;
-          
-          gl_FragColor = vec4(color, opacity * (wave * 0.5 + 0.5));
-        }
-      \`,
+      vertexShader,
+      fragmentShader,
       transparent: true,
       side: THREE.DoubleSide
     });
@@ -127,16 +108,22 @@ export class CheckpointEffect extends BaseEffect {
         Math.sin(angle) * this.RING_EXPAND_SPEED
       );
       
-      this.flashParticles.emit({
+      const color = new THREE.Color().fromArray(this.beamMaterial.uniforms.baseColor.value.toArray());
+      this.flashParticles.addParticle({
         position: new THREE.Vector3(
           position.x + Math.cos(angle) * radius,
           position.y,
           position.z + Math.sin(angle) * radius
         ),
         velocity: velocity,
-        color: this.beamMaterial.uniforms.baseColor.value,
+        color,
+        startColor: color,
+        endColor: color.clone().multiplyScalar(0.5),
         size: 0.2 + Math.random() * 0.3,
-        life: 0.5
+        startSize: 0.2 + Math.random() * 0.3,
+        endSize: 0,
+        life: 0.5,
+        maxLife: 0.5
       });
     }
   }
