@@ -5,7 +5,7 @@ import { EffectConfig } from './EffectConfig';
 
 export class BoostTrailEffect extends BaseEffect {
   private speedLines: SpeedLineSystem;
-  private emissionPoints: THREE.Vector3[];
+  private spread: number = 0.8;  // Base spread for V formation in view space
   private lastEmitTime: number = 0;
   private emitInterval: number = 0.05;  // Emit every 50ms
   private baseVelocity: THREE.Vector3;
@@ -53,14 +53,7 @@ export class BoostTrailEffect extends BaseEffect {
     // Initialize speed line system
     this.speedLines = new SpeedLineSystem(scene, 50);
 
-    // Set up emission points in V formation
-    this.emissionPoints = [
-      new THREE.Vector3(-0.2, 0, 0),   // Left
-      new THREE.Vector3(0, 0, 0),       // Center
-      new THREE.Vector3(0.2, 0, 0),     // Right
-      new THREE.Vector3(-0.4, 0, -0.1), // Outer left
-      new THREE.Vector3(0.4, 0, -0.1)   // Outer right
-    ];
+    // Initialize with default spread
   }
 
   // Override particle generation to incorporate vehicle velocity
@@ -72,37 +65,38 @@ export class BoostTrailEffect extends BaseEffect {
     if (now - this.lastEmitTime < this.emitInterval * 1000) return;
     this.lastEmitTime = now;
 
-    // Emit from each point in the V formation
-    this.emissionPoints.forEach((offset, index) => {
-      // Transform offset by vehicle orientation
-      const emitPos = position.clone().add(
-        offset.clone().applyMatrix4(new THREE.Matrix4().lookAt(
-          new THREE.Vector3(),
-          this.baseVelocity.clone().normalize(),
-          new THREE.Vector3(0, 1, 0)
-        ))
+    // Create V formation with speed lines
+    const baseColor = new THREE.Color(0xffff00);  // Base yellow color
+    const speed = this.baseVelocity.length();
+    
+    // Adjust spread based on speed and intensity
+    // Calculate spread based on speed and intensity
+    // Faster speed = wider spread, higher intensity = more pronounced effect
+    // Calculate spread based on speed and intensity
+    // More speed = wider spread, higher intensity = more pronounced effect
+    const dynamicSpread = this.spread * (1.0 + speed * 0.2) * (0.7 + this.intensity * 0.3);
+    
+    // Create formation centered at position
+    this.speedLines.addFormationLines(
+      position,
+      // Keep full velocity for better line length
+      this.baseVelocity.clone(),
+      dynamicSpread,
+      baseColor
+    );
+    
+    // Add some variation in color and spread
+    // Add variations more frequently for better effect
+    if (Math.random() < 0.4) {
+      // Smaller vertical variation to keep formation tight
+      const variation = Math.random() * 0.1 - 0.05;
+      this.speedLines.addFormationLines(
+        position.clone().add(new THREE.Vector3(0, variation, 0)),
+        this.baseVelocity.clone().multiplyScalar(0.9),
+        dynamicSpread * 0.8,
+        baseColor.clone().multiplyScalar(0.9)
       );
-
-      // Calculate speed line properties
-      const speed = this.baseVelocity.length();
-      const lineVel = this.baseVelocity.clone().multiplyScalar(0.8);
-      
-      // Add some outward spread based on position
-      const spread = offset.clone().normalize().multiplyScalar(speed * 0.2);
-      lineVel.add(spread);
-
-      // Create speed line with color based on position
-      const color = new THREE.Color();
-      if (index === 1) { // Center line
-        color.setHex(0xffff00);  // Bright yellow
-      } else if (index < 3) { // Inner lines
-        color.setHex(0xff8800);  // Orange
-      } else { // Outer lines
-        color.setHex(0xff4400);  // Red
-      }
-
-      this.speedLines.addLine(emitPos, lineVel, color);
-    });
+    }
   }
 
   update(deltaTime: number): void {

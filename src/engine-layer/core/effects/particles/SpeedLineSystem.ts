@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 
+const MIN_LINE_LENGTH = 1.0;  // Minimum line length for visibility
+const BASE_LINE_LENGTH = 2.0; // Base length before speed scaling
+
 interface SpeedLine {
   position: THREE.Vector3;
   length: number;
@@ -44,12 +47,12 @@ export class SpeedLineSystem {
     this.scene.add(this.linesMesh);
   }
 
-  addLine(position: THREE.Vector3, velocity: THREE.Vector3, color: THREE.Color): void {
+  addLine(position: THREE.Vector3, velocity: THREE.Vector3, color: THREE.Color, length?: number): void {
     if (this.lines.length >= this.maxLines) return;
 
     const line: SpeedLine = {
       position: position.clone(),
-      length: velocity.length() * 0.5,  // Length based on speed
+      length: length || Math.max(MIN_LINE_LENGTH, velocity.length() * BASE_LINE_LENGTH),
       width: 1.0,
       color: color.clone(),
       life: 1.0,
@@ -80,6 +83,65 @@ export class SpeedLineSystem {
     this.updateGeometry();
   }
 
+  addFormationLines(position: THREE.Vector3, velocity: THREE.Vector3, spread: number, color: THREE.Color): void {
+    const speed = velocity.length();
+    // Ensure minimum line length
+    const lineLength = Math.max(MIN_LINE_LENGTH, BASE_LINE_LENGTH * speed);
+    // Calculate view-space vectors for V formation
+    const forward = velocity.clone().normalize();
+    
+    // Get right vector (cross product of world-up and forward)
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+    
+    // Get view-space up (cross product of forward and right)
+    const viewUp = new THREE.Vector3().crossVectors(forward, right).normalize();
+    
+    // Use viewUp for spread direction
+    const spreadDir = viewUp.multiplyScalar(spread);
+    
+    // Center line - longer and brighter
+    this.addLine(
+      position,
+      velocity.clone().multiplyScalar(1.2),  // Faster center line
+      color.clone().multiplyScalar(1.5),     // Brighter center
+      lineLength * 1.5                       // Even longer center line for better visibility
+    );
+
+    // Inner lines - angled outward
+    const innerSpread = spreadDir.clone().multiplyScalar(0.7);
+    const innerVelocity = velocity.clone().multiplyScalar(1.0);
+    
+    this.addLine(
+      position.clone().add(innerSpread),
+      innerVelocity.clone().add(innerSpread.clone().multiplyScalar(0.2)),
+      color.clone().multiplyScalar(1.2),
+      lineLength * 1.2
+    );
+    this.addLine(
+      position.clone().sub(innerSpread),
+      innerVelocity.clone().sub(innerSpread.clone().multiplyScalar(0.2)),
+      color.clone().multiplyScalar(1.2),
+      lineLength * 1.2
+    );
+
+    // Outer lines - more spread, shorter but still visible
+    const outerSpread = spreadDir.clone().multiplyScalar(1.8);
+    const outerVelocity = velocity.clone().multiplyScalar(0.9);
+    
+    this.addLine(
+      position.clone().add(outerSpread),
+      outerVelocity.clone().add(outerSpread.clone().multiplyScalar(0.3)),
+      color.clone().multiplyScalar(0.8),  // Slightly brighter outer lines
+      lineLength * 0.9                    // Not too short
+    );
+    this.addLine(
+      position.clone().sub(outerSpread),
+      outerVelocity.clone().sub(outerSpread.clone().multiplyScalar(0.3)),
+      color.clone().multiplyScalar(0.8),
+      lineLength * 0.9
+    );
+  }
+
   private updateGeometry(): void {
     const positions = this.geometry.attributes.position.array as Float32Array;
     const colors = this.geometry.attributes.color.array as Float32Array;
@@ -88,8 +150,14 @@ export class SpeedLineSystem {
     this.lines.forEach(line => {
       // Calculate end point based on velocity direction and length
       const direction = line.velocity.clone().normalize();
+      // Calculate end point with slight curve
+      const t = line.life / line.maxLife;
+      const curve = Math.sin(t * Math.PI) * 0.2;  // Max curve at middle of life
+      const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x);
+      
       const endPoint = line.position.clone().add(
         direction.multiplyScalar(line.length * line.width)
+          .add(perpendicular.multiplyScalar(curve * line.length))
       );
 
       // Start point
