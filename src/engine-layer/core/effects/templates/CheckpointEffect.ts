@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BaseEffect } from './BaseEffect';
 import { EffectConfig } from './EffectConfig';
 import { ParticleSystem } from '../particles/ParticleSystem';
-import { TextGeometry, type TextGeometryParameters } from 'three/addons/geometries/TextGeometry.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { Font, FontLoader } from 'three/addons/loaders/FontLoader.js';
 // @ts-ignore
 import vertexShader from './shaders/checkpoint-beam.vert?raw';
@@ -121,10 +121,18 @@ export class CheckpointEffect extends BaseEffect {
 
     // Load font and create number mesh
     const fontLoader = new FontLoader();
-    fontLoader.load('/fonts/helvetiker_bold.typeface.json', (font: Font) => {
-      this.font = font;
-      this.createNumberMesh(config.checkpointNumber);
-    });
+    const fontPath = '/fonts/helvetiker_bold.typeface.json';
+    fontLoader.load(
+      fontPath,
+      (font: Font) => {
+        this.font = font;
+        this.createNumberMesh(config.checkpointNumber);
+      },
+      undefined, // onProgress callback
+      (error) => {
+        console.error(`Error loading font from ${fontPath}:`, error);
+      }
+    );
 
     this.numberMaterial = numberMaterial;
 
@@ -180,6 +188,9 @@ export class CheckpointEffect extends BaseEffect {
       this.numberDisplay.position.copy(position);
       this.numberDisplay.position.y += this.NUMBER_VERTICAL_OFFSET;
       this.numberDisplay.visible = true;
+      if (this.numberMesh) {
+        this.numberMesh.visible = true;
+      }
     }
     
     // Show elements
@@ -248,6 +259,12 @@ export class CheckpointEffect extends BaseEffect {
       // Hide everything when done
       this.beam.visible = false;
       this.ring.visible = false;
+      if (this.numberDisplay) {
+        this.numberDisplay.visible = false;
+        if (this.numberMesh) {
+          this.numberMesh.visible = false;
+        }
+      }
       this.isActive = false;
     }
 
