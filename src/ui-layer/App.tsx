@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-route
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
 import { LobbyScreen } from './components/screens/LobbyScreen';
 import { RaceScreen } from './components/screens/RaceScreen';
+import BabylonTestScreen from './components/screens/BabylonTestScreen';
 import './App.css';
 
 function AppContent() {
@@ -21,8 +22,7 @@ function AppContent() {
   };
 
   const handleTutorial = () => {
-    // TODO: Navigate to tutorial screen once created
-    console.log('Tutorial clicked');
+    navigate('/babylon-test');
   };
 
   const handleStartRace = () => {
@@ -49,7 +49,8 @@ function AppContent() {
           onBack={handleBackToMenu}
         />
       } />
-      <Route path="/race" element={<RaceScreen />} />
+      <Route path="/race" element={<RaceScreen onBack={handleBackToMenu} />} />
+      <Route path="/babylon-test" element={<BabylonTestScreen />} />
     </Routes>
   );
 }
