@@ -5,6 +5,7 @@ import { IVideoSource, VideoConfig } from '../video/types';
 import { MarkerDetector, Marker } from './MarkerDetector';
 import { MarkerVisualizer } from './MarkerVisualizer';
 import { StatsService } from './StatsService';
+import { effectManager } from '../effects/EffectManager';
 
 export class ARManager {
   private container!: HTMLElement;
@@ -98,6 +99,9 @@ export class ARManager {
     
     this.renderer.setClearColor(0x0000ff, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    // Initialize effect manager
+    effectManager.initialize(this.scene);
     
     const canvas = this.renderer.domElement;
     canvas.style.width = '100%';
@@ -185,6 +189,7 @@ export class ARManager {
     this.statsService.updateFrameCount(this.frameCount);
     
     this.videoBackground.update();
+    effectManager.update();
     
     if (this.frameCount % 3 === 0) {
       const frame = this.videoSource.getCurrentFrame();
