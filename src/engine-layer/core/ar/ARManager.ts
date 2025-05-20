@@ -6,6 +6,7 @@ import { MarkerDetector, Marker } from './MarkerDetector';
 import { MarkerVisualizer } from './MarkerVisualizer';
 import { StatsService } from './StatsService';
 import { effectManager } from '../effects/EffectManager';
+import { physicsManager } from '../physics/PhysicsManager';
 
 export class ARManager {
   private container!: HTMLElement;
@@ -102,6 +103,9 @@ export class ARManager {
 
     // Initialize effect manager
     effectManager.initialize(this.scene);
+
+    // Initialize physics system
+    await physicsManager.initialize();
     
     const canvas = this.renderer.domElement;
     canvas.style.width = '100%';
@@ -190,6 +194,7 @@ export class ARManager {
     
     this.videoBackground.update();
     effectManager.update();
+    physicsManager.update();
     
     if (this.frameCount % 3 === 0) {
       const frame = this.videoSource.getCurrentFrame();
