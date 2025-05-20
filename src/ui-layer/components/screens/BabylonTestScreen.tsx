@@ -76,7 +76,7 @@ const BabylonTestScreen: React.FC = () => {
         particleSystemRef.current = particleSystem;
 
         // Create a particle emitter as a sphere
-        const emitter = BABYLON.MeshBuilder.CreateSphere('emitter', { diameter: 0.1 }, scene);
+        const emitter = BABYLON.MeshBuilder.CreateBox('emitter', { size: 0.1 }, scene);
         emitter.position = new BABYLON.Vector3(0, 0, -2);
         emitter.isVisible = false;
 
@@ -85,33 +85,40 @@ const BabylonTestScreen: React.FC = () => {
         particleSystem.minEmitBox = new BABYLON.Vector3(-0.1, -0.1, -0.1);
         particleSystem.maxEmitBox = new BABYLON.Vector3(0.1, 0.1, 0.1);
 
-        // Create a default particle texture
-        const texture = new BABYLON.Texture('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAAXNSR0IArs4c6QAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9oFBxMWGxXhZY0AAAAZdEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIEdJTVBXgQ4XAAAAJUlEQVQY02NgYGD4z0AEYCJGEQMDAwMjjM0EFRhgAOYgKYgpBQBnNgmWk/JKZAAAAABJRU5ErkJggg==', scene);
-        particleSystem.particleTexture = texture;
+        // Create a particle texture (simple circle)
+        const particleTexture = new BABYLON.Texture(
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAAF0WlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4yLWMwMDAgNzkuMWI2NWE3OWI0LCAyMDIyLzA2LzEzLTIyOjAxOjAxICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOnhtcE1NPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvbW0vIiB4bWxuczpzdEV2dD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL3NUeXBlL1Jlc291cmNlRXZlbnQjIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iIHhtbG5zOnBob3Rvc2hvcD0iaHR0cDovL25zLmFkb2JlLmNvbS9waG90b3Nob3AvMS4wLyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjQuMCAoTWFjaW50b3NoKSIgeG1wOkNyZWF0ZURhdGU9IjIwMjMtMDUtMjBUMTY6MDY6NDctMDQ6MDAiIHhtcDpNZXRhZGF0YURhdGU9IjIwMjMtMDUtMjBUMTY6MDY6NDctMDQ6MDAiIHhtcDpNb2RpZnlEYXRlPSIyMDIzLTA1LTIwVDE2OjA2OjQ3LTA0OjAwIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOjNlZDU1OTEwLTU3NmMtNDY5ZC04ZTM1LTJmOGJhNzZhOTY5YyIgeG1wTU06RG9jdW1lbnRJRD0iYWRvYmU6ZG9jaWQ6cGhvdG9zaG9wOjM5YzI2ZTRiLTFjNmUtZGM0Yy1hMjA1LWEzNzY4NjM0MzE5NyIgeG1wTU06T3JpZ2luYWxEb2N1bWVudElEPSJ4bXAuZGlkOjNlZDU1OTEwLTU3NmMtNDY5ZC04ZTM1LTJmOGJhNzZhOTY5YyIgZGM6Zm9ybWF0PSJpbWFnZS9wbmciIHBob3Rvc2hvcDpDb2xvck1vZGU9IjMiPiA8eG1wTU06SGlzdG9yeT4gPHJkZjpTZXE+IDxyZGY6bGkgc3RFdnQ6YWN0aW9uPSJjcmVhdGVkIiBzdEV2dDppbnN0YW5jZUlEPSJ4bXAuaWlkOjNlZDU1OTEwLTU3NmMtNDY5ZC04ZTM1LTJmOGJhNzZhOTY5YyIgc3RFdnQ6d2hlbj0iMjAyMy0wNS0yMFQxNjowNjo0Ny0wNDowMCIgc3RFdnQ6c29mdHdhcmVBZ2VudD0iQWRvYmUgUGhvdG9zaG9wIDI0LjAgKE1hY2ludG9zaCkiLz4gPC9yZGY6U2VxPiA8L3htcE1NOkhpc3Rvcnk+IDwvcmRmOkRlc2NyaXB0aW9uPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hwYWNrZXQgZW5kPSJyIj8+aNWjKwAAA5BJREFUWIXtl11IU2EYx3/n7GxuabrNj2kuU8uPyjQjKzQiiaAgIYjo+iDBLoQgL7qIroS6CCLosqCbrgqCoLCbwsCLtGHRxzKtsD6c2Jy6fZh76zxdnB13ds5Sc4O6yD9sZ+d9n/f5/Z//85znfUUiQjhCKBQiFAoRDAYJBAIEg0H8fj8+nw+v14vH48HtduNyuXA6nTgcDhwOB3a7HZvNhtVqxWKxYDabMZlMGI1GDAYDer0enU6HVqtFo9Gg0WhQq9Wo1WpUKhVKpRKFQoFcLkcmk4UVSZIQEQk3JUnC7/fj8/nwer243W5cLhdOpxO73Y7NZsNqtWI2mzEajej1erRaLRqNBpVKhUKhQC6XIxKJkMlkyGQyRCIRYrEYiUSCVColISGBuLg44uLiiI2NJTo6mqioKCIjI4mIiEAulyOXy5HL5UgkEsRiMWKxGJFIhEgkQiQSIRaLEYvFiMViJBIJUqkUqVSKTCZDLpcjl8tRKBQoFAqUSiUqlQq1Wo1Go0Gr1aLT6dDr9RgMBgwGAwaDAaPRiNFoxGQyYTKZMJvNWCwWLBYLVqsVm82G3W7H4XDgdDpxuVy43W48Hg9erxefz4ff7ycQCBAMBgmFQoRCIUKhEJIkIYoIhUKEQiGCwSABvx+/34/P58Pr9eL1evF4PLjdblwuFw6HA7vdjs1mw2q1YjabMZlMGAwG9Ho9Op0OrVaLWq1GqVSiUCiQy+VIpVIkEgkSiQSxWIxIJEIkEiEWi5FIJEilUmQyGXK5HIVCgVKpRKVSoVarUSqVKJVKlEolKpUKtVqNRqNBq9Wi0+nQ6/UYDAaMRiMmkwmz2YzFYsFqtWKz2bDb7TidTlwuF263G4/Hg9frxefz4ff7CQQCBINBgsEgoVAISZIQEQqFCAaDBINBAoEAfr8fn8+H1+vF4/HgdrtxOp04HA5sNhtWqxWz2YzRaESv16PT6dBqtajVapRKJQqFArlcjlQqRSKRIBaLEYlEiEQixGIxEokEqVSKTCZDLpcjl8tRKBQolUpUKhVqtRqNRoNWq0Wn06HX6zEYDBiNRkwmE2azGYvFgtVqxWaz4XA4cDqduFwu3G43Ho8Hr9eL1+vF5/Ph9/sJBAIEg0GCwSChUAhJkhARCoUIBoMEAgH8fj8+nw+v14vH48HtduN0OnE4HNhsNqxWK2azGaPRiF6vR6fTodVqUavVKJVKFAoFcrkc2f/yGf4LfAWUEa5WxHMPzAAAAABJRU5ErkJggg==',
+            scene
+        );
+        particleSystem.particleTexture = particleTexture;
 
-        // Particle colors
+        // Particle colors with more opacity
         particleSystem.color1 = new BABYLON.Color4(1, 0.5, 0, 1.0);
         particleSystem.color2 = new BABYLON.Color4(1, 0.2, 0, 1.0);
         particleSystem.colorDead = new BABYLON.Color4(0, 0, 0, 0.0);
 
-        // Size and lifetime
-        particleSystem.minSize = 0.1;
-        particleSystem.maxSize = 0.3;
+        // Larger size for better visibility
+        particleSystem.minSize = 0.2;
+        particleSystem.maxSize = 0.4;
         particleSystem.minLifeTime = 0.5;
         particleSystem.maxLifeTime = 1.0;
 
-        // Emission properties
-        particleSystem.emitRate = 500;
-        particleSystem.minEmitPower = 2;
-        particleSystem.maxEmitPower = 4;
+        // More particles
+        particleSystem.emitRate = 1000;
+        particleSystem.minEmitPower = 3;
+        particleSystem.maxEmitPower = 5;
         particleSystem.updateSpeed = 0.01;
 
-        // Gravity and direction
-        particleSystem.gravity = new BABYLON.Vector3(0, 1, 0);
-        particleSystem.direction1 = new BABYLON.Vector3(-1, 2, -1);
-        particleSystem.direction2 = new BABYLON.Vector3(1, 2, 1);
+        // Stronger upward motion
+        particleSystem.gravity = new BABYLON.Vector3(0, 2, 0);
+        particleSystem.direction1 = new BABYLON.Vector3(-1, 3, -1);
+        particleSystem.direction2 = new BABYLON.Vector3(1, 3, 1);
 
-        // Blend mode for better visual effect
+        // Add some angular velocity for rotation
+        particleSystem.minAngularSpeed = -Math.PI;
+        particleSystem.maxAngularSpeed = Math.PI;
+
+        // Use ADD blend mode for glow effect
         particleSystem.blendMode = BABYLON.ParticleSystem.BLENDMODE_ADD;
 
         // Start the system in stopped state
@@ -203,48 +210,50 @@ const BabylonTestScreen: React.FC = () => {
             }
             if (event.key === ' ') { // Spacebar
                 event.preventDefault();
-                if (particleSystemRef.current) {
-                    // Reset and start the particle system
-                    particleSystemRef.current.stop();
-                    particleSystemRef.current.reset();
-                    particleSystemRef.current.start();
-                    
-                    // Create a quick flash of light
-                    const light = new BABYLON.PointLight('explosionLight', 
-                        particleSystemRef.current.emitter.position, 
-                        scene
-                    );
-                    light.intensity = 2;
-                    light.diffuse = new BABYLON.Color3(1, 0.5, 0);
-                    
-                    // Animate light intensity down and remove it
-                    const lightAnim = new BABYLON.Animation(
-                        'lightAnim',
-                        'intensity',
-                        60,
-                        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
-                        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
-                    );
-                    
-                    const lightKeys = [
-                        { frame: 0, value: 2 },
-                        { frame: 30, value: 0 }
-                    ];
-                    
-                    lightAnim.setKeys(lightKeys);
-                    light.animations = [lightAnim];
-                    
-                    scene.beginAnimation(light, 0, 30, false, 1, () => {
-                        light.dispose();
-                    });
-                    
-                    // Stop particles after 1.5 seconds
-                    setTimeout(() => {
-                        if (particleSystemRef.current) {
-                            particleSystemRef.current.stop();
-                        }
-                    }, 1500);
-                }
+                const particleSystem = particleSystemRef.current;
+                if (!particleSystem?.emitter || !(particleSystem.emitter instanceof BABYLON.Mesh)) return;
+
+                // Reset and start the particle system
+                particleSystem.stop();
+                particleSystem.reset();
+                particleSystem.start();
+                
+                // Create a quick flash of light
+                const light = new BABYLON.PointLight(
+                    'explosionLight',
+                    particleSystem.emitter.position.clone(),
+                    scene
+                );
+                light.intensity = 2;
+                light.diffuse = new BABYLON.Color3(1, 0.5, 0);
+                
+                // Animate light intensity down and remove it
+                const lightAnim = new BABYLON.Animation(
+                    'lightAnim',
+                    'intensity',
+                    60,
+                    BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+                    BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+                );
+                
+                const lightKeys = [
+                    { frame: 0, value: 2 },
+                    { frame: 30, value: 0 }
+                ];
+                
+                lightAnim.setKeys(lightKeys);
+                light.animations = [lightAnim];
+                
+                scene.beginAnimation(light, 0, 30, false, 1, () => {
+                    light.dispose();
+                });
+                
+                // Stop particles after 1.5 seconds
+                setTimeout(() => {
+                    if (particleSystem) {
+                        particleSystem.stop();
+                    }
+                }, 1500);
             }
         };
 
