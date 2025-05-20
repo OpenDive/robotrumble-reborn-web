@@ -2,10 +2,16 @@ import * as THREE from 'three';
 import { BaseEffect } from './BaseEffect';
 import { EffectConfig } from './EffectConfig';
 import { ParticleSystem } from '../particles/ParticleSystem';
+import { TextGeometry, type TextGeometryParameters } from 'three/addons/geometries/TextGeometry.js';
+import { Font, FontLoader } from 'three/addons/loaders/FontLoader.js';
 // @ts-ignore
 import vertexShader from './shaders/checkpoint-beam.vert?raw';
 // @ts-ignore
 import fragmentShader from './shaders/checkpoint-beam.frag?raw';
+// @ts-ignore
+import numberVertexShader from './shaders/number-glow.vert?raw';
+// @ts-ignore
+import numberFragmentShader from './shaders/number-glow.frag?raw';
 
 export interface CheckpointConfig extends EffectConfig {
   checkpointNumber: number;
@@ -24,6 +30,15 @@ export class CheckpointEffect extends BaseEffect {
   private readonly EFFECT_DURATION: number = 0.5;
   private readonly BEAM_RADIUS: number = 1.5;
   private readonly RING_EXPAND_SPEED: number = 3.0;
+  private readonly NUMBER_FLOAT_SPEED: number = 1.0;
+  private readonly NUMBER_FLOAT_AMPLITUDE: number = 0.2;
+  private readonly NUMBER_SCALE: number = 0.5;
+  private readonly NUMBER_VERTICAL_OFFSET: number = 1.0;
+
+  private numberDisplay: THREE.Group | null = null;
+  private numberMesh: THREE.Mesh | null = null;
+  private numberMaterial: THREE.ShaderMaterial | null = null;
+  private font: Font | null = null;
 
 
 
@@ -83,9 +98,74 @@ export class CheckpointEffect extends BaseEffect {
       transparent: true
     });
 
+    // Initialize number display
+    const numberDisplay = new THREE.Group();
+    scene.add(numberDisplay);
+    this.numberDisplay = numberDisplay;
+
+    // Create number material with glow effect
+    const numberMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        glowColor: { value: config.isFinalLap ? 
+          new THREE.Vector3(1.0, 0.8, 0.0) :  // Gold for final lap
+          new THREE.Vector3(0.0, 0.8, 1.0)    // Blue for normal checkpoint
+        },
+        opacity: { value: 1.0 },
+        time: { value: 0 }
+      },
+      vertexShader: numberVertexShader,
+      fragmentShader: numberFragmentShader,
+      transparent: true,
+      side: THREE.DoubleSide
+    });
+
+    // Load font and create number mesh
+    const fontLoader = new FontLoader();
+    fontLoader.load('/fonts/helvetiker_bold.typeface.json', (font: Font) => {
+      this.font = font;
+      this.createNumberMesh(config.checkpointNumber);
+    });
+
+    this.numberMaterial = numberMaterial;
+
     // Hide initially
     this.beam.visible = false;
     this.ring.visible = false;
+    this.numberDisplay.visible = false;
+  }
+
+  private createNumberMesh(number: number): void {
+    if (!this.font || !this.numberMaterial || !this.numberDisplay) return;
+
+    // Create text geometry
+    const geometry = new TextGeometry(number.toString(), {
+      font: this.font,
+      size: this.NUMBER_SCALE,
+      depth: this.NUMBER_SCALE * 0.2,
+      curveSegments: 12,
+      bevelEnabled: true,
+      bevelThickness: 0.02,
+      bevelSize: 0.01,
+      bevelOffset: 0,
+      bevelSegments: 5
+    });
+
+    // Center the geometry
+    geometry.computeBoundingBox();
+    const centerOffset = new THREE.Vector3();
+    if (geometry.boundingBox) {
+      geometry.boundingBox.getCenter(centerOffset).multiplyScalar(-1);
+    }
+
+    // Create or update mesh
+    if (this.numberMesh) {
+      this.numberDisplay.remove(this.numberMesh);
+    }
+
+    const mesh = new THREE.Mesh(geometry, this.numberMaterial);
+    mesh.position.copy(centerOffset);
+    this.numberDisplay.add(mesh);
+    this.numberMesh = mesh;
   }
 
   activate(position: THREE.Vector3): void {
@@ -95,6 +175,12 @@ export class CheckpointEffect extends BaseEffect {
     // Position everything
     this.beam.position.copy(position);
     this.ring.position.copy(position);
+    
+    if (this.numberDisplay) {
+      this.numberDisplay.position.copy(position);
+      this.numberDisplay.position.y += this.NUMBER_VERTICAL_OFFSET;
+      this.numberDisplay.visible = true;
+    }
     
     // Show elements
     this.beam.visible = true;
@@ -131,6 +217,18 @@ export class CheckpointEffect extends BaseEffect {
   }
 
   update(deltaTime: number): void {
+    // Update number floating animation and glow
+    if (this.numberDisplay?.visible && this.numberMaterial?.uniforms) {
+      const time = performance.now() / 1000;
+      
+      // Floating motion
+      const floatOffset = Math.sin(time * this.NUMBER_FLOAT_SPEED) * this.NUMBER_FLOAT_AMPLITUDE;
+      this.numberDisplay.position.y = this.beam.position.y + this.NUMBER_VERTICAL_OFFSET + floatOffset;
+      
+      // Update glow effect time
+      this.numberMaterial.uniforms.time.value = time;
+    }
+
     if (!this.isActive) return;
 
     const time = performance.now() / 1000;
