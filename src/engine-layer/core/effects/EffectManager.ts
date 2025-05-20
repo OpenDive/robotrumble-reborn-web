@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SmokeEffect } from './templates/SmokeEffect';
 import { ExplosionEffect } from './templates/ExplosionEffect';
 import { BoostTrailEffect } from './templates/BoostTrailEffect';
+import { CheckpointEffect, CheckpointConfig } from './templates/CheckpointEffect';
 
 export class EffectManager {
   private static instance: EffectManager;
@@ -23,6 +24,32 @@ export class EffectManager {
     this.effects.set('smoke', new SmokeEffect(scene));
     this.effects.set('explosion', new ExplosionEffect(scene));
     this.effects.set('boost', new BoostTrailEffect(scene));
+    const checkpointConfig: CheckpointConfig = {
+      // Checkpoint-specific properties
+      checkpointNumber: 1,
+      isFinalLap: false,
+      height: 3,
+      // Base effect properties
+      maxParticles: 50,
+      particleSize: 0.2,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      emitRate: 10,
+      startSize: 0.2,
+      endSize: 0,
+      lifetime: 0.5,
+      startColor: new THREE.Color(0x00ccff),
+      endColor: new THREE.Color(0x0066ff),
+      emitShape: 'point',
+      emitShapeParams: { radius: 0.1 },
+      // Required by EffectConfig
+      velocityBase: new THREE.Vector3(0, 1, 0),
+      velocitySpread: new THREE.Vector3(0.2, 0.2, 0.2),
+      positionSpread: new THREE.Vector3(0.1, 0.1, 0.1),
+      acceleration: new THREE.Vector3(0, -0.5, 0)
+    };
+    
+    this.effects.set('checkpoint', new CheckpointEffect(scene, checkpointConfig));
 
     // Set up keyboard controls for testing
     document.addEventListener('keydown', (event) => {
@@ -39,6 +66,9 @@ export class EffectManager {
           break;
         case 'b':
           this.emitBoostTrail(testPosition, testVelocity, 1.0);
+          break;
+        case 'c':
+          this.emitCheckpoint(testPosition);
           break;
       }
     });
@@ -67,6 +97,13 @@ export class EffectManager {
       boost.setVelocityBase(velocity);
       boost.setIntensity(intensity);
       boost.emit(position);
+    }
+  }
+
+  emitCheckpoint(position: THREE.Vector3): void {
+    const effect = this.effects.get('checkpoint') as CheckpointEffect;
+    if (effect) {
+      effect.activate(position);
     }
   }
 

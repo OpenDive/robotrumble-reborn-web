@@ -5,7 +5,7 @@ import { ParticleSystem } from '../particles/ParticleSystem';
 import vertexShader from '../shaders/checkpoint-beam.vert';
 import fragmentShader from '../shaders/checkpoint-beam.frag';
 
-interface CheckpointConfig extends EffectConfig {
+export interface CheckpointConfig extends EffectConfig {
   checkpointNumber: number;
   isFinalLap: boolean;
   height: number;
