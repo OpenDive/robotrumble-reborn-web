@@ -46,20 +46,33 @@ This directory contains the particle effects system for RobotRumble Reborn. The 
 **Activation**: Press 'B' key (for testing)
 
 **Visual Characteristics**:
-- Continuous emission of energetic particles in a narrow cone
-- Small initial size (0.2-0.3 units) with moderate expansion (0.4-0.5 units)
-- Bright cyan/blue core transitioning to white-blue edges
-- Particles inherit and blend with vehicle velocity
-- Duration: Particles last 0.5-0.8 seconds
-- Emission Rate: 60 particles per second
-- Maximum Particles: 150
+- Two-part effect combining particles and speed lines
+- Core Effect:
+  - Small energy particles (0.1-0.15 units)
+  - Yellow-red color gradient
+  - Tight cone formation (7.5 degrees)
+  - Quick lifetime (0.3-0.5 seconds)
+- Speed Lines:
+  - V-shaped formation with 5 emission points
+  - Length scales with velocity
+  - Color varies by position (yellow center to red edges)
+  - Animated width pulsing
+  - Dynamic spacing based on speed
+
+**Formation Pattern**:
+```
+    O   O    (Outer red lines)
+   O  O  O   (Inner orange/yellow lines)
+     [V]     (Vehicle position)
+```
 
 **Expected Experience**:
-- Creates a dynamic energy trail behind the vehicle
-- Particles stretch and flow with movement
-- Intensity varies with boost power
-- Additive blending for energy glow effect
-- Useful for: boost/nitro effects, engine power visualization
+- Classic racing game boost visual
+- Clear directional indication
+- Speed lines create sense of motion
+- V-formation suggests forward thrust
+- Colors suggest heat/energy
+- Intensity and spacing adapt to speed
 
 ## Viewing Distance and Perspective
 
