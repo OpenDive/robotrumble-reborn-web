@@ -24,7 +24,7 @@ export const DebugCategoriesPanel: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 bg-black/80 text-white p-4 rounded-lg font-mono text-sm">
+    <div className="fixed top-24 left-4 bg-black/80 text-white p-4 rounded-lg font-mono text-sm z-50">
       <h3 className="font-bold mb-2">Debug Categories</h3>
       <div className="space-y-2">
         {Object.entries(categories).map(([category, enabled]) => (

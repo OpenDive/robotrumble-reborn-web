@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { engine } from '../../../engine-layer';
+import { isDebugEnabled } from '../../../shared/config/env';
 
 interface GameLayoutProps {
   children: React.ReactNode;
@@ -49,8 +50,13 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
 
       {/* HUD Layer */}
       <div className="absolute inset-0 pointer-events-none">
+        {/* Debug Tools Layer - Enable pointer events */}
+        <div className="pointer-events-auto">
+          {isDebugEnabled && children}
+        </div>
+        {/* Game HUD Layer - Keep pointer events disabled */}
         <div className="relative w-full h-full">
-          {children}
+          {!isDebugEnabled && children}
         </div>
       </div>
 
