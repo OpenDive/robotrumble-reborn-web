@@ -26,13 +26,13 @@ export class EffectManager {
     document.addEventListener('keydown', (event) => {
       if (!this.scene) return;
 
-      const cameraPosition = new THREE.Vector3(0, 0, 2);  // 2 units in front of camera
+      const testPosition = new THREE.Vector3(0, 0, 2);  // 2 units in front of camera
       switch (event.key.toLowerCase()) {
         case 's':
-          this.emitSmoke(cameraPosition);
+          this.emitSmoke(testPosition);
           break;
         case 'e':
-          this.emitExplosion(cameraPosition);
+          this.emitExplosion(testPosition);
           break;
       }
     });
