@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { BaseEffect } from './BaseEffect';
 import { EffectConfig } from './EffectConfig';
 import { ParticleSystem } from '../particles/ParticleSystem';
-import vertexShader from '../shaders/checkpoint-beam.vert';
-import fragmentShader from '../shaders/checkpoint-beam.frag';
+// @ts-ignore
+import vertexShader from './shaders/checkpoint-beam.vert?raw';
+// @ts-ignore
+import fragmentShader from './shaders/checkpoint-beam.frag?raw';
 
 export interface CheckpointConfig extends EffectConfig {
   checkpointNumber: number;
