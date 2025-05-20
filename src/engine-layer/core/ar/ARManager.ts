@@ -54,6 +54,9 @@ export class ARManager {
     console.log('ARManager: Updating video source...');
     this.videoSource = newSource;
     
+    // Start the video source first to ensure it's active
+    await this.videoSource.start();
+    
     const videoElement = this.videoSource.getVideoElement();
     
     if (videoElement.readyState < videoElement.HAVE_METADATA) {
@@ -75,6 +78,7 @@ export class ARManager {
     }, newSource);
     
     this.markerVisualizer.updateVideoSource(newSource);
+    await this.markerDetector.updateVideoSource(newSource);
     
     try {
       if (videoElement.paused) {

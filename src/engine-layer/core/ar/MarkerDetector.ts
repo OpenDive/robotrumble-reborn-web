@@ -1,6 +1,7 @@
 import jsAruco from 'js-aruco';
 import { debugManager } from '../debug/DebugManager';
 import { debugLogger } from '../debug/DebugLogger';
+import { IVideoSource } from '../video/types';
 
 export interface Marker {
   id: number;
@@ -58,15 +59,75 @@ export class MarkerDetector {
   }
 
   /**
+   * Update video source and reset debug visualization
+   */
+  async updateVideoSource(newSource: IVideoSource): Promise<void> {
+    debugLogger.log('ar', 'MarkerDetector: Updating video source');
+    
+    // Get fresh debug canvases
+    const { canvas, ctx, tempCanvas, tempCtx } = debugManager.getMarkerDebugCanvas();
+    
+    // Update internal references
+    this.debugCanvas = canvas;
+    this.debugCtx = ctx;
+    this.tempCanvas = tempCanvas;
+    this.tempCtx = tempCtx;
+    
+    // Get dimensions from new source
+    const videoElement = newSource.getVideoElement();
+    const { width, height } = newSource.getDimensions();
+    
+    // Update canvas dimensions
+    this.tempCanvas!.width = width;
+    this.tempCanvas!.height = height;
+    
+    // Clear any existing content
+    if (this.debugCtx) {
+      this.debugCtx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    if (this.tempCtx) {
+      this.tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+    }
+
+    // Update POSIT focal length based on new dimensions
+    // @ts-ignore - js-aruco types are not properly defined
+    this.posit = new jsAruco.POS1.Posit(this.MARKER_SIZE_MM, width);
+
+    debugLogger.log('ar', 'MarkerDetector: Debug canvases reset and dimensions updated', {
+      width,
+      height,
+      videoReady: videoElement.readyState
+    });
+  }
+
+  /**
    * Detect markers in the current video frame
    */
   detectMarkers(imageData: ImageData): Marker[] {
     try {
+      // Validate frame data
+      if (!imageData || imageData.width === 0 || imageData.height === 0 || imageData.data.length === 0) {
+        debugLogger.warn('ar', 'MarkerDetector: Invalid frame data', { imageData });
+        return [];
+      }
+
+      // Check if frame data length matches expected dimensions
+      const expectedLength = imageData.width * imageData.height * 4;
+      if (imageData.data.length !== expectedLength) {
+        debugLogger.warn('ar', 'MarkerDetector: Frame data length mismatch', {
+          actual: imageData.data.length,
+          expected: expectedLength,
+          width: imageData.width,
+          height: imageData.height
+        });
+        return [];
+      }
+
       debugLogger.log('ar', 'MarkerDetector: Processing frame', {
         width: imageData.width,
         height: imageData.height,
         dataLength: imageData.data.length,
-        expectedLength: imageData.width * imageData.height * 4,
+        expectedLength,
         firstPixels: Array.from(imageData.data.slice(0, 16)), // Show first few pixels
         dataType: imageData.data.constructor.name
       });
@@ -76,27 +137,37 @@ export class MarkerDetector {
       this.posit = new jsAruco.POS1.Posit(this.MARKER_SIZE_MM, imageData.width);
 
       // Debug visualization
-      if (this.debugCtx && this.debugCanvas) {
-        // Scale down for debug view
-        this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
-        this.debugCtx.save();
-        this.debugCtx.scale(
-          this.debugCanvas.width / imageData.width,
-          this.debugCanvas.height / imageData.height
-        );
-        
-        // Use reusable temp canvas for image processing
-        this.tempCanvas!.width = imageData.width;
-        this.tempCanvas!.height = imageData.height;
-        this.tempCtx!.putImageData(imageData, 0, 0);
-        // Draw original image
-        this.debugCtx.drawImage(this.tempCanvas!, 0, 0);
-        this.debugCtx.restore();
+      if (this.debugCtx && this.debugCanvas && this.tempCtx && this.tempCanvas) {
+        try {
+          // Scale down for debug view
+          this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
+          this.debugCtx.save();
+          this.debugCtx.scale(
+            this.debugCanvas.width / imageData.width,
+            this.debugCanvas.height / imageData.height
+          );
+          
+          // Use reusable temp canvas for image processing
+          if (this.tempCanvas.width !== imageData.width) this.tempCanvas.width = imageData.width;
+          if (this.tempCanvas.height !== imageData.height) this.tempCanvas.height = imageData.height;
+          
+          this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
+          this.tempCtx.putImageData(imageData, 0, 0);
+          
+          // Draw original image
+          this.debugCtx.drawImage(this.tempCanvas, 0, 0);
+          this.debugCtx.restore();
 
-        // Add debug info
-        this.debugCtx.fillStyle = 'red';
-        this.debugCtx.font = '12px monospace';
-        this.debugCtx.fillText(`Frame: ${imageData.width}x${imageData.height}`, 5, 15);
+          // Add debug info
+          this.debugCtx.fillStyle = 'red';
+          this.debugCtx.font = '12px monospace';
+          this.debugCtx.fillText(`Frame: ${imageData.width}x${imageData.height}`, 5, 15);
+        } catch (error) {
+          debugLogger.error('ar', 'MarkerDetector: Error in debug visualization', error);
+          // Clear both canvases on error
+          this.debugCtx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
+          this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
+        }
       }
 
       // Detect markers
