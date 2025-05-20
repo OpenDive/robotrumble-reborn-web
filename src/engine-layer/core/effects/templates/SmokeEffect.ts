@@ -1,46 +1,42 @@
 import * as THREE from 'three';
-import { ParticleSystem, ParticleData } from '../particles/ParticleSystem';
+import { BaseEffect } from './BaseEffect';
+import { EffectConfig } from './EffectConfig';
 
-export class SmokeEffect {
-  private particleSystem: ParticleSystem;
-
+export class SmokeEffect extends BaseEffect {
   constructor(scene: THREE.Scene) {
-    this.particleSystem = new ParticleSystem(scene, {
+    const config: EffectConfig = {
+      // Particle system settings
       maxParticles: 200,
-      particleSize: 0.03,
-      transparent: true,
-      depthWrite: false
-    });
-  }
+      particleSize: 0.5,  // Much larger for first-person view
+      emitRate: 50,  // particles per second
 
-  emit(position: THREE.Vector3): void {
-    for (let i = 0; i < 50; i++) {
-      const particle: ParticleData = {
-        position: position.clone().add(
-          new THREE.Vector3(
-            (Math.random() - 0.5) * 0.1,
-            (Math.random() - 0.5) * 0.1,
-            (Math.random() - 0.5) * 0.1
-          )
-        ),
-        velocity: new THREE.Vector3(
-          (Math.random() - 0.5) * 0.01,
-          Math.random() * 0.02,
-          (Math.random() - 0.5) * 0.01
-        ),
-        life: 1.0,
-        maxLife: 1.0 + Math.random(),
-        size: 0.02 + Math.random() * 0.02
-      };
-      this.particleSystem.addParticle(particle);
-    }
-  }
+      // Particle properties
+      startSize: [0.3, 0.5],  // Larger size range
+      endSize: [0.8, 1.2],    // Expand as it dissipates
+      lifetime: [1.5, 2.5],    // Longer lifetime
+      
+      // Colors - gray smoke that fades to transparent
+      startColor: new THREE.Color(0x888888),
+      endColor: new THREE.Color(0x444444),
+      
+      // Emission in a cone shape
+      emitShape: 'cone',
+      emitShapeParams: {
+        radius: 0.2,  // Base radius of cone
+        angle: Math.PI / 6  // 30 degree spread
+      },
+      
+      // Physics
+      startSpeed: [0.5, 1.0],  // Faster initial velocity
+      gravity: new THREE.Vector3(0, 0.5, 0),  // Upward drift
+      drag: 0.5,  // Air resistance
+      turbulence: 0.2,  // Random movement
+      
+      // Rendering
+      blending: THREE.AdditiveBlending,
+      transparent: true
+    };
 
-  update(deltaTime: number): void {
-    this.particleSystem.update(deltaTime);
-  }
-
-  dispose(): void {
-    this.particleSystem.dispose();
+    super(scene, config);
   }
 }

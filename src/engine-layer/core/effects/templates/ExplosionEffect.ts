@@ -1,44 +1,42 @@
 import * as THREE from 'three';
-import { ParticleSystem, ParticleData } from '../particles/ParticleSystem';
+import { BaseEffect } from './BaseEffect';
+import { EffectConfig } from './EffectConfig';
 
-export class ExplosionEffect {
-  private particleSystem: ParticleSystem;
-
+export class ExplosionEffect extends BaseEffect {
   constructor(scene: THREE.Scene) {
-    this.particleSystem = new ParticleSystem(scene, {
+    const config: EffectConfig = {
+      // Particle system settings
       maxParticles: 300,
-      particleSize: 0.04,
+      particleSize: 0.5,  // Much larger for first-person view
+      burstCount: 100,    // One-shot burst
+
+      // Particle properties
+      startSize: [0.4, 0.6],  // Start larger
+      endSize: [0.1, 0.2],    // Shrink as they fade
+      lifetime: [0.5, 1.0],   // Quick explosion
+      
+      // Colors - bright orange/yellow core to red edges
+      startColor: [new THREE.Color(0xffff80), new THREE.Color(0xff8000)],  // Yellow to orange
+      endColor: [new THREE.Color(0xff2000), new THREE.Color(0x000000)],    // Red to black
+      
+      // Emission in a sphere
+      emitShape: 'sphere',
+      emitShapeParams: {
+        radius: 0.1  // Initial blast radius
+      },
+      
+      // Physics
+      startSpeed: [2.0, 3.0],  // Fast initial burst
+      gravity: new THREE.Vector3(0, -1, 0),  // Slight downward pull
+      drag: 1.0,    // High air resistance
+      turbulence: 0.5,  // Chaotic movement
+      
+      // Rendering
+      blending: THREE.AdditiveBlending,
       transparent: true,
-      depthWrite: false
-    });
-  }
+      emitRate: 0  // Not used for burst effects
+    };
 
-  emit(position: THREE.Vector3): void {
-    for (let i = 0; i < 100; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 0.05 + Math.random() * 0.05;
-      const velocity = new THREE.Vector3(
-        Math.cos(angle) * speed,
-        Math.sin(angle) * speed,
-        (Math.random() - 0.5) * speed
-      );
-
-      const particle: ParticleData = {
-        position: position.clone(),
-        velocity: velocity,
-        life: 1.0,
-        maxLife: 0.5 + Math.random() * 0.5,
-        size: 0.03 + Math.random() * 0.02
-      };
-      this.particleSystem.addParticle(particle);
-    }
-  }
-
-  update(deltaTime: number): void {
-    this.particleSystem.update(deltaTime);
-  }
-
-  dispose(): void {
-    this.particleSystem.dispose();
+    super(scene, config);
   }
 }

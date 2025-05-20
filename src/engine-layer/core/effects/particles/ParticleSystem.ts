@@ -6,6 +6,11 @@ export interface ParticleData {
   life: number;
   maxLife: number;
   size: number;
+  startSize: number;
+  endSize: number;
+  startColor: THREE.Color;
+  endColor: THREE.Color;
+  color?: THREE.Color;  // Current interpolated color
 }
 
 export interface ParticleSystemOptions {
@@ -83,12 +88,16 @@ export class ParticleSystem {
     }
   }
 
-  update(deltaTime: number): void {
+  updateWithPhysics(deltaTime: number, physicsCallback: (particle: ParticleData) => void): void {
     // Update particle physics
     this.particles = this.particles.filter(particle => {
       particle.life -= deltaTime;
       if (particle.life <= 0) return false;
 
+      // Apply custom physics
+      physicsCallback(particle);
+      
+      // Update position based on velocity
       particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
       return true;
     });
@@ -110,10 +119,17 @@ export class ParticleSystem {
       positions[i3 + 1] = particle.position.y;
       positions[i3 + 2] = particle.position.z;
 
-      const alpha = particle.life / particle.maxLife;
-      colors[i3] = alpha;
-      colors[i3 + 1] = alpha;
-      colors[i3 + 2] = alpha;
+      // Use interpolated color if available, otherwise use alpha
+      if (particle.color) {
+        colors[i3] = particle.color.r;
+        colors[i3 + 1] = particle.color.g;
+        colors[i3 + 2] = particle.color.b;
+      } else {
+        const alpha = particle.life / particle.maxLife;
+        colors[i3] = alpha;
+        colors[i3 + 1] = alpha;
+        colors[i3 + 2] = alpha;
+      }
 
       sizes[i] = particle.size;
     });
@@ -121,6 +137,13 @@ export class ParticleSystem {
     this.geometry.attributes.position.needsUpdate = true;
     this.geometry.attributes.color.needsUpdate = true;
     this.geometry.attributes.size.needsUpdate = true;
+  }
+
+  // Keep the old update for backward compatibility
+  update(deltaTime: number): void {
+    this.updateWithPhysics(deltaTime, () => {
+      // No custom physics
+    });
   }
 
   dispose(): void {
