@@ -20,19 +20,74 @@ const BabylonTestScreen: React.FC = () => {
         const scene = new BABYLON.Scene(engine);
         sceneRef.current = scene;
 
-        // Setup camera
+        // Setup orthographic camera for proper 2D-style viewing
         const camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(0, 2, -5), scene);
-        camera.setTarget(BABYLON.Vector3.Zero());
+        camera.setTarget(new BABYLON.Vector3(0, 0, 0));
+        camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+        
+        // Set initial ortho scale based on screen size
+        const aspectRatio = engine.getRenderWidth() / engine.getRenderHeight();
+        const orthoScale = 2;
+        camera.orthoLeft = -orthoScale * aspectRatio;
+        camera.orthoRight = orthoScale * aspectRatio;
+        camera.orthoBottom = -orthoScale;
+        camera.orthoTop = orthoScale;
+        
+        // Handle window resize
+        const handleResize = () => {
+            const aspectRatio = engine.getRenderWidth() / engine.getRenderHeight();
+            
+            // Update camera orthographic settings
+            const orthoScale = 2;
+            camera.orthoLeft = -orthoScale * aspectRatio;
+            camera.orthoRight = orthoScale * aspectRatio;
+            camera.orthoBottom = -orthoScale;
+            camera.orthoTop = orthoScale;
+            
+            // Scale video plane to fill view
+            if (videoPlane) {
+                videoPlane.scaling.x = 4 * aspectRatio;
+                videoPlane.scaling.y = 4;
+            }
+            
+            // Scale track and arrows
+            if (trackPlane) {
+                trackPlane.scaling.x = 1.5;
+                trackPlane.scaling.z = 2;
+            }
+            
+            // Update arrow positions
+            const arrowOffset = 1.2;
+            if (leftArrowRef.current) {
+                leftArrowRef.current.position.x = -arrowOffset;
+                leftArrowRef.current.position.y = 0;
+                leftArrowRef.current.position.z = 0;
+            }
+            if (rightArrowRef.current) {
+                rightArrowRef.current.position.x = arrowOffset;
+                rightArrowRef.current.position.y = 0;
+                rightArrowRef.current.position.z = 0;
+            }
+        };
+        
+        window.addEventListener('resize', handleResize);
 
         // Add lights
         new BABYLON.HemisphericLight('light', new BABYLON.Vector3(0, 1, 0), scene);
 
         // Create background video plane
         const videoPlane = BABYLON.MeshBuilder.CreatePlane('videoPlane', {
-            width: 4,
-            height: 3
+            width: 1,
+            height: 1,
+            sideOrientation: BABYLON.Mesh.DOUBLESIDE
         }, scene);
-        videoPlane.position.z = 2;
+        videoPlane.position.z = 1; // Put video behind other elements
+        
+        // Ensure engine is ready before initial resize
+        engine.runRenderLoop(() => {
+            handleResize();
+            scene.render();
+        });
 
         // Setup webcam video texture
         navigator.mediaDevices.getUserMedia({ video: true })
@@ -57,12 +112,13 @@ const BabylonTestScreen: React.FC = () => {
             });
 
         // Create track plane
-        const trackPlane = BABYLON.MeshBuilder.CreateGround('track', {
-            width: 2,
+        const trackPlane = BABYLON.MeshBuilder.CreateGround('trackPlane', {
+            width: 3,
             height: 4
         }, scene);
-        trackPlane.position.y = -0.5;
-        trackPlane.rotation.x = Math.PI / 8; // Tilt towards horizon
+        trackPlane.position.y = -0.75;
+        trackPlane.position.z = 0.5; // Put track in front of video but behind arrows
+        trackPlane.rotation.x = Math.PI / 6; // Tilt for better perspective
 
         const trackMaterial = new BABYLON.StandardMaterial('trackMat', scene);
         trackMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
@@ -73,8 +129,8 @@ const BabylonTestScreen: React.FC = () => {
         const createArrow = (isLeft: boolean) => {
             const points = [
                 new BABYLON.Vector3(0, 0, 0),
-                new BABYLON.Vector3(isLeft ? -0.5 : 0.5, 0, -0.5),
-                new BABYLON.Vector3(isLeft ? -1 : 1, 0, 0)
+                new BABYLON.Vector3(isLeft ? -0.3 : 0.3, 0, -0.3),
+                new BABYLON.Vector3(isLeft ? -0.6 : 0.6, 0, 0)
             ];
             
             const arrow = BABYLON.MeshBuilder.CreateTube(
@@ -94,8 +150,8 @@ const BabylonTestScreen: React.FC = () => {
             arrowMaterial.emissiveColor = new BABYLON.Color3(1, 1, 0);
             arrow.material = arrowMaterial;
             
-            arrow.position.y = -0.3;
-            arrow.position.z = -1;
+            arrow.position.y = -0.2;
+            arrow.position.z = 0.02; // Slightly in front of track
             arrow.position.x = isLeft ? -0.8 : 0.8;
             
             return arrow;
@@ -169,10 +225,7 @@ const BabylonTestScreen: React.FC = () => {
         window.addEventListener('keydown', keyDownHandler);
         window.addEventListener('keyup', keyUpHandler);
 
-        // Start render loop
-        engine.runRenderLoop(() => {
-            scene.render();
-        });
+
 
         // Handle window resize
         window.addEventListener('resize', () => {
@@ -183,6 +236,7 @@ const BabylonTestScreen: React.FC = () => {
         return () => {
             window.removeEventListener('keydown', keyDownHandler);
             window.removeEventListener('keyup', keyUpHandler);
+            window.removeEventListener('resize', handleResize);
             scene.dispose();
             engine.dispose();
             if (videoTextureRef.current) {
@@ -192,8 +246,23 @@ const BabylonTestScreen: React.FC = () => {
     }, []);
 
     return (
-        <div className="w-full h-full">
-            <canvas ref={canvasRef} className="w-full h-full" />
+        <div style={{ 
+            width: '100vw', 
+            height: '100vh', 
+            overflow: 'hidden',
+            background: 'black',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+        }}>
+            <canvas 
+                ref={canvasRef} 
+                style={{ 
+                    width: '100%',
+                    height: '100%',
+                    display: 'block'
+                }} 
+            />
         </div>
     );
 };
