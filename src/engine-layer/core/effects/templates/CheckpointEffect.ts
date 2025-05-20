@@ -20,6 +20,8 @@ export interface CheckpointConfig extends EffectConfig {
 }
 
 export class CheckpointEffect extends BaseEffect {
+  protected scene: THREE.Scene;
+
   private beam: THREE.Mesh;
   private ring: THREE.Mesh;
   private flashParticles: ParticleSystem;
@@ -31,9 +33,9 @@ export class CheckpointEffect extends BaseEffect {
   private readonly BEAM_RADIUS: number = 1.5;
   private readonly RING_EXPAND_SPEED: number = 3.0;
   private readonly NUMBER_FLOAT_SPEED: number = 1.0;
-  private readonly NUMBER_FLOAT_AMPLITUDE: number = 0.2;
-  private readonly NUMBER_SCALE: number = 0.5;
-  private readonly NUMBER_VERTICAL_OFFSET: number = 1.0;
+  private readonly NUMBER_FLOAT_AMPLITUDE: number = 0.1;
+  private readonly NUMBER_SCALE: number = 2.0;
+  private readonly NUMBER_VERTICAL_OFFSET: number = 0.5;
 
   private numberDisplay: THREE.Group | null = null;
   private numberMesh: THREE.Mesh | null = null;
@@ -44,6 +46,7 @@ export class CheckpointEffect extends BaseEffect {
 
   constructor(scene: THREE.Scene, config: CheckpointConfig) {
     super(scene, config);
+    this.scene = scene;
 
     // Create beam cylinder
     const beamGeometry = new THREE.CylinderGeometry(
@@ -145,11 +148,19 @@ export class CheckpointEffect extends BaseEffect {
   private createNumberMesh(number: number): void {
     if (!this.font || !this.numberMaterial || !this.numberDisplay) return;
 
+    // Clean up old mesh if it exists
+    if (this.numberMesh) {
+      this.numberDisplay.remove(this.numberMesh);
+      if (this.numberMesh.geometry) {
+        this.numberMesh.geometry.dispose();
+      }
+    }
+
     // Create text geometry
     const geometry = new TextGeometry(number.toString(), {
       font: this.font,
       size: this.NUMBER_SCALE,
-      depth: this.NUMBER_SCALE * 0.2,
+      depth: this.NUMBER_SCALE * 0.1,
       curveSegments: 12,
       bevelEnabled: true,
       bevelThickness: 0.02,
@@ -165,15 +176,21 @@ export class CheckpointEffect extends BaseEffect {
       geometry.boundingBox.getCenter(centerOffset).multiplyScalar(-1);
     }
 
-    // Create or update mesh
-    if (this.numberMesh) {
-      this.numberDisplay.remove(this.numberMesh);
-    }
-
+    // Create new mesh
     const mesh = new THREE.Mesh(geometry, this.numberMaterial);
     mesh.position.copy(centerOffset);
+    
+    // Set initial scale and rotation
+    mesh.scale.set(1, 1, 1);
+    // Rotate to face camera
+    mesh.rotation.x = -Math.PI / 6; // Tilt slightly up
+    
+    // Add to scene
     this.numberDisplay.add(mesh);
     this.numberMesh = mesh;
+    
+    // Ensure visibility matches parent
+    mesh.visible = this.numberDisplay.visible;
   }
 
   activate(position: THREE.Vector3): void {
@@ -229,15 +246,30 @@ export class CheckpointEffect extends BaseEffect {
 
   update(deltaTime: number): void {
     // Update number floating animation and glow
-    if (this.numberDisplay?.visible && this.numberMaterial?.uniforms) {
+    if (this.numberDisplay && this.numberMaterial?.uniforms) {
       const time = performance.now() / 1000;
       
-      // Floating motion
-      const floatOffset = Math.sin(time * this.NUMBER_FLOAT_SPEED) * this.NUMBER_FLOAT_AMPLITUDE;
-      this.numberDisplay.position.y = this.beam.position.y + this.NUMBER_VERTICAL_OFFSET + floatOffset;
-      
-      // Update glow effect time
-      this.numberMaterial.uniforms.time.value = time;
+      if (this.numberDisplay.visible) {
+        // Floating motion
+        const floatOffset = Math.sin(time * this.NUMBER_FLOAT_SPEED) * this.NUMBER_FLOAT_AMPLITUDE;
+        const baseY = this.beam.position.y + this.NUMBER_VERTICAL_OFFSET;
+        this.numberDisplay.position.y = baseY + floatOffset;
+        
+        // Make number always face camera
+        if (this.numberMesh) {
+          // Find the main camera in the scene
+          const camera = this.scene.children.find(child => child instanceof THREE.Camera) as THREE.Camera;
+          if (camera) {
+            this.numberMesh.lookAt(camera.position);
+            // Keep the X rotation we set initially for tilting up
+            this.numberMesh.rotation.x = -Math.PI / 6;
+          }
+        }
+        
+        // Update glow effect time
+        this.numberMaterial.uniforms.time.value = time;
+        this.numberMaterial.uniforms.opacity.value = 1.0;
+      }
     }
 
     if (!this.isActive) return;
