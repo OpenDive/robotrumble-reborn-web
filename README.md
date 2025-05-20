@@ -260,6 +260,11 @@ npm install
 npm run dev
 ```
 
+```bash
+# Run without debug logs
+npm run build && npm run preview
+```
+
 ## Performance Targets
 
 - 30 FPS AR overlay minimum
