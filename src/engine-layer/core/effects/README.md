@@ -42,6 +42,25 @@ This directory contains the particle effects system for RobotRumble Reborn. The 
 - Visible from 2+ units away with good depth perception
 - Useful for: collisions, power-ups, victory effects
 
+### Boost Trail Effect
+**Activation**: Press 'B' key (for testing)
+
+**Visual Characteristics**:
+- Continuous emission of energetic particles in a narrow cone
+- Small initial size (0.2-0.3 units) with moderate expansion (0.4-0.5 units)
+- Bright cyan/blue core transitioning to white-blue edges
+- Particles inherit and blend with vehicle velocity
+- Duration: Particles last 0.5-0.8 seconds
+- Emission Rate: 60 particles per second
+- Maximum Particles: 150
+
+**Expected Experience**:
+- Creates a dynamic energy trail behind the vehicle
+- Particles stretch and flow with movement
+- Intensity varies with boost power
+- Additive blending for energy glow effect
+- Useful for: boost/nitro effects, engine power visualization
+
 ## Viewing Distance and Perspective
 
 Effects are positioned 2 units away from the camera by default, which provides:
