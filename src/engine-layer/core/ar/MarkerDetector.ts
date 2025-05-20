@@ -1,4 +1,5 @@
 import jsAruco from 'js-aruco';
+import { debugManager } from '../debug/DebugManager';
 
 export interface Marker {
   id: number;
@@ -22,6 +23,8 @@ export class MarkerDetector {
   private posit: any; // jsAruco.POS1.Posit
   private debugCanvas: HTMLCanvasElement | null = null;
   private debugCtx: CanvasRenderingContext2D | null = null;
+  private tempCanvas: HTMLCanvasElement | null = null;
+  private tempCtx: CanvasRenderingContext2D | null = null;
   private readonly MARKER_SIZE_MM = 50; // Physical marker size in millimeters
 
   constructor() {
@@ -37,19 +40,12 @@ export class MarkerDetector {
       this.posit = new jsAruco.POS1.Posit(this.MARKER_SIZE_MM, 640);
       console.log('MarkerDetector: Successfully created POSIT estimator');
       
-      // Create debug canvas
-      this.debugCanvas = document.createElement('canvas');
-      this.debugCanvas.style.position = 'fixed';
-      this.debugCanvas.style.bottom = '10px';
-      this.debugCanvas.style.right = '10px';
-      this.debugCanvas.style.border = '2px solid red';
-      this.debugCanvas.style.zIndex = '1000';
-      this.debugCanvas.width = 320; // Quarter size for debug
-      this.debugCanvas.height = 180;
-      this.debugCtx = this.debugCanvas.getContext('2d', {
-        willReadFrequently: true
-      });
-      document.body.appendChild(this.debugCanvas);
+      // Get debug canvas from DebugManager
+      const { canvas, ctx, tempCanvas, tempCtx } = debugManager.getMarkerDebugCanvas();
+      this.debugCanvas = canvas;
+      this.debugCtx = ctx;
+      this.tempCanvas = tempCanvas;
+      this.tempCtx = tempCtx;
     } catch (error) {
       console.error('MarkerDetector: Failed to create detector:', error);
       throw error;
@@ -88,16 +84,12 @@ export class MarkerDetector {
           this.debugCanvas.height / imageData.height
         );
         
-        // Create temporary canvas for full-size image
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = imageData.width;
-        tempCanvas.height = imageData.height;
-        const tempCtx = tempCanvas.getContext('2d');
-        if (tempCtx) {
-          tempCtx.putImageData(imageData, 0, 0);
-          // Draw original image
-          this.debugCtx.drawImage(tempCanvas, 0, 0);
-        }
+        // Use reusable temp canvas for image processing
+        this.tempCanvas!.width = imageData.width;
+        this.tempCanvas!.height = imageData.height;
+        this.tempCtx!.putImageData(imageData, 0, 0);
+        // Draw original image
+        this.debugCtx.drawImage(this.tempCanvas!, 0, 0);
         this.debugCtx.restore();
 
         // Add debug info
