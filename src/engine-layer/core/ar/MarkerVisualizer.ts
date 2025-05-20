@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Marker } from './MarkerDetector';
 import { IVideoSource } from '../video/types';
+import { debugLogger } from '../debug/DebugLogger';
 
 interface MarkerVisualizerConfig {
   videoScale?: number;     // Scale factor for video plane (default: 1.5)
@@ -47,7 +48,7 @@ export class MarkerVisualizer {
   }
 
   updateVideoSource(newSource: IVideoSource): void {
-    console.log('MarkerVisualizer: Updating video source');
+    debugLogger.log('ar', 'Updating video source');
     this.videoSource = newSource;
     // Clear all existing marker meshes
     this.removeInactiveMarkers([]);
@@ -80,7 +81,7 @@ export class MarkerVisualizer {
     const videoWidth = videoElement.videoWidth;
     const videoHeight = videoElement.videoHeight;
     
-    console.log('MarkerVisualizer: Updating markers', {
+    debugLogger.log('ar', 'Updating markers', {
       markersCount: markers.length,
       videoElement: {
         width: videoWidth,

@@ -2,6 +2,7 @@
 
 // Environment configuration
 export const isDebugEnabled = import.meta.env.DEV || import.meta.env.VITE_DEBUG_TOOLS_ENABLED === 'true';
+// export const isDebugEnabled = false;
 
 export const videoSourceConfig = {
   defaultSource: import.meta.env.VITE_VIDEO_SOURCE || (import.meta.env.DEV ? 'webcam' : 'webrtc'),

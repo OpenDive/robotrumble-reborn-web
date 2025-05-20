@@ -3,6 +3,7 @@ import { TestVideoSource } from './TestVideoSource';
 import type { VideoSourceType } from './types';
 import { IVideoSource, VideoConfig } from './types';
 import { arManager } from '../ar/ARManager';
+import { debugLogger } from '../debug/DebugLogger';
 
 /**
  * Factory for creating and managing video sources
@@ -24,7 +25,7 @@ export class VideoSourceFactory {
    * Create a video source of specified type
    */
   async createSource(config: VideoConfig): Promise<IVideoSource> {
-    console.log('VideoSourceFactory: Creating new source...', { type: config.sourceType });
+    debugLogger.log('video', 'Creating new source...', { type: config.sourceType });
     
     // Cleanup existing source if any
     await this.cleanup();
@@ -47,16 +48,16 @@ export class VideoSourceFactory {
     }
 
     // Initialize the new source
-    console.log('VideoSourceFactory: Initializing new source...');
+    debugLogger.log('video', 'Initializing new source...');
     await this.currentSource.initialize(config);
     
     // Update ARManager with new source if it's already initialized
     if (arManager.getVideoSource()) {
-      console.log('VideoSourceFactory: Updating ARManager with new source...');
+      debugLogger.log('video', 'Updating ARManager with new source...');
       await arManager.updateVideoSource(this.currentSource);
     }
     
-    console.log('VideoSourceFactory: Source creation complete');
+    debugLogger.log('video', 'Source creation complete');
     return this.currentSource;
   }
 
@@ -71,7 +72,7 @@ export class VideoSourceFactory {
    * Switch to a different video source
    */
   async switchSource(config: VideoConfig): Promise<IVideoSource> {
-    console.log('VideoSourceFactory: Switching source...', { 
+    debugLogger.log('video', 'Switching source...', { 
       from: this.currentSource?.constructor.name,
       to: config.sourceType 
     });
@@ -83,7 +84,7 @@ export class VideoSourceFactory {
    */
   private async cleanup(): Promise<void> {
     if (this.currentSource) {
-      console.log('VideoSourceFactory: Cleaning up current source...');
+      debugLogger.log('video', 'Cleaning up current source...');
       
       // Get video element before stopping
       const videoElement = this.currentSource.getVideoElement();
@@ -93,7 +94,7 @@ export class VideoSourceFactory {
       
       // Clean up video element
       if (videoElement) {
-        console.log('VideoSourceFactory: Cleaning up video element...');
+        debugLogger.log('video', 'Cleaning up video element...');
         videoElement.pause();
         videoElement.srcObject = null;
         videoElement.src = '';
@@ -108,7 +109,7 @@ export class VideoSourceFactory {
       }
       
       this.currentSource = null;
-      console.log('VideoSourceFactory: Cleanup complete');
+      debugLogger.log('video', 'Cleanup complete');
     }
   }
 }

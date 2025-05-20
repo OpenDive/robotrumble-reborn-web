@@ -1,5 +1,6 @@
 import jsAruco from 'js-aruco';
 import { debugManager } from '../debug/DebugManager';
+import { debugLogger } from '../debug/DebugLogger';
 
 export interface Marker {
   id: number;
@@ -28,17 +29,17 @@ export class MarkerDetector {
   private readonly MARKER_SIZE_MM = 50; // Physical marker size in millimeters
 
   constructor() {
-    console.log('MarkerDetector: Initializing...', { jsAruco: !!jsAruco, AR: !!(jsAruco?.AR) });
+    debugLogger.log('ar', 'MarkerDetector: Initializing...', { jsAruco: !!jsAruco, AR: !!(jsAruco?.AR) });
     try {
       // @ts-ignore - js-aruco types are not properly defined
       this.detector = new jsAruco.AR.Detector();
-      console.log('MarkerDetector: Successfully created detector');
+      debugLogger.log('ar', 'MarkerDetector: Successfully created detector');
       
       // Initialize POSIT with marker size and default focal length
       // We'll update the focal length when we get the actual video dimensions
       // @ts-ignore - js-aruco types are not properly defined
       this.posit = new jsAruco.POS1.Posit(this.MARKER_SIZE_MM, 640);
-      console.log('MarkerDetector: Successfully created POSIT estimator');
+      debugLogger.log('ar', 'MarkerDetector: Successfully created POSIT estimator');
       
       // Get debug canvas from DebugManager
       const { canvas, ctx, tempCanvas, tempCtx } = debugManager.getMarkerDebugCanvas();
@@ -47,7 +48,7 @@ export class MarkerDetector {
       this.tempCanvas = tempCanvas;
       this.tempCtx = tempCtx;
     } catch (error) {
-      console.error('MarkerDetector: Failed to create detector:', error);
+      debugLogger.error('ar', 'MarkerDetector: Failed to create detector:', error);
       throw error;
     }
   }
@@ -61,7 +62,7 @@ export class MarkerDetector {
    */
   detectMarkers(imageData: ImageData): Marker[] {
     try {
-      console.log('MarkerDetector: Processing frame', {
+      debugLogger.log('ar', 'MarkerDetector: Processing frame', {
         width: imageData.width,
         height: imageData.height,
         dataLength: imageData.data.length,
@@ -129,7 +130,7 @@ export class MarkerDetector {
         });
       }
 
-      console.log('MarkerDetector: Detection result', {
+      debugLogger.log('ar', 'Detection result', {
         markersFound: markers.length,
         firstMarker: markers.length > 0 ? {
           id: markers[0].id,
@@ -155,14 +156,14 @@ export class MarkerDetector {
         let pose;
         try {
           pose = this.posit.pose(centeredCorners);
-          console.log('MarkerDetector: Pose calculated', {
+          debugLogger.log('ar', 'Pose calculated', {
             markerId: marker.id,
             bestError: pose.bestError,
             bestTranslation: pose.bestTranslation,
             bestRotation: pose.bestRotation
           });
         } catch (error) {
-          console.error('MarkerDetector: Failed to calculate pose:', error);
+          debugLogger.error('ar', 'Failed to calculate pose:', error);
         }
 
         return {
@@ -176,7 +177,7 @@ export class MarkerDetector {
         };
       });
     } catch (error) {
-      console.error('MarkerDetector: Detection failed:', error);
+      debugLogger.error('ar', 'MarkerDetector: Detection failed:', error);
       return [];
     }
   }

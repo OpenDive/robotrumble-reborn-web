@@ -5,6 +5,7 @@ import { IVideoSource, VideoConfig } from '../video/types';
 import { MarkerDetector } from './MarkerDetector';
 import { MarkerVisualizer } from './MarkerVisualizer';
 import { StatsService } from './StatsService';
+import { debugLogger } from '../debug/DebugLogger';
 import { effectManager } from '../effects/EffectManager';
 import { physicsManager } from '../physics/PhysicsManager';
 
@@ -228,7 +229,7 @@ export class ARManager {
           this.markerVisualizer.updateVisuals(markers);
 
           if (this.frameCount % 60 === 0) {
-            console.log('System Stats:', {
+            debugLogger.log('general', 'System Stats:', {
               ...this.statsService.getFormattedStats(),
               renderer: this.renderer.info.render,
               scene: { objects: this.scene.children.length }

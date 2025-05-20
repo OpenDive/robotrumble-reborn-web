@@ -7,6 +7,9 @@ interface DebugCanvas {
   tempCtx: CanvasRenderingContext2D;
 }
 
+import { isDebugEnabled } from '../../../shared/config/env';
+import { debugLogger } from './DebugLogger';
+
 export class DebugManager {
   private static instance: DebugManager;
   private markerDebugCanvas: DebugCanvas | null = null;
@@ -20,6 +23,16 @@ export class DebugManager {
   }
 
   getMarkerDebugCanvas(): DebugCanvas {
+    if (!isDebugEnabled) {
+      debugLogger.warn('general', 'Attempted to get debug canvas while debug is disabled');
+      return {
+        canvas: document.createElement('canvas'),
+        ctx: document.createElement('canvas').getContext('2d')!,
+        tempCanvas: document.createElement('canvas'),
+        tempCtx: document.createElement('canvas').getContext('2d')!
+      };
+    }
+
     if (!this.markerDebugCanvas) {
       // Create main debug canvas
       const canvas = document.createElement('canvas');

@@ -1,4 +1,5 @@
 import { IVideoSource, VideoStats, VideoConfig, VideoConnectionState } from './types';
+import { debugLogger } from '../debug/DebugLogger';
 
 /**
  * Implementation of VideoSource using the device's webcam
@@ -200,7 +201,7 @@ export class WebcamVideoSource implements IVideoSource {
 
     // Log stats periodically
     if (this.frameStats.frameCount % 60 === 0) {
-      console.log('Frame capture stats:', {
+      debugLogger.log('video', 'Frame capture stats:', {
         lastCaptureTime: this.frameStats.captureTime.toFixed(2) + 'ms',
         avgCaptureTime: this.frameStats.avgCaptureTime.toFixed(2) + 'ms',
         totalFrames: this.frameStats.frameCount,

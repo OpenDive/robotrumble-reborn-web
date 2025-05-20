@@ -3,7 +3,8 @@ import { GameLayout } from '../layout/GameLayout';
 import { engine } from '../../../engine-layer';
 import { VideoSourceDebug } from '../debug/VideoSourceDebug';
 import { ARDebugPanel } from '../debug/ARDebugPanel';
-import { isDebugEnabled } from '../../../shared/config/env'
+import { isDebugEnabled } from '../../../shared/config/env';
+import { DebugCategoriesPanel } from '../debug/DebugCategoriesPanel';
 
 export const RaceScreen: React.FC = () => {
   const handleEngineReady = () => {
@@ -29,6 +30,7 @@ export const RaceScreen: React.FC = () => {
         <>
           <VideoSourceDebug />
           <ARDebugPanel />
+          <DebugCategoriesPanel />
         </>
       )}
     </GameLayout>
