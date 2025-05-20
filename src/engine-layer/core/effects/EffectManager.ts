@@ -26,7 +26,7 @@ export class EffectManager {
     document.addEventListener('keydown', (event) => {
       if (!this.scene) return;
 
-      const cameraPosition = new THREE.Vector3(0, 0, -1);
+      const cameraPosition = new THREE.Vector3(0, 0, 2);  // 2 units in front of camera
       switch (event.key.toLowerCase()) {
         case 's':
           this.emitSmoke(cameraPosition);

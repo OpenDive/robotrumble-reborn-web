@@ -3,6 +3,11 @@ import { BaseEffect } from './BaseEffect';
 import { EffectConfig } from './EffectConfig';
 
 export class ExplosionEffect extends BaseEffect {
+  emit(position: THREE.Vector3): void {
+    this.reset();  // Reset before each explosion
+    super.emit(position);
+  }
+
   constructor(scene: THREE.Scene) {
     const config: EffectConfig = {
       // Particle system settings
@@ -11,9 +16,9 @@ export class ExplosionEffect extends BaseEffect {
       burstCount: 100,    // One-shot burst
 
       // Particle properties
-      startSize: [0.4, 0.6],  // Start larger
-      endSize: [0.1, 0.2],    // Shrink as they fade
-      lifetime: [0.5, 1.0],   // Quick explosion
+      startSize: [0.8, 1.2],  // Much larger start size
+      endSize: [0.3, 0.5],    // Still visible when fading
+      lifetime: [1.0, 1.5],   // Longer lifetime for visibility
       
       // Colors - bright orange/yellow core to red edges
       startColor: [new THREE.Color(0xffff80), new THREE.Color(0xff8000)],  // Yellow to orange
@@ -26,10 +31,10 @@ export class ExplosionEffect extends BaseEffect {
       },
       
       // Physics
-      startSpeed: [2.0, 3.0],  // Fast initial burst
-      gravity: new THREE.Vector3(0, -1, 0),  // Slight downward pull
-      drag: 1.0,    // High air resistance
-      turbulence: 0.5,  // Chaotic movement
+      startSpeed: [3.0, 4.0],  // Faster initial burst
+      gravity: new THREE.Vector3(0, 0.5, 0),  // Slight upward force for visibility
+      drag: 0.5,    // Less air resistance
+      turbulence: 1.0,  // More chaotic movement
       
       // Rendering
       blending: THREE.AdditiveBlending,

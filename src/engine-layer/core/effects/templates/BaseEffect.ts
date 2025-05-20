@@ -6,7 +6,8 @@ export class BaseEffect {
   protected particleSystem: ParticleSystem;
   protected config: EffectConfig;
   protected emitAccumulator: number = 0;
-  protected active: boolean = true;
+  protected canEmit: boolean = true;
+  protected hasActiveParticles: boolean = false;
 
   constructor(scene: THREE.Scene, config: EffectConfig) {
     this.config = config;
@@ -92,14 +93,15 @@ export class BaseEffect {
   }
 
   emit(position: THREE.Vector3): void {
-    if (!this.active) return;
+    if (!this.canEmit) return;
 
     if (this.config.burstCount) {
       // One-shot burst emission
       for (let i = 0; i < this.config.burstCount; i++) {
         this.particleSystem.addParticle(this.generateParticle(position));
       }
-      this.active = false;
+      this.canEmit = false;  // Prevent new bursts
+      this.hasActiveParticles = true;
     } else {
       // Continuous emission based on emitRate
       const particlesToEmit = Math.floor(this.emitAccumulator);
@@ -111,10 +113,11 @@ export class BaseEffect {
   }
 
   update(deltaTime: number): void {
-    if (!this.active) return;
-    
-    // Accumulate time for emission rate
-    if (!this.config.burstCount) {
+    // For burst effects, only update if we have particles
+    if (this.config.burstCount && !this.hasActiveParticles) return;
+
+    // For continuous effects, accumulate emission time
+    if (!this.config.burstCount && this.canEmit) {
       this.emitAccumulator += this.config.emitRate * deltaTime;
     }
 
@@ -123,7 +126,9 @@ export class BaseEffect {
     const drag = this.config.drag;
     const turbulence = this.config.turbulence || 0;
 
+    let activeCount = 0;
     this.particleSystem.updateWithPhysics(deltaTime, (particle) => {
+      if (particle.life > 0) activeCount++;
       // Apply gravity
       particle.velocity.add(gravity.clone().multiplyScalar(deltaTime));
       
@@ -144,9 +149,17 @@ export class BaseEffect {
       particle.size = THREE.MathUtils.lerp(particle.startSize, particle.endSize, t);
       particle.color = new THREE.Color().lerpColors(particle.startColor, particle.endColor, t);
     });
+
+    // Update active state based on particle count
+    this.hasActiveParticles = activeCount > 0;
   }
 
   dispose(): void {
     this.particleSystem.dispose();
+  }
+
+  reset(): void {
+    this.canEmit = true;
+    // Don't reset hasActiveParticles - let it be controlled by particle count
   }
 }
