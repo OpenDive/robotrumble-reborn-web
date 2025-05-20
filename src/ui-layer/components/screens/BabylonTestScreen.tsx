@@ -21,39 +21,54 @@ const BabylonTestScreen: React.FC = () => {
         sceneRef.current = scene;
 
         // Setup orthographic camera for proper 2D-style viewing
-        const camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(0, 2, -5), scene);
-        camera.setTarget(new BABYLON.Vector3(0, 0, 0));
+        const camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(0, 2, -2), scene);
+        camera.setTarget(new BABYLON.Vector3(0, -1, 2)); // Look at track center
         camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
         
+        // Set clipping planes to ensure all objects are visible
+        camera.minZ = 0.1;
+        camera.maxZ = 10;
+        
         // Set initial ortho scale based on screen size
-        const aspectRatio = engine.getRenderWidth() / engine.getRenderHeight();
-        const orthoScale = 2;
-        camera.orthoLeft = -orthoScale * aspectRatio;
-        camera.orthoRight = orthoScale * aspectRatio;
-        camera.orthoBottom = -orthoScale;
-        camera.orthoTop = orthoScale;
+        const width = engine.getRenderWidth();
+        const height = engine.getRenderHeight();
+        const aspectRatio = width / height;
+        
+        // Use width as the base for scaling to maintain video proportions
+        const orthoWidth = 2;
+        const orthoHeight = orthoWidth / aspectRatio;
+        
+        camera.orthoLeft = -orthoWidth;
+        camera.orthoRight = orthoWidth;
+        camera.orthoBottom = -orthoHeight;
+        camera.orthoTop = orthoHeight;
         
         // Handle window resize
         const handleResize = () => {
-            const aspectRatio = engine.getRenderWidth() / engine.getRenderHeight();
+            const width = engine.getRenderWidth();
+            const height = engine.getRenderHeight();
+            const aspectRatio = width / height;
+            
+            // Use width as the base for scaling
+            const orthoWidth = 2;
+            const orthoHeight = orthoWidth / aspectRatio;
             
             // Update camera orthographic settings
-            const orthoScale = 2;
-            camera.orthoLeft = -orthoScale * aspectRatio;
-            camera.orthoRight = orthoScale * aspectRatio;
-            camera.orthoBottom = -orthoScale;
-            camera.orthoTop = orthoScale;
+            camera.orthoLeft = -orthoWidth;
+            camera.orthoRight = orthoWidth;
+            camera.orthoBottom = -orthoHeight;
+            camera.orthoTop = orthoHeight;
             
-            // Scale video plane to fill view
+            // Scale video plane to match orthographic view
             if (videoPlane) {
-                videoPlane.scaling.x = 4 * aspectRatio;
-                videoPlane.scaling.y = 4;
+                videoPlane.scaling.x = orthoWidth * 2;
+                videoPlane.scaling.y = orthoHeight * 2;
             }
             
             // Scale track and arrows
             if (trackPlane) {
-                trackPlane.scaling.x = 1.5;
-                trackPlane.scaling.z = 2;
+                trackPlane.scaling.x = 2;
+                trackPlane.scaling.z = 1.5;
             }
             
             // Update arrow positions
@@ -113,12 +128,12 @@ const BabylonTestScreen: React.FC = () => {
 
         // Create track plane
         const trackPlane = BABYLON.MeshBuilder.CreateGround('trackPlane', {
-            width: 3,
-            height: 4
+            width: 2,
+            height: 6
         }, scene);
-        trackPlane.position.y = -0.75;
-        trackPlane.position.z = 0.5; // Put track in front of video but behind arrows
-        trackPlane.rotation.x = Math.PI / 6; // Tilt for better perspective
+        trackPlane.position.y = -1; // Lower the track
+        trackPlane.position.z = 2; // Move track back for perspective
+        trackPlane.rotation.x = Math.PI / 3.5; // Steeper angle for horizon effect
 
         const trackMaterial = new BABYLON.StandardMaterial('trackMat', scene);
         trackMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
