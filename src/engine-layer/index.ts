@@ -18,6 +18,14 @@ export class GameEngine {
   private initialized = false;
   private currentContainer: HTMLElement | null = null;
 
+  cleanup(): void {
+    if (this.initialized) {
+      arManager.cleanup();
+      this.initialized = false;
+      this.currentContainer = null;
+    }
+  }
+
   async initialize(container: HTMLElement): Promise<void> {
     try {
       // If already initialized, just move the renderer to the new container

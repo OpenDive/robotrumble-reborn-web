@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { VideoSourceFactory } from '../video/VideoSourceFactory';
 import { VideoBackground } from '../renderer/VideoBackground';
 import { IVideoSource, VideoConfig } from '../video/types';
-import { MarkerDetector, Marker } from './MarkerDetector';
+import { MarkerDetector } from './MarkerDetector';
 import { MarkerVisualizer } from './MarkerVisualizer';
 import { StatsService } from './StatsService';
 import { effectManager } from '../effects/EffectManager';
@@ -40,6 +40,13 @@ export class ARManager {
       this.renderer.domElement.remove();
     }
     container.appendChild(this.renderer.domElement);
+    this.container = container;
+    this.handleResize();
+  }
+
+  cleanup(): void {
+    window.removeEventListener('resize', this.handleResize);
+    // Remove any other event listeners or resources here
   }
 
   async updateVideoSource(newSource: IVideoSource): Promise<void> {
@@ -78,13 +85,24 @@ export class ARManager {
     }
   }
 
+  private handleResize = (): void => {
+    if (!this.container || !this.camera || !this.renderer) return;
+    
+    // Update camera aspect ratio
+    this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
+    this.camera.updateProjectionMatrix();
+    
+    // Update renderer size
+    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+  };
+
   public async initialize(container: HTMLElement): Promise<void> {
     this.container = container;
     this.scene = new THREE.Scene();
     
     this.camera = new THREE.PerspectiveCamera(
       60,
-      this.container.clientWidth / this.container.clientHeight,
+      container.clientWidth / container.clientHeight,
       0.1,
       1000
     );
@@ -99,6 +117,10 @@ export class ARManager {
     });
     
     this.renderer.setClearColor(0x0000ff, 1);
+    this.renderer.setSize(container.clientWidth, container.clientHeight);
+    
+    // Add resize event listener
+    window.addEventListener('resize', this.handleResize);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     // Initialize effect manager

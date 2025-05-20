@@ -32,7 +32,10 @@ export const GameLayout: React.FC<GameLayoutProps> = ({
 
     initEngine();
 
-    // No cleanup needed as engine is a singleton
+    // Cleanup when component unmounts
+    return () => {
+      engine.cleanup();
+    };
   }, [onEngineReady]);
 
   return (
