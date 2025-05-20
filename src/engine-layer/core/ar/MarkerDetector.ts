@@ -105,29 +105,11 @@ export class MarkerDetector {
    */
   detectMarkers(imageData: ImageData): Marker[] {
     try {
-      // Validate frame data
-      if (!imageData || imageData.width === 0 || imageData.height === 0 || imageData.data.length === 0) {
-        debugLogger.warn('ar', 'MarkerDetector: Invalid frame data', { imageData });
-        return [];
-      }
-
-      // Check if frame data length matches expected dimensions
-      const expectedLength = imageData.width * imageData.height * 4;
-      if (imageData.data.length !== expectedLength) {
-        debugLogger.warn('ar', 'MarkerDetector: Frame data length mismatch', {
-          actual: imageData.data.length,
-          expected: expectedLength,
-          width: imageData.width,
-          height: imageData.height
-        });
-        return [];
-      }
 
       debugLogger.log('ar', 'MarkerDetector: Processing frame', {
         width: imageData.width,
         height: imageData.height,
         dataLength: imageData.data.length,
-        expectedLength,
         firstPixels: Array.from(imageData.data.slice(0, 16)), // Show first few pixels
         dataType: imageData.data.constructor.name
       });
