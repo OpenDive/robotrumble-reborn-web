@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '../shared/Button';
+import './WelcomeScreen.css';
 
 interface WelcomeScreenProps {
   onQuickPlay: () => void;
@@ -15,8 +16,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onTutorial,
 }) => {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-game-900 to-game-800 text-white flex items-center justify-center">
-      <div className="w-full max-w-lg px-6 py-8">
+    <div className="welcome-screen min-h-screen text-white flex items-center justify-center relative overflow-hidden">
+      {/* Racing checkered pattern overlay */}
+      <div className="checkered-overlay absolute inset-0 opacity-10" />
+      
+      {/* Speed lines animation */}
+      <div className="speed-lines absolute inset-0" />
+      
+      {/* Main content */}
+      <div className="welcome-content w-full max-w-lg px-6 py-8 relative z-10">
         {/* Logo and Title */}
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">

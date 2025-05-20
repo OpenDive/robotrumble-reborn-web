@@ -1,0 +1,67 @@
+/* Mario Kart-inspired welcome screen styles */
+.welcome-screen {
+  background: linear-gradient(135deg, #4a90e2 0%, #2c56a8 100%);
+  position: relative;
+}
+
+.welcome-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Checkered pattern overlay */
+.checkered-overlay {
+  background-image: 
+    linear-gradient(45deg, #000 25%, transparent 25%),
+    linear-gradient(-45deg, #000 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #000 75%),
+    linear-gradient(-45deg, transparent 75%, #000 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  animation: scrollBackground 20s linear infinite;
+}
+
+/* Speed lines animation */
+.speed-lines {
+  background: 
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.1) 1px,
+      transparent 1px,
+      transparent 20px
+    );
+  animation: speedLines 0.5s linear infinite;
+  opacity: 0.3;
+}
+
+/* Welcome content styling */
+.welcome-content {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Animations */
+@keyframes scrollBackground {
+  from {
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  }
+  to {
+    background-position: -400px -400px, -400px -390px, -390px -410px, -410px -400px;
+  }
+}
+
+@keyframes speedLines {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-20px);
+  }
+}
