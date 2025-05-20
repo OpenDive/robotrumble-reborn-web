@@ -6,10 +6,11 @@ const BabylonTestScreen: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const engineRef = useRef<BABYLON.Engine | null>(null);
     const sceneRef = useRef<BABYLON.Scene | null>(null);
-    const videoTextureRef = useRef<BABYLON.VideoTexture | null>(null);
+    const particleSystemRef = useRef<BABYLON.ParticleSystem | null>(null);
+    const smokeSystemRef = useRef<BABYLON.ParticleSystem | null>(null);
     const leftArrowRef = useRef<BABYLON.Mesh | null>(null);
     const rightArrowRef = useRef<BABYLON.Mesh | null>(null);
-    const particleSystemRef = useRef<BABYLON.ParticleSystem | null>(null);
+    const videoTextureRef = useRef<BABYLON.VideoTexture | null>(null);
 
     useEffect(() => {
         if (!canvasRef.current) return;
@@ -123,6 +124,61 @@ const BabylonTestScreen: React.FC = () => {
 
         // Start the system in stopped state
         particleSystem.stop();
+
+        // Create smoke particle system
+        const smokeSystem = new BABYLON.ParticleSystem('smoke', 5000, scene);
+        smokeSystemRef.current = smokeSystem;
+
+        // Create smoke emitter
+        const smokeEmitter = BABYLON.MeshBuilder.CreateBox('smokeEmitter', { size: 0.5 }, scene);
+        smokeEmitter.position = new BABYLON.Vector3(0, -0.5, -2);
+        smokeEmitter.isVisible = false;
+
+        // Set the smoke emitter
+        smokeSystem.emitter = smokeEmitter;
+        smokeSystem.minEmitBox = new BABYLON.Vector3(-1, -0.2, -0.2);
+        smokeSystem.maxEmitBox = new BABYLON.Vector3(1, 0.2, 0.2);
+
+        // Smoke texture
+        smokeSystem.particleTexture = particleTexture; // Reuse the same texture
+
+        // Smoke colors (dark gray)
+        smokeSystem.color1 = new BABYLON.Color4(0.2, 0.2, 0.2, 0.8);
+        smokeSystem.color2 = new BABYLON.Color4(0.3, 0.3, 0.3, 0.8);
+        smokeSystem.colorDead = new BABYLON.Color4(0.1, 0.1, 0.1, 0);
+
+        // Large size for smoke coverage
+        smokeSystem.minSize = 1.0;
+        smokeSystem.maxSize = 3.0;
+        smokeSystem.minScaleX = 2.0;
+        smokeSystem.maxScaleX = 4.0;
+        smokeSystem.minScaleY = 2.0;
+        smokeSystem.maxScaleY = 4.0;
+
+        // Longer lifetime for lingering effect
+        smokeSystem.minLifeTime = 2.0;
+        smokeSystem.maxLifeTime = 4.0;
+
+        // Slower emission for smoke
+        smokeSystem.emitRate = 200;
+        smokeSystem.minEmitPower = 0.5;
+        smokeSystem.maxEmitPower = 1.5;
+        smokeSystem.updateSpeed = 0.02;
+
+        // Gentle upward drift
+        smokeSystem.gravity = new BABYLON.Vector3(0, 0.5, 0);
+        smokeSystem.direction1 = new BABYLON.Vector3(-1, 1, -1);
+        smokeSystem.direction2 = new BABYLON.Vector3(1, 1, 1);
+
+        // Add slow rotation for turbulence
+        smokeSystem.minAngularSpeed = -0.5;
+        smokeSystem.maxAngularSpeed = 0.5;
+
+        // Use MULTIPLY blend mode for smoke-like effect
+        smokeSystem.blendMode = BABYLON.ParticleSystem.BLENDMODE_MULTIPLY;
+
+        // Start the system in stopped state
+        smokeSystem.stop();
 
         // Create turn indicators (arrows)
         const createArrow = (isLeft: boolean) => {
@@ -254,6 +310,59 @@ const BabylonTestScreen: React.FC = () => {
                         particleSystem.stop();
                     }
                 }, 1500);
+            }
+            
+            if (event.key === 's' || event.key === 'S') { // Smoke effect
+                event.preventDefault();
+                const smokeSystem = smokeSystemRef.current;
+                if (!smokeSystem?.emitter || !(smokeSystem.emitter instanceof BABYLON.Mesh)) return;
+
+                // If smoke is already running, stop it
+                if (smokeSystem.isStarted()) {
+                    smokeSystem.stop();
+                    return;
+                }
+
+                // Start smoke effect
+                smokeSystem.stop();
+                smokeSystem.reset();
+                smokeSystem.start();
+
+                // Create ambient light for smoke visibility
+                const ambientLight = new BABYLON.HemisphericLight(
+                    'smokeLight',
+                    new BABYLON.Vector3(0, 1, 0),
+                    scene
+                );
+                ambientLight.intensity = 0.3;
+                ambientLight.groundColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+
+                // Animate smoke spread
+                const spreadAnim = new BABYLON.Animation(
+                    'spreadAnim',
+                    'minEmitBox.x',
+                    30,
+                    BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+                    BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+                );
+
+                const spreadKeys = [
+                    { frame: 0, value: -1 },
+                    { frame: 90, value: -5 }
+                ];
+
+                spreadAnim.setKeys(spreadKeys);
+                smokeSystem.animations = [spreadAnim];
+
+                scene.beginAnimation(smokeSystem, 0, 90, false);
+
+                // Clean up after 10 seconds
+                setTimeout(() => {
+                    if (smokeSystem) {
+                        smokeSystem.stop();
+                    }
+                    ambientLight.dispose();
+                }, 10000);
             }
         };
 
