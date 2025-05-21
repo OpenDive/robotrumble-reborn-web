@@ -1,6 +1,6 @@
 /* Mario Kart-inspired welcome screen styles */
 .welcome-screen {
-  background: linear-gradient(135deg, #4a90e2 0%, #2c56a8 100%);
+  background: linear-gradient(135deg, #ff4444 0%, #cc0000 50%, #990000 100%);
   position: relative;
 }
 
@@ -19,8 +19,8 @@
     linear-gradient(-45deg, #000 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #000 75%),
     linear-gradient(-45deg, transparent 75%, #000 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-size: 60px 60px;
+  background-position: 0 0, 0 30px, 30px -30px, -30px 0px;
   animation: scrollBackground 20s linear infinite;
 }
 
@@ -40,11 +40,14 @@
 
 /* Welcome content styling */
 .welcome-content {
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(10px);
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 0 0 2px #ffdd00,
+    0 0 20px rgba(255, 221, 0, 0.3);
+  border: none;
 }
 
 /* Animations */

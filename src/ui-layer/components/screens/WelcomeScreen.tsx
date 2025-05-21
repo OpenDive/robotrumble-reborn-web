@@ -27,10 +27,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       <div className="welcome-content w-full max-w-lg px-6 py-8 relative z-10">
         {/* Logo and Title */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-300 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)]">
             RobotRumble
           </h1>
-          <p className="mt-4 text-lg text-white/80">
+          <p className="mt-4 text-lg text-yellow-200 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">
             Browser-based Mixed Reality Racing
           </p>
         </div>
