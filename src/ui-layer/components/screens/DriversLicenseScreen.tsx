@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGamepad } from '@fortawesome/free-solid-svg-icons';
 import { DriversLicenseCard } from '../cards/DriversLicenseCard';
 import { CountdownOverlay } from '../overlays/CountdownOverlay';
+import { triggerNeonConfetti } from '../../utils/confetti';
 
 type CaptureState = 'camera' | 'preview';
 type CountdownState = 'idle' | 'counting' | 'capturing';
@@ -148,8 +149,10 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
     startCamera();
   };
 
-  const handleDone = () => {
-    // TODO: Save photo data and navigate to next screen
+  const handleDone = async () => {
+    triggerNeonConfetti();
+    // Wait for confetti animation to finish
+    await new Promise(resolve => setTimeout(resolve, 1000));
     console.log('Photo saved:', photoData);
     onComplete();
   };
