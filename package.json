@@ -18,6 +18,7 @@
     "@types/react-router-dom": "^5.3.3",
     "@types/webrtc": "^0.0.46",
     "canvas-confetti": "^1.9.3",
+    "framer-motion": "^12.12.1",
     "js-aruco": "^0.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

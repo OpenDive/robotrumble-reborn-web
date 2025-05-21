@@ -3,6 +3,8 @@ import { LoginScreen } from './components/screens/LoginScreen';
 import { DriversLicenseScreen } from './components/screens/DriversLicenseScreen';
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
 import { LobbyScreen } from './components/screens/LobbyScreen';
+import { GameMenuScreen } from './components/screens/GameMenuScreen';
+import { RouteTransition } from './components/transitions/RouteTransition';
 import { RaceScreen } from './components/screens/RaceScreen';
 import BabylonTestScreen from './components/screens/BabylonTestScreen';
 import './App.css';
@@ -22,7 +24,7 @@ function AppContent() {
   };
 
   const handleLicenseComplete = () => {
-    navigate('/welcome');
+    navigate('/game-menu');
   };
 
   const handleQuickPlay = () => {
@@ -52,8 +54,25 @@ function AppContent() {
 
   return (
     <Routes>
-      <Route path="/" element={<LoginScreen onLoginComplete={handleLoginComplete} />} />
-      <Route path="/drivers-license" element={<DriversLicenseScreen onComplete={handleLicenseComplete} />} />
+      <Route path="/" element={
+        <RouteTransition route="login">
+          <LoginScreen onLoginComplete={handleLoginComplete} />
+        </RouteTransition>
+      } />
+      <Route path="/drivers-license" element={
+        <RouteTransition route="license">
+          <DriversLicenseScreen onComplete={handleLicenseComplete} />
+        </RouteTransition>
+      } />
+      <Route path="/game-menu" element={
+        <RouteTransition route="menu">
+          <GameMenuScreen
+            onBack={handleBackToMenu}
+            onStartSinglePlayer={() => navigate('/lobby')}
+            onStartMultiplayer={() => navigate('/lobby')}
+          />
+        </RouteTransition>
+      } />
       <Route path="/welcome" element={
         <WelcomeScreen 
           onQuickPlay={handleQuickPlay}
