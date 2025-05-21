@@ -49,13 +49,33 @@ export default {
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'float': 'float 6s ease-in-out infinite',
+        'number-countdown': 'numberCountdown 1s ease-out',
         'glow': 'glow 2s ease-in-out infinite',
         'button-press': 'button-press 0.2s ease-in-out',
+        'countdown': 'numberCountdown 1s ease-out',
       },
       keyframes: {
         float: {
           '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-10px)' },
+          '50%': { transform: 'translateY(-20px)' },
+        },
+        numberCountdown: {
+          '0%': { 
+            transform: 'scale(1.5)',
+            opacity: '0'
+          },
+          '20%': { 
+            transform: 'scale(1)',
+            opacity: '1'
+          },
+          '80%': { 
+            transform: 'scale(1.1)',
+            opacity: '1'
+          },
+          '100%': { 
+            transform: 'scale(0.8)',
+            opacity: '0'
+          },
         },
         glow: {
           '0%, 100%': { boxShadow: '0 0 5px #00FF95, 0 0 20px #00FF95, 0 0 50px #00FF95' },

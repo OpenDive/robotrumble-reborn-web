@@ -3,8 +3,10 @@ import { FaCamera, FaRedo } from 'react-icons/fa';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGamepad } from '@fortawesome/free-solid-svg-icons';
 import { DriversLicenseCard } from '../cards/DriversLicenseCard';
+import { CountdownOverlay } from '../overlays/CountdownOverlay';
 
 type CaptureState = 'camera' | 'preview';
+type CountdownState = 'idle' | 'counting' | 'capturing';
 
 interface DriversLicenseScreenProps {
   onComplete: () => void;
@@ -18,14 +20,20 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
+  const [countdownState, setCountdownState] = useState<CountdownState>('idle');
+  const [countdownNumber, setCountdownNumber] = useState<number>(3);
 
   useEffect(() => {
     startCamera();
 
     // Add keyboard listeners for spacebar and flash test
     const handleKeyPress = async (event: KeyboardEvent) => {
-      if (captureState === 'camera' && event.code === 'Space') {
-        await capturePhoto();
+      if (captureState === 'camera') {
+        if (event.code === 'Space' && countdownState === 'idle') {
+          await startCountdown();
+        } else if (event.code === 'Escape' && countdownState === 'counting') {
+          setCountdownState('idle');
+        }
       }
     };
 
@@ -58,7 +66,24 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
     }
   };
 
+  const startCountdown = async () => {
+    if (countdownState !== 'idle') return;
+    
+    setCountdownState('counting');
+    setCountdownNumber(3);
+
+    // Start countdown
+    for (let i = 3; i > 0; i--) {
+      setCountdownNumber(i);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // Take photo after countdown
+    await capturePhoto();
+  };
+
   const capturePhoto = async () => {
+    setCountdownState('capturing');
     if (videoRef.current) {
       const video = videoRef.current;
       
@@ -109,6 +134,7 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
         
         // Switch to preview state
         setCaptureState('preview');
+        setCountdownState('idle');
       }
     }
   };
@@ -145,6 +171,11 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
         </div>
       </div>
       <div className="relative h-[400px] overflow-hidden">
+        {/* Countdown overlay */}
+        <CountdownOverlay 
+          number={countdownNumber}
+          isVisible={countdownState === 'counting'}
+        />
         {/* Video element */}
         <video
           ref={videoRef}
@@ -162,8 +193,12 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
 
       {/* Button - outside of overlay stack */}
       <button
-        onClick={capturePhoto}
-        className="w-full flex items-center justify-center px-6 py-4 text-lg font-bold rounded-2xl text-white bg-neon-purple hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neon-purple transition-all duration-200 active:animate-button-press shadow-[0_0_20px_-5px_rgba(178,75,243,0.5)] hover:shadow-[0_0_30px_-5px_rgba(178,75,243,0.8)]"
+        onClick={startCountdown}
+        disabled={countdownState !== 'idle'}
+        className={`w-full flex items-center justify-center px-6 py-4 text-lg font-bold rounded-2xl text-white ${countdownState === 'idle' 
+          ? 'bg-neon-purple hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neon-purple transition-all duration-200 active:animate-button-press shadow-[0_0_20px_-5px_rgba(178,75,243,0.5)] hover:shadow-[0_0_30px_-5px_rgba(178,75,243,0.8)]'
+          : 'bg-gray-500 cursor-not-allowed opacity-50'
+        }`}
       >
         <FaCamera className="mr-3" /> Take Photo
       </button>
