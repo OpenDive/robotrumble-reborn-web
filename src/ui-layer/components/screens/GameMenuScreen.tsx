@@ -72,26 +72,64 @@ export const GameMenuScreen: React.FC<GameMenuScreenProps> = ({
   };
 
   return (
-    <div className="w-full h-full bg-gradient-to-br from-game-900 to-game-950">
+    <div className="w-full h-full bg-[#0B0B1A] relative overflow-hidden">
+      {/* Background grid effect */}
+      <div 
+        className="absolute inset-0 opacity-10"
+        style={{
+          backgroundImage: `
+            linear-gradient(to right, #B24BF3 1px, transparent 1px),
+            linear-gradient(to bottom, #B24BF3 1px, transparent 1px)
+          `,
+          backgroundSize: '40px 40px',
+          transform: 'perspective(500px) rotateX(60deg)',
+          transformOrigin: 'center 150%',
+        }}
+      />
+
+      {/* Radial gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-radial from-transparent via-[#0B0B1A]/80 to-[#0B0B1A]"/>
       <SplitLayout
+        className="relative z-10"
         leftContent={
           <div className="w-full h-full flex items-center justify-center">
-            {/* Placeholder for 3D model */}
-            <div className="w-64 h-64 rounded-full bg-game-800 animate-float" />
+            {/* Placeholder for 3D model with glow effect */}
+            <div className="relative group animate-float">
+              <div className="absolute inset-0 bg-neon-purple blur-xl opacity-20 group-hover:opacity-30 transition-opacity duration-500" />
+              <div className="w-80 h-80 rounded-full bg-gradient-to-br from-game-800 to-game-900 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-radial from-neon-purple/20 to-transparent opacity-75" />
+                <div 
+                  className="absolute inset-0 opacity-10"
+                  style={{
+                    backgroundImage: `
+                      linear-gradient(to right, white 1px, transparent 1px),
+                      linear-gradient(to bottom, white 1px, transparent 1px)
+                    `,
+                    backgroundSize: '20px 20px',
+                  }}
+                />
+              </div>
+            </div>
           </div>
         }
         rightContent={
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full max-w-md mx-auto px-4">
+            {/* Yellow accent line */}
+            <div className="absolute top-0 right-0 w-32 h-1 bg-racing-yellow rounded-full transform -translate-y-2" />
             {/* Game logo */}
-            <div className="mb-8">
-              <h1 className="text-4xl font-black text-white text-center mb-2">
+            <div className="mb-12 mt-8 relative">
+              <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-white/80 text-center">
                 ROBOT KARTS
               </h1>
-              <div className="h-1 w-32 mx-auto bg-racing-yellow rounded-full" />
+              <div className="h-1 w-32 mx-auto bg-racing-yellow rounded-full mt-4 relative">
+                <div className="absolute inset-0 animate-pulse-slow bg-racing-yellow blur-md opacity-50" />
+              </div>
             </div>
 
             {/* Menu options */}
-            <div className="flex-1 space-y-2">
+            <div className="flex-1 space-y-3 relative">
+              {/* Menu background glow */}
+              <div className="absolute inset-0 bg-gradient-to-b from-neon-purple/5 via-transparent to-transparent rounded-3xl -m-4" />
               <MenuButton
                 label="Single Player"
                 icon={<FaUser />}
@@ -120,9 +158,17 @@ export const GameMenuScreen: React.FC<GameMenuScreenProps> = ({
             </div>
 
             {/* Connection status */}
-            <div className="mt-auto mb-4 flex justify-between text-sm text-white/60">
-              <span>Signal: Strong</span>
-              <span>Players Online: 42</span>
+            <div className="mt-auto pt-8 pb-4">
+              <div className="flex justify-between items-center px-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-racing-green animate-pulse" />
+                  <span className="text-sm font-medium text-white/80">Signal: Strong</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-white/80">42 Players Online</span>
+                  <div className="w-2 h-2 rounded-full bg-racing-blue animate-pulse-slow" />
+                </div>
+              </div>
             </div>
           </div>
         }
