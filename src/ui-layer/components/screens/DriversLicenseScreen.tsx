@@ -83,13 +83,10 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
   const renderCamera = () => (
     <div className="relative w-full max-w-2xl mx-auto">
       {/* Camera frame overlay */}
-      <div className="absolute inset-0 border-2 border-neon-glow rounded-xl shadow-[0_0_20px_rgba(0,255,149,0.3)] pointer-events-none" />
-      
-      {/* Corner markers */}
-      <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-racing-yellow" />
-      <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-racing-yellow" />
-      <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-racing-yellow" />
-      <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-racing-yellow" />
+      <div className="absolute inset-0 rounded-xl overflow-hidden">
+        <div className="absolute inset-0 border-2 border-neon-purple/50 rounded-xl shadow-[0_0_30px_rgba(178,75,243,0.3)] pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-neon-purple/10 via-transparent to-neon-purple/10 animate-pulse-slow" />
+      </div>
 
       <video
         ref={videoRef}
@@ -100,7 +97,7 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
 
       <button
         onClick={capturePhoto}
-        className="mt-6 w-full flex items-center justify-center px-6 py-4 text-lg font-bold rounded-2xl text-white bg-racing-red hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-racing-red transition-all duration-200 active:animate-button-press shadow-[0_0_20px_-5px_rgba(255,76,76,0.5)] hover:shadow-[0_0_30px_-5px_rgba(255,76,76,0.8)]"
+        className="mt-6 w-full flex items-center justify-center px-6 py-4 text-lg font-bold rounded-2xl text-white bg-neon-purple hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neon-purple transition-all duration-200 active:animate-button-press shadow-[0_0_20px_-5px_rgba(178,75,243,0.5)] hover:shadow-[0_0_30px_-5px_rgba(178,75,243,0.8)]"
       >
         <FaCamera className="mr-3" /> Take Photo
       </button>
