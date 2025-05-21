@@ -23,15 +23,9 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
     startCamera();
 
     // Add keyboard listeners for spacebar and flash test
-    const handleKeyPress = (event: KeyboardEvent) => {
-      if (captureState === 'camera') {
-        if (event.code === 'Space') {
-          capturePhoto();
-        } else if (event.code === 'KeyF') {
-          // Test flash animation with 'F' key
-          setIsFlashing(true);
-          setTimeout(() => setIsFlashing(false), 750); // Flash duration
-        }
+    const handleKeyPress = async (event: KeyboardEvent) => {
+      if (captureState === 'camera' && event.code === 'Space') {
+        await capturePhoto();
       }
     };
 
@@ -64,12 +58,27 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
     }
   };
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (videoRef.current) {
-      const canvas = document.createElement('canvas');
       const video = videoRef.current;
       
-      // Set canvas size to match our display size
+      // Trigger flash effect
+      setIsFlashing(true);
+      
+      // Create a promise that resolves after the flash duration
+      const flashDuration = 750; // ms
+      await new Promise(resolve => {
+        // Pause the video during the flash
+        video.pause();
+        
+        setTimeout(() => {
+          setIsFlashing(false);
+          resolve(null);
+        }, flashDuration);
+      });
+
+      // Capture the photo
+      const canvas = document.createElement('canvas');
       canvas.width = 400;
       canvas.height = 400;
       const ctx = canvas.getContext('2d');
@@ -94,6 +103,11 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
         
         const photoData = canvas.toDataURL('image/jpeg');
         setPhotoData(photoData);
+        
+        // Resume video playback before changing state
+        video.play();
+        
+        // Switch to preview state
         setCaptureState('preview');
       }
     }
