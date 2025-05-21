@@ -31,4 +31,8 @@ body {
 #root {
   position: relative;
   z-index: 1;
+  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
