@@ -1,0 +1,85 @@
+.login-screen {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+}
+
+.login-container {
+  background: rgba(0, 0, 0, 0.8);
+  padding: 2rem;
+  border-radius: 1rem;
+  border: 2px solid #ffd700;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+.login-container h1 {
+  color: white;
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.login-container h2 {
+  color: #ffd700;
+  font-size: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.login-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.google-login-btn,
+.wallet-connect-btn {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.1rem;
+  background: #333;
+  color: white;
+  border: 1px solid #ffd700;
+  transition: all 0.3s ease;
+}
+
+.google-login-btn:hover,
+.wallet-connect-btn:hover {
+  background: #ffd700;
+  color: black;
+}
+
+.referral-section {
+  margin-bottom: 2rem;
+}
+
+.referral-input {
+  width: 100%;
+  padding: 0.8rem;
+  font-size: 1rem;
+  background: #333;
+  border: 1px solid #ffd700;
+  color: white;
+  border-radius: 0.5rem;
+}
+
+.referral-input::placeholder {
+  color: #888;
+}
+
+.back-button {
+  background: transparent;
+  color: #ffd700;
+  border: 1px solid #ffd700;
+  padding: 0.8rem 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.back-button:hover {
+  background: #ffd700;
+  color: black;
+}

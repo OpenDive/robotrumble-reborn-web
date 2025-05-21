@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { LoginScreen } from './components/screens/LoginScreen';
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
 import { LobbyScreen } from './components/screens/LobbyScreen';
 import { RaceScreen } from './components/screens/RaceScreen';
@@ -30,12 +31,13 @@ function AppContent() {
   };
 
   const handleBackToMenu = () => {
-    navigate('/');
+    navigate('/welcome');
   };
 
   return (
     <Routes>
-      <Route path="/" element={
+      <Route path="/" element={<LoginScreen />} />
+      <Route path="/welcome" element={
         <WelcomeScreen 
           onQuickPlay={handleQuickPlay}
           onCustomGame={handleCustomGame}
