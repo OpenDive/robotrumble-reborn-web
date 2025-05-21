@@ -35,7 +35,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
       {/* Background grid effect */}
       <div className="absolute inset-0 w-[200%] h-[200%] -top-1/2 -left-1/2">
         <div 
-          className="absolute inset-0 opacity-20"
+          className="absolute inset-0 opacity-70"
           style={{
             backgroundImage: `
               linear-gradient(to right, #B24BF3 1px, transparent 1px),
