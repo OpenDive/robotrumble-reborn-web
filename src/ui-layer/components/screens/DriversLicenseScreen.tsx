@@ -17,14 +17,21 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isFlashing, setIsFlashing] = useState(false);
 
   useEffect(() => {
     startCamera();
 
-    // Add keyboard listener for spacebar
+    // Add keyboard listeners for spacebar and flash test
     const handleKeyPress = (event: KeyboardEvent) => {
-      if (event.code === 'Space' && captureState === 'camera') {
-        capturePhoto();
+      if (captureState === 'camera') {
+        if (event.code === 'Space') {
+          capturePhoto();
+        } else if (event.code === 'KeyF') {
+          // Test flash animation with 'F' key
+          setIsFlashing(true);
+          setTimeout(() => setIsFlashing(false), 750); // Flash duration
+        }
       }
     };
 
@@ -184,30 +191,37 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
   );
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-radial from-gray-900 via-gray-800 to-gray-900 p-4 overflow-hidden">
-      {/* Racing pattern overlay */}
-      <div className="absolute inset-0 bg-racing-pattern opacity-5 animate-pulse-slow" />
+    <>
+      {/* Flash overlay - covers entire viewport */}
+      <div 
+        className={`fixed inset-0 bg-white pointer-events-none transition-opacity duration-750 z-50
+          ${isFlashing ? 'opacity-60' : 'opacity-0'}`}
+      />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-radial from-gray-900 via-gray-800 to-gray-900 p-4 overflow-hidden">
+        {/* Racing pattern overlay */}
+        <div className="absolute inset-0 bg-racing-pattern opacity-5 animate-pulse-slow" />
 
-      {/* Main container */}
-      <div className="relative w-full">
-        {/* Instructions */}
-        {captureState === 'camera' && (
-          <div className="text-center mb-8 max-w-lg mx-auto">
-            <h2 className="text-2xl font-bold text-white mb-2">Driver's License Photo</h2>
-            <p className="text-gray-300">Position your face within the frame and click the button to take your photo.</p>
-          </div>
-        )}
+        {/* Main container */}
+        <div className="relative w-full">
+          {/* Instructions */}
+          {captureState === 'camera' && (
+            <div className="text-center mb-8 max-w-lg mx-auto">
+              <h2 className="text-2xl font-bold text-white mb-2">Driver's License Photo</h2>
+              <p className="text-gray-300">Position your face within the frame and click the button to take your photo.</p>
+            </div>
+          )}
 
-        {/* Error message */}
-        {error && (
-          <div className="text-racing-red text-center mb-4">
-            {error}
-          </div>
-        )}
+          {/* Error message */}
+          {error && (
+            <div className="text-racing-red text-center mb-4">
+              {error}
+            </div>
+          )}
 
-        {/* Main content */}
-        {captureState === 'camera' ? renderCamera() : renderLicensePreview()}
+          {/* Main content */}
+          {captureState === 'camera' ? renderCamera() : renderLicensePreview()}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
