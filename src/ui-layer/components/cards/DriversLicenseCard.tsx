@@ -1,6 +1,7 @@
 import React from 'react';
 
 interface DriversLicenseCardProps {
+  animate?: boolean;
   photoData: string;
   playerName: string;
   issueDate: Date;
@@ -10,6 +11,7 @@ interface DriversLicenseCardProps {
 
 export const DriversLicenseCard: React.FC<DriversLicenseCardProps> = ({
   photoData,
+  animate = false,
   playerName,
   issueDate,
   licenseType,
@@ -24,7 +26,9 @@ export const DriversLicenseCard: React.FC<DriversLicenseCardProps> = ({
   };
 
   return (
-    <div className={`relative w-full aspect-[1.75] bg-white rounded-xl overflow-hidden ${className}`}>
+    <div
+      className={`relative w-full aspect-[1.75] bg-white rounded-xl overflow-hidden will-change-transform
+        ${animate ? 'animate-license-entrance' : ''} ${className}`}>
       {/* Red header */}
       <div className="absolute top-0 left-0 right-0 h-16 bg-racing-red">
         <h1 className="text-2xl font-black text-white p-4">ROBOT KARTS LIVE</h1>

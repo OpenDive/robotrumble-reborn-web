@@ -22,6 +22,7 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
   const [isFlashing, setIsFlashing] = useState(false);
   const [countdownState, setCountdownState] = useState<CountdownState>('idle');
   const [countdownNumber, setCountdownNumber] = useState<number>(3);
+  const [showPreviewAnimation, setShowPreviewAnimation] = useState(false);
 
   useEffect(() => {
     startCamera();
@@ -132,14 +133,16 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
         // Resume video playback before changing state
         video.play();
         
-        // Switch to preview state
+        // Switch to preview state with animation
         setCaptureState('preview');
         setCountdownState('idle');
+        setShowPreviewAnimation(true);
       }
     }
   };
 
   const handleRetake = () => {
+    setShowPreviewAnimation(false);
     setPhotoData(null);
     setCaptureState('camera');
     startCamera();
@@ -213,6 +216,7 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
       {/* License card */}
       {photoData && (
         <DriversLicenseCard
+          animate={showPreviewAnimation}
           photoData={photoData}
           playerName="Player 1"
           issueDate={new Date()}

@@ -50,6 +50,7 @@ export default {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'float': 'float 6s ease-in-out infinite',
         'number-countdown': 'numberCountdown 1s ease-out',
+        'license-entrance': 'licenseEntrance 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)',
         'glow': 'glow 2s ease-in-out infinite',
         'button-press': 'button-press 0.2s ease-in-out',
         'countdown': 'numberCountdown 1s ease-out',
@@ -75,6 +76,30 @@ export default {
           '100%': { 
             transform: 'scale(0.8)',
             opacity: '0'
+          },
+        },
+        licenseEntrance: {
+          '0%': {
+            transform: 'translate(100%, -100%) rotate(15deg) scale(0.8)',
+            opacity: '0',
+            boxShadow: '0 0 0 rgba(178,75,243,0)'
+          },
+          '30%': {
+            transform: 'translate(0, 0) rotate(-5deg) scale(1.1)',
+            opacity: '1',
+            boxShadow: '0 0 30px rgba(178,75,243,0.3)'
+          },
+          '60%': {
+            transform: 'translate(0, 0) rotate(3deg) scale(0.95)',
+            boxShadow: '0 0 20px rgba(178,75,243,0.2)'
+          },
+          '80%': {
+            transform: 'translate(0, 0) rotate(-2deg) scale(1.02)',
+            boxShadow: '0 0 25px rgba(178,75,243,0.25)'
+          },
+          '100%': {
+            transform: 'translate(0, 0) rotate(0) scale(1)',
+            boxShadow: '0 0 20px rgba(178,75,243,0.2)'
           },
         },
         glow: {
