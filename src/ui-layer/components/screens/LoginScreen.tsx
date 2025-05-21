@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '../shared/Button';
-import './LoginScreen.css';
 
 export const LoginScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -26,43 +24,45 @@ export const LoginScreen: React.FC = () => {
   };
 
   return (
-    <div className="login-screen">
-      <div className="login-container">
-        <h1>RobotRumble</h1>
-        <h2>Login</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
+      <div className="max-w-md w-full space-y-8 p-8 bg-gray-800 rounded-2xl shadow-xl border border-gray-700">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-secondary mb-2">RobotRumble</h1>
+          <h2 className="text-xl text-gray-300 mb-8">Login</h2>
+        </div>
         
-        <div className="login-options">
-          <Button 
+        <div className="space-y-4">
+          <button 
             onClick={handleGoogleLogin}
-            className="google-login-btn"
+            className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
           >
             Login with Google
-          </Button>
+          </button>
 
-          <Button 
+          <button 
             onClick={handleWalletConnect}
-            className="wallet-connect-btn"
+            className="w-full flex items-center justify-center px-4 py-3 border border-gray-600 text-base font-medium rounded-lg text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
           >
             Connect Wallet
-          </Button>
+          </button>
         </div>
 
-        <div className="referral-section">
+        <div className="mt-6">
           <input
             type="text"
             placeholder="Enter Referral Code"
             value={referralCode}
             onChange={handleReferralChange}
-            className="referral-input"
+            className="w-full px-4 py-3 border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
           />
         </div>
 
-        <Button 
+        <button 
           onClick={handleBackToWelcome}
-          className="back-button"
+          className="mt-8 w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-400 hover:text-white focus:outline-none transition-colors"
         >
-          Back to Welcome
-        </Button>
+          ← Back to Welcome
+        </button>
       </div>
     </div>
   );
