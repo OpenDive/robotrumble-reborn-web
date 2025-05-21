@@ -69,14 +69,26 @@ export const MockSessionService = {
 
   // Simulate real-time updates (called by polling)
   simulateUpdates: () => {
-    mockSessions = mockSessions.map(session => ({
-      ...session,
-      robotStatus: {
-        ...session.robotStatus,
-        lastHeartbeat: Date.now(),
-        latency: Math.floor(Math.random() * 20) + 30,
-        batteryLevel: Math.max(0, session.robotStatus.batteryLevel - 0.1)
-      }
-    }));
+    mockSessions = mockSessions.map(session => {
+      // Simulate random disconnections (5% chance if connected, 10% chance to reconnect if disconnected)
+      const shouldChangeConnection = Math.random() < (session.robotStatus.connected ? 0.05 : 0.10);
+      const nextConnectionState = shouldChangeConnection ? !session.robotStatus.connected : session.robotStatus.connected;
+
+      return {
+        ...session,
+        robotStatus: {
+          ...session.robotStatus,
+          connected: nextConnectionState,
+          // Only update heartbeat if connected
+          lastHeartbeat: nextConnectionState ? Date.now() : session.robotStatus.lastHeartbeat,
+          // Latency varies more when connection is unstable
+          latency: nextConnectionState 
+            ? Math.floor(Math.random() * 20) + 30 // 30-50ms when connected
+            : Math.floor(Math.random() * 100) + 100, // 100-200ms when having issues
+          // Battery drains faster when connected
+          batteryLevel: Math.max(0, session.robotStatus.batteryLevel - (nextConnectionState ? 0.1 : 0.02))
+        }
+      };
+    });
   }
 }; 
