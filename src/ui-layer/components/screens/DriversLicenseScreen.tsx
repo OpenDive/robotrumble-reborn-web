@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-
 import { FaCamera, FaRedo } from 'react-icons/fa';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faGamepad } from '@fortawesome/free-solid-svg-icons';
 
 type CaptureState = 'camera' | 'preview';
 
@@ -18,14 +19,27 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
 
   useEffect(() => {
     startCamera();
-    return () => {
-      // Cleanup video stream when component unmounts
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
+
+    // Add keyboard listener for spacebar
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.code === 'Space' && captureState === 'camera') {
+        capturePhoto();
       }
     };
-  }, []);
+
+    window.addEventListener('keydown', handleKeyPress);
+
+    return () => {
+      // Cleanup: stop the camera and remove event listener when component unmounts
+      if (videoRef.current) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
+      }
+      window.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [captureState]);
 
   const startCamera = async () => {
     try {
@@ -91,6 +105,23 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
 
   const renderCamera = () => (
     <div className="relative w-full max-w-2xl mx-auto space-y-6">
+      {/* Speech bubble */}
+      <div className="relative bg-white rounded-2xl p-6 shadow-lg mb-4 animate-float">
+        {/* Speech bubble arrow */}
+        <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2">
+          <div className="w-8 h-8 bg-white rotate-45 transform origin-center"></div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <FontAwesomeIcon 
+            icon={faGamepad} 
+            className="text-3xl text-neon-purple animate-bounce"
+          />
+          <p className="text-gray-800 text-lg">
+            Point the kart's camera at your face, and press <span className="text-neon-purple font-bold">SPACE</span> or the <span className="text-neon-purple font-bold">Take Photo</span> button to snap a photo! 📸
+          </p>
+        </div>
+      </div>
       <div className="relative h-[400px] overflow-hidden">
         {/* Video element */}
         <video
