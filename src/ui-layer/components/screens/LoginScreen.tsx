@@ -2,18 +2,24 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaGoogle, FaWallet, FaChevronLeft } from 'react-icons/fa';
 
-export const LoginScreen: React.FC = () => {
+interface LoginScreenProps {
+  onLoginComplete: () => void;
+}
+
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => {
   const navigate = useNavigate();
   const [referralCode, setReferralCode] = useState('');
 
   const handleGoogleLogin = () => {
     // TODO: Implement Google login
     console.log('Google login clicked');
+    onLoginComplete();
   };
 
   const handleWalletConnect = () => {
     // TODO: Implement wallet connection
     console.log('Wallet connect clicked');
+    onLoginComplete();
   };
 
   const handleReferralChange = (e: React.ChangeEvent<HTMLInputElement>) => {
