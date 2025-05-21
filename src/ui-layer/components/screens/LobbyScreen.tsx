@@ -79,18 +79,20 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStartRace, onBack })
   return (
     <div className="w-full h-screen bg-[#0B0B1A] relative overflow-hidden flex flex-col">
       {/* Background grid effect with racing theme */}
-      <div 
-        className="absolute inset-0 opacity-70"
-        style={{
-          backgroundImage: `
-            linear-gradient(to right, #4C9EFF 1px, transparent 1px),
-            linear-gradient(to bottom, #4C9EFF 1px, transparent 1px)
-          `,
-          backgroundSize: '40px 40px',
-          transform: 'perspective(500px) rotateX(60deg)',
-          transformOrigin: 'center 150%',
-        }}
-      />
+      <div className="absolute inset-0 w-[200%] h-[200%] -top-1/2 -left-1/2">
+        <div 
+          className="absolute inset-0 opacity-70"
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, #4C9EFF 1px, transparent 1px),
+              linear-gradient(to bottom, #4C9EFF 1px, transparent 1px)
+            `,
+            backgroundSize: '40px 40px',
+            transform: 'perspective(1000px) rotateX(60deg)',
+            transformOrigin: 'center center',
+          }}
+        />
+      </div>
       {/* Radial gradient overlay */}
       <div className="absolute inset-0 bg-gradient-radial from-transparent via-[#0B0B1A]/80 to-[#0B0B1A]"/>
       {/* Header */}
