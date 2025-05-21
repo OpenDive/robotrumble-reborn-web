@@ -43,27 +43,36 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
   };
 
   const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
       const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const context = canvas.getContext('2d');
-
-      if (context) {
-        // Set canvas size to match video dimensions
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        // Draw the video frame to canvas
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // Convert to base64 string
-        const photo = canvas.toDataURL('image/jpeg');
-        setPhotoData(photo);
+      
+      // Set canvas size to match our display size
+      canvas.width = 400;
+      canvas.height = 400;
+      const ctx = canvas.getContext('2d');
+      
+      if (ctx) {
+        // Calculate dimensions for zoomed crop (matching our 150% zoom)
+        const zoomLevel = 1.5;
+        const cropSize = Math.min(video.videoWidth, video.videoHeight) / zoomLevel;
+        
+        // Center the crop in the video
+        const sourceX = (video.videoWidth - cropSize) / 2;
+        const sourceY = (video.videoHeight - cropSize) / 2;
+        
+        // Draw the zoomed portion
+        ctx.drawImage(
+          video,
+          sourceX, sourceY,           // Start at center
+          cropSize, cropSize,         // Take a square crop at our zoom level
+          0, 0,                      // Place at top-left of canvas
+          canvas.width, canvas.height // Fill the canvas
+        );
+        
+        const photoData = canvas.toDataURL('image/jpeg');
+        setPhotoData(photoData);
         setCaptureState('preview');
-
-        // Stop the camera stream
-        const stream = video.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
       }
     }
   };
@@ -82,13 +91,13 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
 
   const renderCamera = () => (
     <div className="relative w-full max-w-2xl mx-auto space-y-6">
-      <div className="relative">
+      <div className="relative h-[400px] overflow-hidden">
         {/* Video element */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
-          className="w-full rounded-xl bg-black"
+          className="absolute w-[150%] h-[150%] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-black object-cover"
         />
 
         {/* Camera frame overlay - positioned above video */}
