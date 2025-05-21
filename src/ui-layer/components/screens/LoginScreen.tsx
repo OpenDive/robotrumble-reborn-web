@@ -27,14 +27,14 @@ export const LoginScreen: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
       <div className="max-w-md w-full space-y-8 p-8 bg-gray-800 rounded-2xl shadow-xl border border-gray-700">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-secondary mb-2">RobotRumble</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">RobotRumble</h1>
           <h2 className="text-xl text-gray-300 mb-8">Login</h2>
         </div>
         
         <div className="space-y-4">
           <button 
             onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-lg text-gray-900 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
+            className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
           >
             Login with Google
           </button>
