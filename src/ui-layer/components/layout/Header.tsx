@@ -6,16 +6,18 @@ interface HeaderProps {
   subtitle?: string;
   onBack?: () => void;
   backLabel?: string;
+  className?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   title,
   subtitle,
   onBack,
-  backLabel = 'Back to Menu'
+  backLabel = 'Back to Menu',
+  className
 }) => {
   return (
-    <div className="w-full border-b border-white/5">
+    <div className={`w-full border-b border-white/5 ${className || ''}`}>
       <div className="w-full max-w-[1440px] mx-auto px-6 py-6">
         <div className="flex justify-between items-start">
           <div>

@@ -13,16 +13,24 @@ export const RaceCard: React.FC<RaceCardProps> = ({ session, onSelect }) => {
   return (
     <div 
       className={`
-        group relative overflow-hidden rounded-xl
+        group relative overflow-hidden rounded-3xl
         bg-gradient-to-b from-game-800/80 to-game-800/40
         backdrop-blur-sm
-        border border-white/5 hover:border-white/10
+        border-2 border-white/10
         transition-all duration-300 ease-out
-        hover:transform hover:scale-[1.02] hover:shadow-2xl
-        ${isRobotOnline ? 'shadow-lg shadow-blue-500/5' : 'shadow-lg shadow-red-500/5'}
+        hover:transform hover:scale-[1.02] hover:-rotate-1
+        hover:border-[#4C9EFF]/40
+        cursor-pointer
+        ${isRobotOnline 
+          ? 'shadow-lg shadow-[#4C9EFF]/20 hover:shadow-[#4C9EFF]/30' 
+          : 'shadow-lg shadow-red-500/20 hover:shadow-red-500/30'}
       `}
       onClick={() => onSelect(session.id)}
     >
+      {/* Glow effect */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div className="absolute inset-0 bg-gradient-radial from-[#4C9EFF]/20 to-transparent blur-xl" />
+      </div>
       {/* Top Layer - Track Image */}
       <div className="relative">
         <div className="absolute inset-0 bg-gradient-to-t from-game-900/80 to-transparent z-10" />
@@ -33,11 +41,13 @@ export const RaceCard: React.FC<RaceCardProps> = ({ session, onSelect }) => {
         />
         <div className="absolute top-4 right-4 z-20">
           <span className={`
-            px-4 py-1.5 rounded-full text-sm
+            px-4 py-1.5 rounded-full text-sm font-medium
+            transition-all duration-300
             ${isRobotOnline 
-              ? 'bg-blue-500/20 text-blue-200 border border-blue-500/20' 
-              : 'bg-red-500/20 text-red-200 border border-red-500/20'}
+              ? 'bg-[#4C9EFF]/20 text-[#4C9EFF] border border-[#4C9EFF]/30 group-hover:bg-[#4C9EFF]/30 group-hover:border-[#4C9EFF]/40' 
+              : 'bg-red-500/20 text-red-400 border border-red-500/30 group-hover:bg-red-500/30 group-hover:border-red-500/40'}
             backdrop-blur-sm
+            shadow-lg ${isRobotOnline ? 'shadow-[#4C9EFF]/20' : 'shadow-red-500/20'}
           `}>
             {isRobotOnline ? 'Online' : 'Offline'}
           </span>
@@ -47,7 +57,7 @@ export const RaceCard: React.FC<RaceCardProps> = ({ session, onSelect }) => {
       {/* Middle Layer - Track Info */}
       <div className="relative p-6 pb-4">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-medium text-white group-hover:text-blue-200 transition-colors">
+          <h3 className="text-2xl font-bold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent group-hover:from-[#4C9EFF] group-hover:to-[#4C9EFF]/80 transition-all duration-300">
             {session.trackName}
           </h3>
           <span className="text-blue-400 font-medium">{session.lapCount} Laps</span>

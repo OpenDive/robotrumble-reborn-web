@@ -6,16 +6,18 @@ interface RaceCardGridProps {
   sessions: RaceSession[];
   onSelectSession: (sessionId: string) => void;
   isLoading?: boolean;
+  className?: string;
 }
 
 export const RaceCardGrid: React.FC<RaceCardGridProps> = ({
   sessions,
   onSelectSession,
-  isLoading = false
+  isLoading = false,
+  className
 }) => {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 ${className || ''}`}>
         {[1, 2, 3].map((i) => (
           <div key={i} className="animate-pulse">
             <div className="bg-game-800/50 rounded-xl overflow-hidden border border-white/5">
@@ -48,7 +50,7 @@ export const RaceCardGrid: React.FC<RaceCardGridProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 p-1">
+    <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 p-1 ${className || ''}`}>
       {sessions.map((session) => (
         <div key={session.id} className="w-full">
           <RaceCard

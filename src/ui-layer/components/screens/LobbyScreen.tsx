@@ -77,28 +77,51 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStartRace, onBack })
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-game-900 to-game-800 flex flex-col">
+    <div className="w-full h-screen bg-[#0B0B1A] relative overflow-hidden flex flex-col">
+      {/* Background grid effect with racing theme */}
+      <div 
+        className="absolute inset-0 opacity-70"
+        style={{
+          backgroundImage: `
+            linear-gradient(to right, #4C9EFF 1px, transparent 1px),
+            linear-gradient(to bottom, #4C9EFF 1px, transparent 1px)
+          `,
+          backgroundSize: '40px 40px',
+          transform: 'perspective(500px) rotateX(60deg)',
+          transformOrigin: 'center 150%',
+        }}
+      />
+      {/* Radial gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-radial from-transparent via-[#0B0B1A]/80 to-[#0B0B1A]"/>
       {/* Header */}
       <Header
         title="Race Lobby"
         subtitle="Select a race to join"
         onBack={onBack}
+        className="relative z-10 bg-gradient-to-r from-game-900/50 via-game-800/50 to-game-900/50 backdrop-blur-sm border-b border-white/5"
       />
 
       {/* Main Content */}
-      <div className="flex-1">
+      <div className="flex-1 relative z-10">
         <PageContainer className="py-6">
-          <RaceCardGrid
-            sessions={sessions}
-            onSelectSession={handleSessionSelect}
-            isLoading={isLoading}
-          />
+          {/* Racing theme decorative elements */}
+          <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-neon-blue/10 to-transparent pointer-events-none" />
+          <div className="relative">
+            <RaceCardGrid
+              sessions={sessions}
+              onSelectSession={handleSessionSelect}
+              isLoading={isLoading}
+              className="animate-float"
+            />
+          </div>
         </PageContainer>
       </div>
 
       {/* Footer */}
-      <div className="border-t border-white/5">
+      <div className="relative z-10 border-t border-white/10 bg-gradient-to-b from-transparent to-game-900/50 backdrop-blur-sm">
         <PageContainer className="py-4">
+          {/* Racing theme decorative elements */}
+          <div className="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-[#4C9EFF]/5 to-transparent pointer-events-none" />
           <div className="flex justify-between items-center text-sm text-white/40">
             <div>
               RobotRumble v0.1.0
