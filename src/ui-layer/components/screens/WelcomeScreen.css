@@ -37,7 +37,7 @@
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 .welcome-screen {
-  background: linear-gradient(135deg, #ff4444 0%, #cc0000 50%, #990000 100%);
+  background: linear-gradient(135deg, #1a1a1a 0%, #111111 100%);
   position: relative;
 }
 
@@ -52,13 +52,14 @@
 /* Checkered pattern overlay */
 .checkered-overlay {
   background-image: 
-    linear-gradient(45deg, #000 25%, transparent 25%),
-    linear-gradient(-45deg, #000 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #000 75%),
-    linear-gradient(-45deg, transparent 75%, #000 75%);
-  background-size: 60px 60px;
-  background-position: 0 0, 0 30px, 30px -30px, -30px 0px;
-  animation: scrollBackground 20s linear infinite;
+    linear-gradient(45deg, #222222 25%, transparent 25%),
+    linear-gradient(-45deg, #222222 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #222222 75%),
+    linear-gradient(-45deg, transparent 75%, #222222 75%);
+  background-size: 160px 160px;
+  background-position: 0 0, 0 80px, 80px -80px, -80px 0px;
+  opacity: 0.4 !important;
+  animation: scrollBackground 30s linear infinite;
 }
 
 /* Speed lines animation */
