@@ -4,10 +4,10 @@ import { DriversLicenseScreen } from './components/screens/DriversLicenseScreen'
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
 import { LobbyScreen } from './components/screens/LobbyScreen';
 import { GameMenuScreen } from './components/screens/GameMenuScreen';
+import { TestGameScreen } from './components/screens/TestGameScreen';
 import { RouteTransition } from './components/transitions/RouteTransition';
 import { RaceScreen } from './components/screens/RaceScreen';
 import BabylonTestScreen from './components/screens/BabylonTestScreen';
-import { TestGameScreen } from './components/screens/TestGameScreen';
 import './App.css';
 
 function AppContent() {
@@ -45,10 +45,6 @@ function AppContent() {
     navigate('/babylon-test');
   };
 
-  const handleTestGame = () => {
-    navigate('/test-game');
-  };
-
   const handleStartRace = () => {
     navigate('/race');
   };
@@ -64,6 +60,11 @@ function AppContent() {
           <LoginScreen onLoginComplete={handleLoginComplete} />
         </RouteTransition>
       } />
+      <Route path="/test-game" element={
+        <RouteTransition route="test-game">
+          <TestGameScreen />
+        </RouteTransition>
+      } />
       <Route path="/drivers-license" element={
         <RouteTransition route="license">
           <DriversLicenseScreen onComplete={handleLicenseComplete} />
@@ -75,6 +76,7 @@ function AppContent() {
             onBack={handleBackToMenu}
             onStartSinglePlayer={() => navigate('/lobby')}
             onStartMultiplayer={() => navigate('/lobby')}
+            onTestGame={() => navigate('/test-game')}
           />
         </RouteTransition>
       } />
@@ -90,12 +92,10 @@ function AppContent() {
         <LobbyScreen 
           onStartRace={handleStartRace}
           onBack={handleBackToMenu}
-          onTestGame={handleTestGame}
         />
       } />
       <Route path="/race" element={<RaceScreen onBack={handleBackToMenu} />} />
       <Route path="/babylon-test" element={<BabylonTestScreen />} />
-      <Route path="/test-game" element={<TestGameScreen onBack={handleBackToMenu} />} />
     </Routes>
   );
 }
