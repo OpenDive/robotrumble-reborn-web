@@ -9,9 +9,10 @@ import { PageContainer } from '../layout/PageContainer';
 interface LobbyScreenProps {
   onStartRace: () => void;
   onBack: () => void;
+  onTestGame?: () => void;
 }
 
-export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStartRace, onBack }) => {
+export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStartRace, onBack, onTestGame }) => {
   const [sessions, setSessions] = useState<RaceSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState<RaceSession | null>(null);
@@ -132,6 +133,17 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStartRace, onBack })
               <span>Ping: 32ms</span>
               <span className="text-white/20">•</span>
               <span>Region: US West</span>
+              {onTestGame && (
+                <>
+                  <span className="text-white/20">•</span>
+                  <button
+                    onClick={onTestGame}
+                    className="text-neon-blue hover:text-white transition-colors"
+                  >
+                    Test Game
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </PageContainer>

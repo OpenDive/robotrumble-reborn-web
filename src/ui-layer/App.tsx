@@ -7,6 +7,7 @@ import { GameMenuScreen } from './components/screens/GameMenuScreen';
 import { RouteTransition } from './components/transitions/RouteTransition';
 import { RaceScreen } from './components/screens/RaceScreen';
 import BabylonTestScreen from './components/screens/BabylonTestScreen';
+import { TestGameScreen } from './components/screens/TestGameScreen';
 import './App.css';
 
 function AppContent() {
@@ -42,6 +43,10 @@ function AppContent() {
 
   const handleTutorial = () => {
     navigate('/babylon-test');
+  };
+
+  const handleTestGame = () => {
+    navigate('/test-game');
   };
 
   const handleStartRace = () => {
@@ -85,10 +90,12 @@ function AppContent() {
         <LobbyScreen 
           onStartRace={handleStartRace}
           onBack={handleBackToMenu}
+          onTestGame={handleTestGame}
         />
       } />
       <Route path="/race" element={<RaceScreen onBack={handleBackToMenu} />} />
       <Route path="/babylon-test" element={<BabylonTestScreen />} />
+      <Route path="/test-game" element={<TestGameScreen onBack={handleBackToMenu} />} />
     </Routes>
   );
 }
