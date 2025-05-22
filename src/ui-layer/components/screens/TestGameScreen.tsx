@@ -44,6 +44,10 @@ export const TestGameScreen: React.FC = () => {
   const worldRef = useRef<RAPIER.World | null>(null);
   const playerBodyRef = useRef<RAPIER.RigidBody | null>(null);
   
+  // Add state for visualization trail points
+  const trailPointsRef = useRef<THREE.Vector3[]>([]);
+  const MAX_TRAIL_POINTS = 50;
+  
   // Initialize physics world
   useEffect(() => {
     let world: RAPIER.World | null = null;
@@ -76,8 +80,8 @@ export const TestGameScreen: React.FC = () => {
       // Create player rigid body
       const playerBodyDesc = RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(0, 1, 0)
-        .setLinearDamping(5.0) // Add damping to prevent sliding
-        .setAngularDamping(1.0);
+        .setLinearDamping(1.5) // Reduce further for smoother movement
+        .setAngularDamping(0.5); // Reduce for smoother rotation
       
       const playerBody = world.createRigidBody(playerBodyDesc);
       
@@ -182,6 +186,12 @@ export const TestGameScreen: React.FC = () => {
     rightWall.position.set(5, 0.5, 0);
     rightWall.castShadow = true;
     scene.add(rightWall);
+
+    // Add a trail visualization line
+    const trailMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+    const trailGeometry = new THREE.BufferGeometry();
+    const trailLine = new THREE.Line(trailGeometry, trailMaterial);
+    scene.add(trailLine);
 
     // Store refs for cleanup
     sceneRef.current = scene;
@@ -348,11 +358,19 @@ export const TestGameScreen: React.FC = () => {
         if (keysRef.current.right) newRotation -= rotationSpeed * deltaTime;
         
         // Handle movement
-        const speed = 50.0; // Increased for better response
+        const speed = 15.0; // Reduced further for less abrupt movement
         const moveDirection = new THREE.Vector3(0, 0, 0);
         
         if (keysRef.current.forward) moveDirection.z = -1; // Forward
         if (keysRef.current.backward) moveDirection.z = 1;  // Backward
+        
+        // Get physics state for camera and state updates regardless of movement
+        const pos = playerBody.translation();
+        const currentVel = playerBody.linvel();
+        const velocityMagnitude = Math.sqrt(
+          currentVel.x * currentVel.x + 
+          currentVel.z * currentVel.z
+        );
         
         // Apply movement if any movement keys are pressed
         if (keysRef.current.forward || keysRef.current.backward) {
@@ -391,117 +409,119 @@ export const TestGameScreen: React.FC = () => {
             }
           });
           
-          // Update camera position and rotation
-          const pos = playerBody.translation();
-          camera.position.set(
-            pos.x,
-            pos.y + 0.5, // Slightly above the capsule
-            pos.z
-          );
-          
-          // Smoothly interpolate camera rotation
-          const currentRotation = camera.rotation.y;
-          const targetRotation = newRotation;
-          camera.rotation.y = currentRotation + (targetRotation - currentRotation) * 0.1;
-          
-          // Apply velocity damping when not moving
-          if (!keysRef.current.forward && !keysRef.current.backward) {
+          // Apply velocity clamping to prevent excessive speed
+          const maxVelocity = 5.0; // Maximum velocity in any direction
+          if (velocityMagnitude > maxVelocity) {
+            const scaleFactor = maxVelocity / velocityMagnitude;
             playerBody.setLinvel(
               {
-                x: physicsState.velocity.x * 0.9,
-                y: 0,
-                z: physicsState.velocity.z * 0.9
+                x: currentVel.x * scaleFactor,
+                y: currentVel.y, // Don't clamp vertical velocity (jumping/falling)
+                z: currentVel.z * scaleFactor
               },
               true
             );
           }
+        }
+        
+        // Update camera position and rotation with smoothing - MOVED OUTSIDE CONDITIONAL
+        const targetPosition = new THREE.Vector3(
+          pos.x,
+          pos.y + 0.5, // Slightly above the capsule
+          pos.z
+        );
+        
+        // Get current camera position
+        const currentPosition = new THREE.Vector3();
+        camera.getWorldPosition(currentPosition);
+        
+        // Apply smooth lerping to camera position with much smaller factor
+        const positionLerpFactor = Math.min(
+          0.03 + (velocityMagnitude * 0.005), // Much smaller base value and velocity influence
+          0.1 // Lower cap for smoother transitions
+        );
+        currentPosition.lerp(targetPosition, positionLerpFactor);
+        camera.position.copy(currentPosition);
+        
+        // Smoothly interpolate camera rotation
+        const currentRotation = camera.rotation.y;
+        const targetRotation = newRotation;
+        const rotationLerpFactor = 0.05; // Reduced for smoother rotation
+        camera.rotation.y = currentRotation + (targetRotation - currentRotation) * rotationLerpFactor;
+        
+        // Update trail visualization
+        if (playerBodyRef.current) {
+          const playerPos = playerBody.translation();
+          const newPoint = new THREE.Vector3(playerPos.x, playerPos.y + 0.1, playerPos.z);
           
-          // Check collisions
-          const radius = 0.5;
-          const rayDirections = [
-            {x: 1, y: 0, z: 0},
-            {x: -1, y: 0, z: 0},
-            {x: 0, y: 0, z: 1},
-            {x: 0, y: 0, z: -1},
-          ];
+          // Only add points if moved enough to be visible
+          const lastPoint = trailPointsRef.current.length > 0 ? 
+            trailPointsRef.current[trailPointsRef.current.length - 1] : null;
           
-          const isColliding = rayDirections.some(dir => {
-            const ray = new RAPIER.Ray(physicsState.position, dir);
-            return world.castRay(ray, radius * 2, true) !== null;
-          });
-          
-          // Update camera for first-person view
-          camera.position.set(
-            physicsState.position.x,
-            physicsState.position.y + 1,
-            physicsState.position.z
-          );
-          camera.rotation.y = newRotation;
-          
-          // Update React state
-          setGameState(prev => ({
-            ...prev,
-            position: new THREE.Vector3(
-              physicsState.position.x,
-              physicsState.position.y,
-              physicsState.position.z
-            ),
-            rotation: newRotation,
-            isColliding
-          }));
-          
-          // Handle collision feedback
-          if (isColliding) {
-            const walls = scene.children.filter(child => 
-              child instanceof THREE.Mesh && 
-              child.material instanceof THREE.MeshStandardMaterial &&
-              child.position.y === 0.5
-            ) as THREE.Mesh[];
+          if (!lastPoint || lastPoint.distanceTo(newPoint) > 0.2) {
+            trailPointsRef.current.push(newPoint);
             
-            walls.forEach(wall => {
-              const material = wall.material as THREE.MeshStandardMaterial;
-              material.emissive.setHex(0x330000);
-              setTimeout(() => material.emissive.setHex(0x000000), 100);
-            });
+            // Limit trail length
+            if (trailPointsRef.current.length > MAX_TRAIL_POINTS) {
+              trailPointsRef.current.shift();
+            }
+            
+            // Update line geometry
+            trailGeometry.setFromPoints(trailPointsRef.current);
           }
         }
         
-        // Debug test: Move yellow cube on key press
-        const targetMesh = scene.children.find(child => 
-          child instanceof THREE.Mesh && 
-          child.material instanceof THREE.MeshStandardMaterial && 
-          (child.material as THREE.MeshStandardMaterial).color.getHex() === 0xffff00
-        ) as THREE.Mesh | undefined;
-
-        if (targetMesh) {
-          // Record initial position
-          const initialPosition = { 
-            x: targetMesh.position.x, 
-            y: targetMesh.position.y, 
-            z: targetMesh.position.z 
-          };
+        // Improve velocity damping when not moving to stop more quickly
+        if (!keysRef.current.forward && !keysRef.current.backward) {
+          playerBody.setLinvel(
+            {
+              x: physicsState.velocity.x * 0.8, // More aggressive damping (was 0.9)
+              y: 0,
+              z: physicsState.velocity.z * 0.8  // More aggressive damping (was 0.9)
+            },
+            true
+          );
+        }
+        
+        // Check collisions
+        const radius = 0.5;
+        const rayDirections = [
+          {x: 1, y: 0, z: 0},
+          {x: -1, y: 0, z: 0},
+          {x: 0, y: 0, z: 1},
+          {x: 0, y: 0, z: -1},
+        ];
+        
+        const isColliding = rayDirections.some(dir => {
+          const ray = new RAPIER.Ray(physicsState.position, dir);
+          return world.castRay(ray, radius * 2, true) !== null;
+        });
+        
+        // Update React state
+        setGameState(prev => ({
+          ...prev,
+          position: new THREE.Vector3(
+            physicsState.position.x,
+            physicsState.position.y,
+            physicsState.position.z
+          ),
+          rotation: newRotation,
+          isColliding
+        }));
+        
+        // Handle collision feedback
+        if (isColliding) {
+          const walls = scene.children.filter(child => 
+            child instanceof THREE.Mesh && 
+            child.material instanceof THREE.MeshStandardMaterial &&
+            child.position.y === 0.5
+          ) as THREE.Mesh[];
           
-          // Apply movements
-          if (keysRef.current.forward) targetMesh.position.z -= 0.1;
-          if (keysRef.current.backward) targetMesh.position.z += 0.1;
-          if (keysRef.current.left) targetMesh.position.x -= 0.1;
-          if (keysRef.current.right) targetMesh.position.x += 0.1;
-          
-          // Check if position actually changed
-          if (initialPosition.x !== targetMesh.position.x || 
-              initialPosition.z !== targetMesh.position.z) {
-            console.log('%cCube moved:', 'color: #FFC107; font-weight: bold', {
-              from: initialPosition,
-              to: {
-                x: targetMesh.position.x,
-                y: targetMesh.position.y,
-                z: targetMesh.position.z
-              },
-              keys: keysRef.current
-            });
-          } else {
-            console.log('Found target cube for debug movement');
-          }
+          walls.forEach(wall => {
+            const material = wall.material as THREE.MeshStandardMaterial;
+            material.emissive.setHex(0x330000);
+            setTimeout(() => material.emissive.setHex(0x000000), 100);
+          });
         }
       }
       
