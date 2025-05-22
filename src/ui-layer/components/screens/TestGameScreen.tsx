@@ -48,6 +48,76 @@ export const TestGameScreen: React.FC = () => {
   const trailPointsRef = useRef<THREE.Vector3[]>([]);
   const MAX_TRAIL_POINTS = 50;
   
+  // Add these helper functions at the top of the component
+  const safeGetTranslation = (body: RAPIER.RigidBody | null): { x: number, y: number, z: number } => {
+    try {
+      if (!body) return { x: 0, y: 0, z: 0 };
+      const translation = body.translation();
+      return { 
+        x: translation.x, 
+        y: translation.y, 
+        z: translation.z 
+      };
+    } catch (e) {
+      console.error("Error getting translation:", e);
+      return { x: 0, y: 0, z: 0 };
+    }
+  };
+
+  const safeGetLinvel = (body: RAPIER.RigidBody | null): { x: number, y: number, z: number } => {
+    try {
+      if (!body) return { x: 0, y: 0, z: 0 };
+      const linvel = body.linvel();
+      return { 
+        x: linvel.x, 
+        y: linvel.y, 
+        z: linvel.z 
+      };
+    } catch (e) {
+      console.error("Error getting linear velocity:", e);
+      return { x: 0, y: 0, z: 0 };
+    }
+  };
+
+  const safeSetLinvel = (
+    body: RAPIER.RigidBody | null, 
+    velocity: { x: number, y: number, z: number }, 
+    wake: boolean
+  ): void => {
+    try {
+      if (!body) return;
+      body.setLinvel(velocity, wake);
+    } catch (e) {
+      console.error("Error setting linear velocity:", e);
+    }
+  };
+
+  const safeCastRay = (
+    world: RAPIER.World | null,
+    origin: { x: number, y: number, z: number },
+    direction: { x: number, y: number, z: number },
+    maxToi: number,
+    solid: boolean
+  ): RAPIER.RayColliderHit | null => {
+    try {
+      if (!world) return null;
+      const ray = new RAPIER.Ray(origin, direction);
+      return world.castRay(ray, maxToi, solid);
+    } catch (e) {
+      console.error("Error casting ray:", e);
+      return null;
+    }
+  };
+
+  const safeWorldStep = (world: RAPIER.World | null): void => {
+    try {
+      if (!world) return;
+      world.step();
+    } catch (e) {
+      console.error("Error stepping world:", e);
+    }
+  };
+  
   // Initialize physics world
   useEffect(() => {
     let world: RAPIER.World | null = null;
@@ -100,10 +170,58 @@ export const TestGameScreen: React.FC = () => {
     return () => {
       cleanup = true;
       if (world) {
-        // Clean up physics objects
-        playerBodyRef.current = null;
-        worldRef.current = null;
-        world.free();
+        try {
+          // First set the current player body reference to null
+          playerBodyRef.current = null;
+          
+          // Safely remove and free all colliders
+          if (world.colliders) {
+            try {
+              if (world) {
+                world.forEachCollider(collider => {
+                  if (collider) {
+                    try {
+                      if (world) {
+                        world.removeCollider(collider, true);
+                      }
+                    } catch (e) {
+                      console.error("Error removing collider:", e);
+                    }
+                  }
+                });
+              }
+            } catch (e) {
+              console.error("Error iterating colliders:", e);
+            }
+          }
+          
+          // Safely remove and free all rigid bodies
+          if (world.bodies) {
+            try {
+              if (world) {
+                world.forEachRigidBody(body => {
+                  if (body) {
+                    try {
+                      if (world) {
+                        world.removeRigidBody(body);
+                      }
+                    } catch (e) {
+                      console.error("Error removing rigid body:", e);
+                    }
+                  }
+                });
+              }
+            } catch (e) {
+              console.error("Error iterating rigid bodies:", e);
+            }
+          }
+          
+          // Finally set world ref to null and free the world
+          worldRef.current = null;
+          world.free();
+        } catch (e) {
+          console.error("Error cleaning up physics world:", e);
+        }
       }
     };
   }, []);
@@ -321,36 +439,7 @@ export const TestGameScreen: React.FC = () => {
         const world = worldRef.current;
         const playerBody = playerBodyRef.current;
         
-        // Step the physics world
-        world.step();
-        
-        // Get current physics state
-        const physicsState = {
-          position: playerBody.translation(),
-          velocity: playerBody.linvel()
-        };
-        
-        // Only debug log if there's movement or key input
-        const isMoving = Object.values(keysRef.current).some(key => key) || 
-                        Math.abs(physicsState.velocity.x) > 0.1 || 
-                        Math.abs(physicsState.velocity.z) > 0.1;
-        
-        if (isMoving) {
-          console.log('%cState:', 'color: #4CAF50; font-weight: bold', {
-            keys: keysRef.current,
-            position: {
-              x: physicsState.position.x.toFixed(2),
-              y: physicsState.position.y.toFixed(2),
-              z: physicsState.position.z.toFixed(2)
-            },
-            velocity: {
-              x: physicsState.velocity.x.toFixed(2),
-              y: physicsState.velocity.y.toFixed(2),
-              z: physicsState.velocity.z.toFixed(2)
-            }
-          });
-        }
-        
+        // PHASE 1: Gather input and calculate intended movement
         // Handle rotation first
         let newRotation = gameState.rotation;
         const rotationSpeed = 3.0;
@@ -365,21 +454,26 @@ export const TestGameScreen: React.FC = () => {
         if (keysRef.current.forward) moveDirection.z = -1; // Forward
         if (keysRef.current.backward) moveDirection.z = 1;  // Backward
         
-        // Get physics state for camera and state updates regardless of movement
-        const pos = playerBody.translation();
-        const currentVel = playerBody.linvel();
+        // PHASE 2: Cache current physics state before any modifications
+        const currentPos = safeGetTranslation(playerBody);
+        const currentVel = safeGetLinvel(playerBody);
         const velocityMagnitude = Math.sqrt(
           currentVel.x * currentVel.x + 
           currentVel.z * currentVel.z
         );
         
-        // CHANGED: Use velocity-based control instead of force-based
-        // This ensures the player stops when keys are released
+        // PHASE 3: Step the physics world once
+        safeWorldStep(world);
+        
+        // PHASE 4: Update physics body based on input (after stepping)
+        // Calculate the new velocity based on input
+        let newVelocity = { x: currentVel.x, y: currentVel.y, z: currentVel.z };
+        
         if (keysRef.current.forward || keysRef.current.backward) {
           // Apply rotation to movement vector
           moveDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), newRotation);
           
-          // Calculate target velocity instead of force
+          // Calculate target velocity
           const targetVelocity = {
             x: moveDirection.x * speed,
             y: 0,
@@ -388,27 +482,13 @@ export const TestGameScreen: React.FC = () => {
           
           // Smoothly interpolate current velocity toward target velocity
           const lerpFactor = 0.2; // How quickly to reach target velocity
-          const newVelocity = {
+          newVelocity = {
             x: currentVel.x + (targetVelocity.x - currentVel.x) * lerpFactor,
             y: currentVel.y,
             z: currentVel.z + (targetVelocity.z - currentVel.z) * lerpFactor
           };
           
-          // Apply velocity clamping to prevent excessive speed
-          const newVelocityMagnitude = Math.sqrt(
-            newVelocity.x * newVelocity.x + 
-            newVelocity.z * newVelocity.z
-          );
-          
-          if (newVelocityMagnitude > maxVelocity) {
-            const scaleFactor = maxVelocity / newVelocityMagnitude;
-            newVelocity.x *= scaleFactor;
-            newVelocity.z *= scaleFactor;
-          }
-          
-          // Set the velocity directly instead of applying force
-          playerBody.setLinvel(newVelocity, true);
-          
+          // Log movement info
           console.log('%cMovement:', 'color: #FF9800; font-weight: bold', {
             targetVelocity,
             newVelocity,
@@ -416,35 +496,66 @@ export const TestGameScreen: React.FC = () => {
             keys: JSON.stringify(keysRef.current)
           });
         } else {
-          // CHANGED: When no movement keys are pressed, rapidly decelerate to a stop
-          // Apply a strong braking force - reduce velocity by 85% each frame
-          playerBody.setLinvel(
-            {
-              x: currentVel.x * 0.15,
-              y: currentVel.y,
-              z: currentVel.z * 0.15
-            },
-            true
-          );
+          // Apply strong braking when no movement keys are pressed
+          newVelocity = {
+            x: currentVel.x * 0.15,
+            y: currentVel.y,
+            z: currentVel.z * 0.15
+          };
           
-          // If nearly stopped, just set to zero to prevent drift
+          // Stop completely if nearly stopped
           if (velocityMagnitude < 0.1) {
-            playerBody.setLinvel({ x: 0, y: currentVel.y, z: 0 }, true);
+            newVelocity.x = 0;
+            newVelocity.z = 0;
           }
         }
         
-        // Update camera position and rotation with smoothing - MOVED OUTSIDE CONDITIONAL
+        // Apply velocity clamping
+        const newVelocityMagnitude = Math.sqrt(
+          newVelocity.x * newVelocity.x + 
+          newVelocity.z * newVelocity.z
+        );
+        
+        if (newVelocityMagnitude > maxVelocity) {
+          const scaleFactor = maxVelocity / newVelocityMagnitude;
+          newVelocity.x *= scaleFactor;
+          newVelocity.z *= scaleFactor;
+        }
+        
+        // Set the new velocity
+        safeSetLinvel(playerBody, newVelocity, true);
+        
+        // PHASE 5: Update game state with the new physics state
+        // Get the updated position after velocity change
+        const newPos = safeGetTranslation(playerBody);
+        
+        // Check collisions using the cached position
+        const radius = 0.5;
+        const isColliding = [
+          {x: 1, y: 0, z: 0},
+          {x: -1, y: 0, z: 0},
+          {x: 0, y: 0, z: 1},
+          {x: 0, y: 0, z: -1},
+        ].some(dir => {
+          // Create a new ray for each direction to avoid aliasing
+          const rayStart = { x: newPos.x, y: newPos.y, z: newPos.z };
+          const hit = safeCastRay(world, rayStart, dir, radius * 2, true);
+          return hit !== null;
+        });
+        
+        // PHASE 6: Update camera and visuals
+        // Update camera position and rotation with smoothing
         const targetPosition = new THREE.Vector3(
-          pos.x - Math.sin(newRotation) * 0.3, // Position slightly behind
-          pos.y + 0.5, // Slightly above the capsule
-          pos.z - Math.cos(newRotation) * 0.3  // Position slightly behind
+          newPos.x - Math.sin(newRotation) * 0.3, // Position slightly behind
+          newPos.y + 0.5, // Slightly above the capsule
+          newPos.z - Math.cos(newRotation) * 0.3  // Position slightly behind
         );
         
         // Get current camera position
         const currentPosition = new THREE.Vector3();
         camera.getWorldPosition(currentPosition);
         
-        // Apply smooth lerping to camera position with much smaller factor
+        // Apply smooth lerping to camera position
         const positionLerpFactor = velocityMagnitude < 0.1 
           ? 0.1  // Quick response when stationary
           : Math.max(0.01, 0.05 - (velocityMagnitude * 0.01)); // Smoother at higher speeds
@@ -459,8 +570,7 @@ export const TestGameScreen: React.FC = () => {
         
         // Update trail visualization
         if (playerBodyRef.current) {
-          const playerPos = playerBody.translation();
-          const newPoint = new THREE.Vector3(playerPos.x, playerPos.y + 0.1, playerPos.z);
+          const newPoint = new THREE.Vector3(newPos.x, newPos.y + 0.1, newPos.z);
           
           // Only add points if moved enough to be visible
           const lastPoint = trailPointsRef.current.length > 0 ? 
@@ -479,28 +589,10 @@ export const TestGameScreen: React.FC = () => {
           }
         }
         
-        // Check collisions
-        const radius = 0.5;
-        const rayDirections = [
-          {x: 1, y: 0, z: 0},
-          {x: -1, y: 0, z: 0},
-          {x: 0, y: 0, z: 1},
-          {x: 0, y: 0, z: -1},
-        ];
-        
-        const isColliding = rayDirections.some(dir => {
-          const ray = new RAPIER.Ray(physicsState.position, dir);
-          return world.castRay(ray, radius * 2, true) !== null;
-        });
-        
         // Update React state
         setGameState(prev => ({
           ...prev,
-          position: new THREE.Vector3(
-            physicsState.position.x,
-            physicsState.position.y,
-            physicsState.position.z
-          ),
+          position: new THREE.Vector3(newPos.x, newPos.y, newPos.z),
           rotation: newRotation,
           isColliding
         }));
