@@ -16,6 +16,22 @@ export const TestGameScreen: React.FC = () => {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   
+  // Create a ref for keys instead of state
+  const keysRef = useRef({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false
+  });
+  
+  // Keep the state for UI rendering
+  const [keys, setKeys] = useState({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false
+  });
+  
   // Game state
   const [gameState, setGameState] = useState<GameState>({
     position: new THREE.Vector3(0, 1, 0),
@@ -28,14 +44,6 @@ export const TestGameScreen: React.FC = () => {
   const worldRef = useRef<RAPIER.World | null>(null);
   const playerBodyRef = useRef<RAPIER.RigidBody | null>(null);
   
-  // Input state
-  const [keys, setKeys] = useState({
-    forward: false,
-    backward: false,
-    left: false,
-    right: false
-  });
-
   // Initialize physics world
   useEffect(() => {
     let world: RAPIER.World | null = null;
@@ -102,6 +110,10 @@ export const TestGameScreen: React.FC = () => {
       console.log('No canvas ref, skipping initialization');
       return;
     }
+    
+    // Focus the canvas so it can receive keyboard events
+    canvasRef.current.focus();
+    console.log('Canvas focused:', document.activeElement === canvasRef.current);
 
     // Initialize Three.js scene
     const scene = new THREE.Scene();
@@ -176,10 +188,16 @@ export const TestGameScreen: React.FC = () => {
     cameraRef.current = camera;
     rendererRef.current = renderer;
 
-    // Handle keyboard input
+    // Handle keyboard input - attach to document instead of canvas
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Skip if typing in an input field
+      if ((event.target as HTMLElement)?.tagName === 'INPUT' || 
+          (event.target as HTMLElement)?.tagName === 'TEXTAREA') {
+        return;
+      }
+      
       event.preventDefault();
-      let newKeys = { ...keys };
+      let newKeys = { ...keysRef.current };
       
       switch(event.code) {
         case 'ArrowUp':
@@ -200,7 +218,10 @@ export const TestGameScreen: React.FC = () => {
           break;
       }
       
-      // Only update if keys changed
+      // Update the ref immediately
+      keysRef.current = newKeys;
+      
+      // Only update state if keys changed
       if (JSON.stringify(newKeys) !== JSON.stringify(keys)) {
         console.log('%cKeys:', 'color: #2196F3; font-weight: bold', newKeys);
         setKeys(newKeys);
@@ -208,8 +229,14 @@ export const TestGameScreen: React.FC = () => {
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
+      // Skip if typing in an input field
+      if ((event.target as HTMLElement)?.tagName === 'INPUT' || 
+          (event.target as HTMLElement)?.tagName === 'TEXTAREA') {
+        return;
+      }
+      
       event.preventDefault();
-      let newKeys = { ...keys };
+      let newKeys = { ...keysRef.current };
       
       switch(event.code) {
         case 'ArrowUp':
@@ -230,16 +257,30 @@ export const TestGameScreen: React.FC = () => {
           break;
       }
       
-      // Only update if keys changed
+      // Update the ref immediately
+      keysRef.current = newKeys;
+      
+      // Only update state if keys changed
       if (JSON.stringify(newKeys) !== JSON.stringify(keys)) {
         console.log('%cKeys:', 'color: #2196F3; font-weight: bold', newKeys);
         setKeys(newKeys);
       }
     };
 
+    // Attach event listeners to document instead of canvas
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    
+    // Focus the canvas when clicking on it
+    const handleCanvasClick = () => {
+      if (canvasRef.current) {
+        canvasRef.current.focus();
+        console.log('Canvas clicked and focused');
+      }
+    };
+    
     const canvas = canvasRef.current;
-    canvas.addEventListener('keydown', handleKeyDown);
-    canvas.addEventListener('keyup', handleKeyUp);
+    canvas.addEventListener('click', handleCanvasClick);
 
     // Animation loop
     let lastTime = 0;
@@ -280,13 +321,13 @@ export const TestGameScreen: React.FC = () => {
         };
         
         // Only debug log if there's movement or key input
-        const isMoving = Object.values(keys).some(key => key) || 
+        const isMoving = Object.values(keysRef.current).some(key => key) || 
                         Math.abs(physicsState.velocity.x) > 0.1 || 
                         Math.abs(physicsState.velocity.z) > 0.1;
         
         if (isMoving) {
           console.log('%cState:', 'color: #4CAF50; font-weight: bold', {
-            keys,
+            keys: keysRef.current,
             position: {
               x: physicsState.position.x.toFixed(2),
               y: physicsState.position.y.toFixed(2),
@@ -303,18 +344,18 @@ export const TestGameScreen: React.FC = () => {
         // Handle rotation first
         let newRotation = gameState.rotation;
         const rotationSpeed = 3.0;
-        if (keys.left) newRotation += rotationSpeed * deltaTime;
-        if (keys.right) newRotation -= rotationSpeed * deltaTime;
+        if (keysRef.current.left) newRotation += rotationSpeed * deltaTime;
+        if (keysRef.current.right) newRotation -= rotationSpeed * deltaTime;
         
         // Handle movement
         const speed = 50.0; // Increased for better response
         const moveDirection = new THREE.Vector3(0, 0, 0);
         
-        if (keys.forward) moveDirection.z = -1; // Forward
-        if (keys.backward) moveDirection.z = 1;  // Backward
+        if (keysRef.current.forward) moveDirection.z = -1; // Forward
+        if (keysRef.current.backward) moveDirection.z = 1;  // Backward
         
         // Apply movement if any movement keys are pressed
-        if (keys.forward || keys.backward) {
+        if (keysRef.current.forward || keysRef.current.backward) {
           // Apply rotation to movement vector
           moveDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), newRotation);
           moveDirection.multiplyScalar(speed); // Keep consistent force
@@ -329,85 +370,138 @@ export const TestGameScreen: React.FC = () => {
             impulse,
             rotation: newRotation.toFixed(2),
             deltaTime: deltaTime.toFixed(3),
-            keys: JSON.stringify(keys)
+            keys: JSON.stringify(keysRef.current)
           });
           
           // Apply force instead of impulse for smoother movement
           playerBody.addForce(impulse, true);
-        }
-        
-        // Update camera position and rotation
-        const pos = playerBody.translation();
-        camera.position.set(
-          pos.x,
-          pos.y + 0.5, // Slightly above the capsule
-          pos.z
-        );
-        
-        // Smoothly interpolate camera rotation
-        const currentRotation = camera.rotation.y;
-        const targetRotation = newRotation;
-        camera.rotation.y = currentRotation + (targetRotation - currentRotation) * 0.1;
-        
-        // Apply velocity damping when not moving
-        if (!keys.forward && !keys.backward) {
-          playerBody.setLinvel(
-            {
-              x: physicsState.velocity.x * 0.9,
-              y: 0,
-              z: physicsState.velocity.z * 0.9
-            },
-            true
-          );
-        }
-        
-        // Check collisions
-        const radius = 0.5;
-        const rayDirections = [
-          {x: 1, y: 0, z: 0},
-          {x: -1, y: 0, z: 0},
-          {x: 0, y: 0, z: 1},
-          {x: 0, y: 0, z: -1},
-        ];
-        
-        const isColliding = rayDirections.some(dir => {
-          const ray = new RAPIER.Ray(physicsState.position, dir);
-          return world.castRay(ray, radius * 2, true) !== null;
-        });
-        
-        // Update camera for first-person view
-        camera.position.set(
-          physicsState.position.x,
-          physicsState.position.y + 1,
-          physicsState.position.z
-        );
-        camera.rotation.y = newRotation;
-        
-        // Update React state
-        setGameState(prev => ({
-          ...prev,
-          position: new THREE.Vector3(
-            physicsState.position.x,
-            physicsState.position.y,
-            physicsState.position.z
-          ),
-          rotation: newRotation,
-          isColliding
-        }));
-        
-        // Handle collision feedback
-        if (isColliding) {
-          const walls = scene.children.filter(child => 
-            child instanceof THREE.Mesh && 
-            child.material instanceof THREE.MeshStandardMaterial &&
-            child.position.y === 0.5
-          ) as THREE.Mesh[];
           
-          walls.forEach(wall => {
-            const material = wall.material as THREE.MeshStandardMaterial;
-            material.emissive.setHex(0x330000);
-            setTimeout(() => material.emissive.setHex(0x000000), 100);
+          // Add debug visualization of force application
+          console.log('%cForce Applied:', 'color: #FF0000; font-weight: bold', {
+            impulse,
+            playerPosition: {
+              x: physicsState.position.x.toFixed(2),
+              y: physicsState.position.y.toFixed(2),
+              z: physicsState.position.z.toFixed(2)
+            },
+            currentVelocity: {
+              x: physicsState.velocity.x.toFixed(2),
+              y: physicsState.velocity.y.toFixed(2),
+              z: physicsState.velocity.z.toFixed(2)
+            }
           });
+          
+          // Update camera position and rotation
+          const pos = playerBody.translation();
+          camera.position.set(
+            pos.x,
+            pos.y + 0.5, // Slightly above the capsule
+            pos.z
+          );
+          
+          // Smoothly interpolate camera rotation
+          const currentRotation = camera.rotation.y;
+          const targetRotation = newRotation;
+          camera.rotation.y = currentRotation + (targetRotation - currentRotation) * 0.1;
+          
+          // Apply velocity damping when not moving
+          if (!keysRef.current.forward && !keysRef.current.backward) {
+            playerBody.setLinvel(
+              {
+                x: physicsState.velocity.x * 0.9,
+                y: 0,
+                z: physicsState.velocity.z * 0.9
+              },
+              true
+            );
+          }
+          
+          // Check collisions
+          const radius = 0.5;
+          const rayDirections = [
+            {x: 1, y: 0, z: 0},
+            {x: -1, y: 0, z: 0},
+            {x: 0, y: 0, z: 1},
+            {x: 0, y: 0, z: -1},
+          ];
+          
+          const isColliding = rayDirections.some(dir => {
+            const ray = new RAPIER.Ray(physicsState.position, dir);
+            return world.castRay(ray, radius * 2, true) !== null;
+          });
+          
+          // Update camera for first-person view
+          camera.position.set(
+            physicsState.position.x,
+            physicsState.position.y + 1,
+            physicsState.position.z
+          );
+          camera.rotation.y = newRotation;
+          
+          // Update React state
+          setGameState(prev => ({
+            ...prev,
+            position: new THREE.Vector3(
+              physicsState.position.x,
+              physicsState.position.y,
+              physicsState.position.z
+            ),
+            rotation: newRotation,
+            isColliding
+          }));
+          
+          // Handle collision feedback
+          if (isColliding) {
+            const walls = scene.children.filter(child => 
+              child instanceof THREE.Mesh && 
+              child.material instanceof THREE.MeshStandardMaterial &&
+              child.position.y === 0.5
+            ) as THREE.Mesh[];
+            
+            walls.forEach(wall => {
+              const material = wall.material as THREE.MeshStandardMaterial;
+              material.emissive.setHex(0x330000);
+              setTimeout(() => material.emissive.setHex(0x000000), 100);
+            });
+          }
+        }
+        
+        // Debug test: Move yellow cube on key press
+        const targetMesh = scene.children.find(child => 
+          child instanceof THREE.Mesh && 
+          child.material instanceof THREE.MeshStandardMaterial && 
+          (child.material as THREE.MeshStandardMaterial).color.getHex() === 0xffff00
+        ) as THREE.Mesh | undefined;
+
+        if (targetMesh) {
+          // Record initial position
+          const initialPosition = { 
+            x: targetMesh.position.x, 
+            y: targetMesh.position.y, 
+            z: targetMesh.position.z 
+          };
+          
+          // Apply movements
+          if (keysRef.current.forward) targetMesh.position.z -= 0.1;
+          if (keysRef.current.backward) targetMesh.position.z += 0.1;
+          if (keysRef.current.left) targetMesh.position.x -= 0.1;
+          if (keysRef.current.right) targetMesh.position.x += 0.1;
+          
+          // Check if position actually changed
+          if (initialPosition.x !== targetMesh.position.x || 
+              initialPosition.z !== targetMesh.position.z) {
+            console.log('%cCube moved:', 'color: #FFC107; font-weight: bold', {
+              from: initialPosition,
+              to: {
+                x: targetMesh.position.x,
+                y: targetMesh.position.y,
+                z: targetMesh.position.z
+              },
+              keys: keysRef.current
+            });
+          } else {
+            console.log('Found target cube for debug movement');
+          }
         }
       }
       
@@ -436,8 +530,9 @@ export const TestGameScreen: React.FC = () => {
     // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
-      canvas.removeEventListener('keydown', handleKeyDown);
-      canvas.removeEventListener('keyup', handleKeyUp);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
+      canvas.removeEventListener('click', handleCanvasClick);
       cancelAnimationFrame(animationFrameId);
       renderer.dispose();
     };
@@ -465,6 +560,22 @@ export const TestGameScreen: React.FC = () => {
           fontFamily: 'monospace'
         }}>
           {gameState.isColliding ? 'COLLISION!' : 'No collision'}
+        </div>
+        
+        {/* Debug overlay */}
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '20px',
+          padding: '10px',
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          color: 'white',
+          fontFamily: 'monospace',
+          borderRadius: '5px'
+        }}>
+          <div>Keys: {JSON.stringify(keysRef.current)}</div>
+          <div>Position: X:{gameState.position.x.toFixed(2)} Y:{gameState.position.y.toFixed(2)} Z:{gameState.position.z.toFixed(2)}</div>
+          <div>Rotation: {gameState.rotation.toFixed(2)}</div>
         </div>
       </div>
     </div>
