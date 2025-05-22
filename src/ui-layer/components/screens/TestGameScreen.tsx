@@ -104,7 +104,7 @@ export const TestGameScreen: React.FC = () => {
       0.1,
       1000
     );
-    camera.position.set(0, 2, 5); // Position for testing, will be updated based on robot position
+    camera.position.set(0, 1, 0); // Start at origin, eye level
     
     // Setup renderer
     const renderer = new THREE.WebGLRenderer({
@@ -135,6 +135,16 @@ export const TestGameScreen: React.FC = () => {
     ground.receiveShadow = true;
     scene.add(ground);
     
+    // Player is not visible in first-person mode
+
+    // Add target cube
+    const targetGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const targetMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00 });
+    const targetMesh = new THREE.Mesh(targetGeometry, targetMaterial);
+    targetMesh.position.set(0, 0.5, -5); // Place it 5 units ahead
+    targetMesh.castShadow = true;
+    scene.add(targetMesh);
+
     // Add track boundaries (simple walls for now)
     const wallGeometry = new THREE.BoxGeometry(1, 1, 20);
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
@@ -158,6 +168,8 @@ export const TestGameScreen: React.FC = () => {
 
     // Handle keyboard input
     const handleKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault(); // Prevent browser scrolling
+      
       switch(event.code) {
         case 'ArrowUp':
         case 'KeyW':
@@ -203,108 +215,105 @@ export const TestGameScreen: React.FC = () => {
     window.addEventListener('keyup', handleKeyUp);
 
     // Animation loop
-    const animate = () => {
+    let lastTime = 0;
+    const animate = (time: number) => {
       requestAnimationFrame(animate);
+      const deltaTime = (time - lastTime) / 1000; // Convert to seconds
+      lastTime = time;
       
       // Update physics world
       if (worldRef.current && playerBodyRef.current) {
         const world = worldRef.current;
         const playerBody = playerBodyRef.current;
         
+        // Handle rotation first
+        let newRotation = gameState.rotation;
+        if (keys.left) newRotation += 2 * deltaTime;
+        if (keys.right) newRotation -= 2 * deltaTime;
+        
+        // Handle movement
+        const speed = 10.0; // Increased speed for better responsiveness
+        const moveDirection = new THREE.Vector3(0, 0, 0);
+        
+        if (keys.forward) moveDirection.z = -1; // Forward
+        if (keys.backward) moveDirection.z = 1;  // Backward
+        
+        if (moveDirection.length() > 0) {
+          // Apply rotation to movement vector
+          moveDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), newRotation);
+          moveDirection.multiplyScalar(speed);
+          
+          const impulse = {
+            x: moveDirection.x,
+            y: 0,
+            z: moveDirection.z
+          };
+          playerBody.applyImpulse(impulse, true);
+        }
+        
+        // Step the physics world
         world.step();
         
-        // Update game state based on input
-        setGameState(prev => {
-          const newState = { ...prev };
-          
-          // Handle rotation
-          if (keys.left) newState.rotation += 0.03;
-          if (keys.right) newState.rotation -= 0.03;
-          
-          // Handle movement
-          const speed = 2.0;
-          const damping = 0.95; // Slow down naturally
-          
-          if (keys.forward || keys.backward) {
-            const direction = keys.forward ? 1 : -1;
-            const impulse = {
-              x: Math.sin(newState.rotation) * speed * direction,
-              y: 0,
-              z: Math.cos(newState.rotation) * speed * direction
-            };
-            playerBody.applyImpulse(impulse, true);
-          }
-          
-          // Apply damping
-          const vel = playerBody.linvel();
-          playerBody.setLinvel(
-            {
-              x: vel.x * damping,
-              y: vel.y,
-              z: vel.z * damping
-            },
-            true
-          );
-          
-          // Update position from physics
-          const pos = playerBody.translation();
-          newState.position.set(pos.x, pos.y, pos.z);
-          
-          // Check for collisions using raycasts
-          const radius = 0.5; // Ball radius
-          
-          // Cast rays in multiple directions to simulate sphere collision
-          const rayDirections = [
-            {x: 1, y: 0, z: 0},   // Right
-            {x: -1, y: 0, z: 0},  // Left
-            {x: 0, y: 0, z: 1},   // Forward
-            {x: 0, y: 0, z: -1},  // Back
-          ];
-          
-          newState.isColliding = rayDirections.some(dir => {
-            const ray = new RAPIER.Ray(pos, dir);
-            const hit = world.castRay(ray, radius * 2, true);
-            return hit !== null;
-          });
-          
-          // Visual feedback for collisions
-          if (newState.isColliding) {
-            // Flash the walls red when colliding
-            const walls = scene.children.filter(child => 
-              child instanceof THREE.Mesh && 
-              child.material instanceof THREE.MeshStandardMaterial &&
-              child.position.y === 0.5
-            ) as THREE.Mesh[];
-            
-            walls.forEach(wall => {
-              const material = wall.material as THREE.MeshStandardMaterial;
-              material.color.setHex(0xff0000);
-              material.emissive.setHex(0x330000);
-              
-              // Reset after 100ms
-              setTimeout(() => {
-                material.color.setHex(0xff0000);
-                material.emissive.setHex(0x000000);
-              }, 100);
-            });
-          }
+        // Cache physics state
+        const pos = playerBody.translation();
+        const vel = playerBody.linvel();
         
-          // Update camera position and rotation
-          if (cameraRef.current) {
-            const camera = cameraRef.current;
-            camera.position.copy(newState.position);
-            camera.position.y = 2; // Camera height
-            camera.rotation.y = newState.rotation;
-          }
-          
-          return newState;
+        // Apply damping
+        playerBody.setLinvel(
+          {
+            x: vel.x * 0.8,
+            y: 0,
+            z: vel.z * 0.8
+          },
+          true
+        );
+        
+        // Check collisions
+        const radius = 0.5;
+        const rayDirections = [
+          {x: 1, y: 0, z: 0},
+          {x: -1, y: 0, z: 0},
+          {x: 0, y: 0, z: 1},
+          {x: 0, y: 0, z: -1},
+        ];
+        
+        const isColliding = rayDirections.some(dir => {
+          const ray = new RAPIER.Ray(pos, dir);
+          return world.castRay(ray, radius * 2, true) !== null;
         });
+        
+        // Update camera for first-person view
+        camera.position.set(pos.x, pos.y + 1, pos.z); // Eye level
+        camera.rotation.y = newRotation;
+        
+        // Update React state less frequently
+        setGameState(prev => ({
+          ...prev,
+          position: new THREE.Vector3(pos.x, pos.y, pos.z),
+          rotation: newRotation,
+          isColliding
+        }));
+        
+        // Handle collision feedback
+        if (isColliding) {
+          const walls = scene.children.filter(child => 
+            child instanceof THREE.Mesh && 
+            child.material instanceof THREE.MeshStandardMaterial &&
+            child.position.y === 0.5
+          ) as THREE.Mesh[];
+          
+          walls.forEach(wall => {
+            const material = wall.material as THREE.MeshStandardMaterial;
+            material.emissive.setHex(0x330000);
+            setTimeout(() => material.emissive.setHex(0x000000), 100);
+          });
+        }
       }
       
       renderer.render(scene, camera);
     };
 
-    animate();
+    animate(0);
 
     // Handle window resize
     const handleResize = () => {
