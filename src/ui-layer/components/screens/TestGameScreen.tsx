@@ -54,27 +54,33 @@ export const TestGameScreen: React.FC = () => {
       const groundColliderDesc = RAPIER.ColliderDesc.cuboid(10.0, 0.1, 10.0);
       world.createCollider(groundColliderDesc);
       
-      // Create wall colliders
+      // Create walls
+      const wallColliderDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 10.0);
+      
       // Left wall
-      const leftWallDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 10.0);
-      leftWallDesc.translation = {x: -5, y: 0.5, z: 0};
-      world.createCollider(leftWallDesc);
+      wallColliderDesc.setTranslation(-5, 0.5, 0);
+      world.createCollider(wallColliderDesc);
       
       // Right wall
-      const rightWallDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 10.0);
-      rightWallDesc.translation = {x: 5, y: 0.5, z: 0};
-      world.createCollider(rightWallDesc);
+      wallColliderDesc.setTranslation(5, 0.5, 0);
+      world.createCollider(wallColliderDesc);
       
       // Create player rigid body
-      const playerBodyDesc = RAPIER.RigidBodyDesc.dynamic();
-      playerBodyDesc.translation = {x: 0, y: 1, z: 0};
+      const playerBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(0, 1, 0)
+        .setLinearDamping(5.0) // Add damping to prevent sliding
+        .setAngularDamping(1.0);
+      
       const playerBody = world.createRigidBody(playerBodyDesc);
       
-      // Add player collider
-      const playerColliderDesc = RAPIER.ColliderDesc.ball(0.5);
+      // Create player collider (capsule for better movement)
+      const playerColliderDesc = RAPIER.ColliderDesc.capsule(0.5, 0.2); // height, radius
       world.createCollider(playerColliderDesc, playerBody);
       
       playerBodyRef.current = playerBody;
+      
+      // Lock rotation except around Y axis
+      playerBody.setEnabledRotations(false, true, false, true);
     };
     
     initPhysics();
@@ -91,7 +97,11 @@ export const TestGameScreen: React.FC = () => {
   }, []);
   
   useEffect(() => {
-    if (!canvasRef.current) return;
+    console.log('Initializing scene...');
+    if (!canvasRef.current) {
+      console.log('No canvas ref, skipping initialization');
+      return;
+    }
 
     // Initialize Three.js scene
     const scene = new THREE.Scene();
@@ -168,56 +178,90 @@ export const TestGameScreen: React.FC = () => {
 
     // Handle keyboard input
     const handleKeyDown = (event: KeyboardEvent) => {
-      event.preventDefault(); // Prevent browser scrolling
+      event.preventDefault();
+      let newKeys = { ...keys };
       
       switch(event.code) {
         case 'ArrowUp':
         case 'KeyW':
-          setKeys(prev => ({ ...prev, forward: true }));
+          newKeys.forward = true;
           break;
         case 'ArrowDown':
         case 'KeyS':
-          setKeys(prev => ({ ...prev, backward: true }));
+          newKeys.backward = true;
           break;
         case 'ArrowLeft':
         case 'KeyA':
-          setKeys(prev => ({ ...prev, left: true }));
+          newKeys.left = true;
           break;
         case 'ArrowRight':
         case 'KeyD':
-          setKeys(prev => ({ ...prev, right: true }));
+          newKeys.right = true;
           break;
+      }
+      
+      // Only update if keys changed
+      if (JSON.stringify(newKeys) !== JSON.stringify(keys)) {
+        console.log('%cKeys:', 'color: #2196F3; font-weight: bold', newKeys);
+        setKeys(newKeys);
       }
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
+      event.preventDefault();
+      let newKeys = { ...keys };
+      
       switch(event.code) {
         case 'ArrowUp':
         case 'KeyW':
-          setKeys(prev => ({ ...prev, forward: false }));
+          newKeys.forward = false;
           break;
         case 'ArrowDown':
         case 'KeyS':
-          setKeys(prev => ({ ...prev, backward: false }));
+          newKeys.backward = false;
           break;
         case 'ArrowLeft':
         case 'KeyA':
-          setKeys(prev => ({ ...prev, left: false }));
+          newKeys.left = false;
           break;
         case 'ArrowRight':
         case 'KeyD':
-          setKeys(prev => ({ ...prev, right: false }));
+          newKeys.right = false;
           break;
+      }
+      
+      // Only update if keys changed
+      if (JSON.stringify(newKeys) !== JSON.stringify(keys)) {
+        console.log('%cKeys:', 'color: #2196F3; font-weight: bold', newKeys);
+        setKeys(newKeys);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    const canvas = canvasRef.current;
+    canvas.addEventListener('keydown', handleKeyDown);
+    canvas.addEventListener('keyup', handleKeyUp);
 
     // Animation loop
     let lastTime = 0;
+    let animationFrameId: number;
+    let frameCount = 0;
+    
     const animate = (time: number) => {
-      requestAnimationFrame(animate);
+      // Request next frame first
+      animationFrameId = requestAnimationFrame(animate);
+      
+      // Debug animation and physics state every 60 frames
+      if (frameCount % 60 === 0) {
+        console.log('%cFrame:', 'color: #4CAF50; font-weight: bold', {
+          number: frameCount,
+          physics: {
+            world: worldRef.current ? 'exists' : 'null',
+            playerBody: playerBodyRef.current ? 'exists' : 'null'
+          }
+        });
+      }
+      frameCount++;
+      
       const deltaTime = (time - lastTime) / 1000; // Convert to seconds
       lastTime = time;
       
@@ -226,47 +270,96 @@ export const TestGameScreen: React.FC = () => {
         const world = worldRef.current;
         const playerBody = playerBodyRef.current;
         
+        // Step the physics world
+        world.step();
+        
+        // Get current physics state
+        const physicsState = {
+          position: playerBody.translation(),
+          velocity: playerBody.linvel()
+        };
+        
+        // Only debug log if there's movement or key input
+        const isMoving = Object.values(keys).some(key => key) || 
+                        Math.abs(physicsState.velocity.x) > 0.1 || 
+                        Math.abs(physicsState.velocity.z) > 0.1;
+        
+        if (isMoving) {
+          console.log('%cState:', 'color: #4CAF50; font-weight: bold', {
+            keys,
+            position: {
+              x: physicsState.position.x.toFixed(2),
+              y: physicsState.position.y.toFixed(2),
+              z: physicsState.position.z.toFixed(2)
+            },
+            velocity: {
+              x: physicsState.velocity.x.toFixed(2),
+              y: physicsState.velocity.y.toFixed(2),
+              z: physicsState.velocity.z.toFixed(2)
+            }
+          });
+        }
+        
         // Handle rotation first
         let newRotation = gameState.rotation;
-        if (keys.left) newRotation += 2 * deltaTime;
-        if (keys.right) newRotation -= 2 * deltaTime;
+        const rotationSpeed = 3.0;
+        if (keys.left) newRotation += rotationSpeed * deltaTime;
+        if (keys.right) newRotation -= rotationSpeed * deltaTime;
         
         // Handle movement
-        const speed = 10.0; // Increased speed for better responsiveness
+        const speed = 50.0; // Increased for better response
         const moveDirection = new THREE.Vector3(0, 0, 0);
         
         if (keys.forward) moveDirection.z = -1; // Forward
         if (keys.backward) moveDirection.z = 1;  // Backward
         
-        if (moveDirection.length() > 0) {
+        // Apply movement if any movement keys are pressed
+        if (keys.forward || keys.backward) {
           // Apply rotation to movement vector
           moveDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), newRotation);
-          moveDirection.multiplyScalar(speed);
+          moveDirection.multiplyScalar(speed); // Keep consistent force
           
           const impulse = {
             x: moveDirection.x,
             y: 0,
             z: moveDirection.z
           };
-          playerBody.applyImpulse(impulse, true);
+          
+          console.log('%cMovement:', 'color: #FF9800; font-weight: bold', {
+            impulse,
+            rotation: newRotation.toFixed(2),
+            deltaTime: deltaTime.toFixed(3),
+            keys: JSON.stringify(keys)
+          });
+          
+          // Apply force instead of impulse for smoother movement
+          playerBody.addForce(impulse, true);
         }
         
-        // Step the physics world
-        world.step();
-        
-        // Cache physics state
+        // Update camera position and rotation
         const pos = playerBody.translation();
-        const vel = playerBody.linvel();
-        
-        // Apply damping
-        playerBody.setLinvel(
-          {
-            x: vel.x * 0.8,
-            y: 0,
-            z: vel.z * 0.8
-          },
-          true
+        camera.position.set(
+          pos.x,
+          pos.y + 0.5, // Slightly above the capsule
+          pos.z
         );
+        
+        // Smoothly interpolate camera rotation
+        const currentRotation = camera.rotation.y;
+        const targetRotation = newRotation;
+        camera.rotation.y = currentRotation + (targetRotation - currentRotation) * 0.1;
+        
+        // Apply velocity damping when not moving
+        if (!keys.forward && !keys.backward) {
+          playerBody.setLinvel(
+            {
+              x: physicsState.velocity.x * 0.9,
+              y: 0,
+              z: physicsState.velocity.z * 0.9
+            },
+            true
+          );
+        }
         
         // Check collisions
         const radius = 0.5;
@@ -278,18 +371,26 @@ export const TestGameScreen: React.FC = () => {
         ];
         
         const isColliding = rayDirections.some(dir => {
-          const ray = new RAPIER.Ray(pos, dir);
+          const ray = new RAPIER.Ray(physicsState.position, dir);
           return world.castRay(ray, radius * 2, true) !== null;
         });
         
         // Update camera for first-person view
-        camera.position.set(pos.x, pos.y + 1, pos.z); // Eye level
+        camera.position.set(
+          physicsState.position.x,
+          physicsState.position.y + 1,
+          physicsState.position.z
+        );
         camera.rotation.y = newRotation;
         
-        // Update React state less frequently
+        // Update React state
         setGameState(prev => ({
           ...prev,
-          position: new THREE.Vector3(pos.x, pos.y, pos.z),
+          position: new THREE.Vector3(
+            physicsState.position.x,
+            physicsState.position.y,
+            physicsState.position.z
+          ),
           rotation: newRotation,
           isColliding
         }));
@@ -310,10 +411,9 @@ export const TestGameScreen: React.FC = () => {
         }
       }
       
+      // Always render at the end with the final state
       renderer.render(scene, camera);
     };
-
-    animate(0);
 
     // Handle window resize
     const handleResize = () => {
@@ -329,19 +429,29 @@ export const TestGameScreen: React.FC = () => {
 
     window.addEventListener('resize', handleResize);
 
+    // Start animation loop
+    console.log('Starting animation loop...');
+    animate(0);
+    
     // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      canvas.removeEventListener('keydown', handleKeyDown);
+      canvas.removeEventListener('keyup', handleKeyUp);
+      cancelAnimationFrame(animationFrameId);
       renderer.dispose();
-
     };
   }, []);
 
   return (
     <div className={styles.container}>
-      <canvas ref={canvasRef} className={styles.canvas} />
+      <canvas 
+        ref={canvasRef} 
+        className={styles.canvas} 
+        tabIndex={0} 
+        onFocus={() => console.log('Canvas focused')} 
+        onBlur={() => console.log('Canvas lost focus')} 
+      />
       {/* Simple HUD */}
       <div className={styles.hud}>
         <div style={{ 
