@@ -80,8 +80,8 @@ export const TestGameScreen: React.FC = () => {
       // Create player rigid body
       const playerBodyDesc = RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(0, 1, 0)
-        .setLinearDamping(1.5) // Reduce further for smoother movement
-        .setAngularDamping(0.5); // Reduce for smoother rotation
+        .setLinearDamping(3.0) // Increased from 1.5 to 3.0 for better stopping
+        .setAngularDamping(0.5);
       
       const playerBody = world.createRigidBody(playerBodyDesc);
       
@@ -358,7 +358,8 @@ export const TestGameScreen: React.FC = () => {
         if (keysRef.current.right) newRotation -= rotationSpeed * deltaTime;
         
         // Handle movement
-        const speed = 15.0; // Reduced further for less abrupt movement
+        const speed = 8.0; 
+        const maxVelocity = 3.0; // Maximum velocity
         const moveDirection = new THREE.Vector3(0, 0, 0);
         
         if (keysRef.current.forward) moveDirection.z = -1; // Forward
@@ -372,63 +373,71 @@ export const TestGameScreen: React.FC = () => {
           currentVel.z * currentVel.z
         );
         
-        // Apply movement if any movement keys are pressed
+        // CHANGED: Use velocity-based control instead of force-based
+        // This ensures the player stops when keys are released
         if (keysRef.current.forward || keysRef.current.backward) {
           // Apply rotation to movement vector
           moveDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), newRotation);
-          moveDirection.multiplyScalar(speed); // Keep consistent force
           
-          const impulse = {
-            x: moveDirection.x,
+          // Calculate target velocity instead of force
+          const targetVelocity = {
+            x: moveDirection.x * speed,
             y: 0,
-            z: moveDirection.z
+            z: moveDirection.z * speed
           };
           
-          console.log('%cMovement:', 'color: #FF9800; font-weight: bold', {
-            impulse,
-            rotation: newRotation.toFixed(2),
-            deltaTime: deltaTime.toFixed(3),
-            keys: JSON.stringify(keysRef.current)
-          });
-          
-          // Apply force instead of impulse for smoother movement
-          playerBody.addForce(impulse, true);
-          
-          // Add debug visualization of force application
-          console.log('%cForce Applied:', 'color: #FF0000; font-weight: bold', {
-            impulse,
-            playerPosition: {
-              x: physicsState.position.x.toFixed(2),
-              y: physicsState.position.y.toFixed(2),
-              z: physicsState.position.z.toFixed(2)
-            },
-            currentVelocity: {
-              x: physicsState.velocity.x.toFixed(2),
-              y: physicsState.velocity.y.toFixed(2),
-              z: physicsState.velocity.z.toFixed(2)
-            }
-          });
+          // Smoothly interpolate current velocity toward target velocity
+          const lerpFactor = 0.2; // How quickly to reach target velocity
+          const newVelocity = {
+            x: currentVel.x + (targetVelocity.x - currentVel.x) * lerpFactor,
+            y: currentVel.y,
+            z: currentVel.z + (targetVelocity.z - currentVel.z) * lerpFactor
+          };
           
           // Apply velocity clamping to prevent excessive speed
-          const maxVelocity = 5.0; // Maximum velocity in any direction
-          if (velocityMagnitude > maxVelocity) {
-            const scaleFactor = maxVelocity / velocityMagnitude;
-            playerBody.setLinvel(
-              {
-                x: currentVel.x * scaleFactor,
-                y: currentVel.y, // Don't clamp vertical velocity (jumping/falling)
-                z: currentVel.z * scaleFactor
-              },
-              true
-            );
+          const newVelocityMagnitude = Math.sqrt(
+            newVelocity.x * newVelocity.x + 
+            newVelocity.z * newVelocity.z
+          );
+          
+          if (newVelocityMagnitude > maxVelocity) {
+            const scaleFactor = maxVelocity / newVelocityMagnitude;
+            newVelocity.x *= scaleFactor;
+            newVelocity.z *= scaleFactor;
+          }
+          
+          // Set the velocity directly instead of applying force
+          playerBody.setLinvel(newVelocity, true);
+          
+          console.log('%cMovement:', 'color: #FF9800; font-weight: bold', {
+            targetVelocity,
+            newVelocity,
+            rotation: newRotation.toFixed(2),
+            keys: JSON.stringify(keysRef.current)
+          });
+        } else {
+          // CHANGED: When no movement keys are pressed, rapidly decelerate to a stop
+          // Apply a strong braking force - reduce velocity by 85% each frame
+          playerBody.setLinvel(
+            {
+              x: currentVel.x * 0.15,
+              y: currentVel.y,
+              z: currentVel.z * 0.15
+            },
+            true
+          );
+          
+          // If nearly stopped, just set to zero to prevent drift
+          if (velocityMagnitude < 0.1) {
+            playerBody.setLinvel({ x: 0, y: currentVel.y, z: 0 }, true);
           }
         }
         
         // Update camera position and rotation with smoothing - MOVED OUTSIDE CONDITIONAL
         const targetPosition = new THREE.Vector3(
-          pos.x,
+          pos.x - Math.sin(newRotation) * 0.3, // Position slightly behind
           pos.y + 0.5, // Slightly above the capsule
-          pos.z
+          pos.z - Math.cos(newRotation) * 0.3  // Position slightly behind
         );
         
         // Get current camera position
@@ -436,10 +445,9 @@ export const TestGameScreen: React.FC = () => {
         camera.getWorldPosition(currentPosition);
         
         // Apply smooth lerping to camera position with much smaller factor
-        const positionLerpFactor = Math.min(
-          0.03 + (velocityMagnitude * 0.005), // Much smaller base value and velocity influence
-          0.1 // Lower cap for smoother transitions
-        );
+        const positionLerpFactor = velocityMagnitude < 0.1 
+          ? 0.1  // Quick response when stationary
+          : Math.max(0.01, 0.05 - (velocityMagnitude * 0.01)); // Smoother at higher speeds
         currentPosition.lerp(targetPosition, positionLerpFactor);
         camera.position.copy(currentPosition);
         
@@ -469,18 +477,6 @@ export const TestGameScreen: React.FC = () => {
             // Update line geometry
             trailGeometry.setFromPoints(trailPointsRef.current);
           }
-        }
-        
-        // Improve velocity damping when not moving to stop more quickly
-        if (!keysRef.current.forward && !keysRef.current.backward) {
-          playerBody.setLinvel(
-            {
-              x: physicsState.velocity.x * 0.8, // More aggressive damping (was 0.9)
-              y: 0,
-              z: physicsState.velocity.z * 0.8  // More aggressive damping (was 0.9)
-            },
-            true
-          );
         }
         
         // Check collisions
