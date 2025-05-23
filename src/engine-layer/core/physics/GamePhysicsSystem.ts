@@ -83,8 +83,8 @@ export class GamePhysicsSystem {
     return this.world;
   }
 
-  step(): void {
-    this.safeWorldStep(this.world);
+  step(): boolean {
+    return this.safeWorldStep(this.world);
   }
 
   dispose(): void {
@@ -139,9 +139,9 @@ export class GamePhysicsSystem {
   }
 
   // Safe helper methods
-  safeGetTranslation(body: RAPIER.RigidBody | null): { x: number, y: number, z: number } {
+  safeGetTranslation(body: RAPIER.RigidBody | null): { x: number, y: number, z: number } | null {
     try {
-      if (!body) return { x: 0, y: 0, z: 0 };
+      if (!body || !this.world || this.cleanup) return null;
       const translation = body.translation();
       return { 
         x: translation.x, 
@@ -150,13 +150,13 @@ export class GamePhysicsSystem {
       };
     } catch (e) {
       console.error("Error getting translation:", e);
-      return { x: 0, y: 0, z: 0 };
+      return null;
     }
   }
 
-  safeGetLinvel(body: RAPIER.RigidBody | null): { x: number, y: number, z: number } {
+  safeGetLinvel(body: RAPIER.RigidBody | null): { x: number, y: number, z: number } | null {
     try {
-      if (!body) return { x: 0, y: 0, z: 0 };
+      if (!body || !this.world || this.cleanup) return null;
       const linvel = body.linvel();
       return { 
         x: linvel.x, 
@@ -165,7 +165,7 @@ export class GamePhysicsSystem {
       };
     } catch (e) {
       console.error("Error getting linear velocity:", e);
-      return { x: 0, y: 0, z: 0 };
+      return null;
     }
   }
 
@@ -173,12 +173,14 @@ export class GamePhysicsSystem {
     body: RAPIER.RigidBody | null, 
     velocity: { x: number, y: number, z: number }, 
     wake: boolean
-  ): void {
+  ): boolean {
     try {
-      if (!body) return;
+      if (!body || !this.world || this.cleanup) return false;
       body.setLinvel(velocity, wake);
+      return true;
     } catch (e) {
       console.error("Error setting linear velocity:", e);
+      return false;
     }
   }
 
@@ -189,7 +191,7 @@ export class GamePhysicsSystem {
     solid: boolean
   ): RAPIER.RayColliderHit | null {
     try {
-      if (!this.world) return null;
+      if (!this.world || this.cleanup) return null;
       const ray = new RAPIER.Ray(origin, direction);
       return this.world.castRay(ray, maxToi, solid);
     } catch (e) {
@@ -198,12 +200,14 @@ export class GamePhysicsSystem {
     }
   }
 
-  private safeWorldStep(world: RAPIER.World | null): void {
+  private safeWorldStep(world: RAPIER.World | null): boolean {
     try {
-      if (!world) return;
+      if (!world || this.cleanup) return false;
       world.step();
+      return true;
     } catch (e) {
       console.error("Error stepping world:", e);
+      return false;
     }
   }
 } 

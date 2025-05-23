@@ -9,6 +9,7 @@ export class GameLoop {
   private lastTime = 0;
   private frameCount = 0;
   private running = false;
+  private disposed = false;
   
   private physicsSystem: GamePhysicsSystem;
   private renderSystem: GameRenderSystem;
@@ -34,7 +35,7 @@ export class GameLoop {
   }
 
   start(onGameStateUpdate?: (state: GameState) => void): void {
-    if (this.running) return;
+    if (this.running || this.disposed) return;
     this.running = true;
     this.onGameStateUpdate = onGameStateUpdate;
     this.lastTime = 0;
@@ -50,17 +51,40 @@ export class GameLoop {
     }
   }
 
+  dispose(): void {
+    this.disposed = true;
+    this.stop();
+    // Clear references to systems
+    this.onGameStateUpdate = undefined;
+  }
+
   private animate = (time: number): void => {
-    // Request next frame first
-    this.animationFrameId = requestAnimationFrame(this.animate);
+    // Early exit if not running or disposed
+    if (!this.running || this.disposed) {
+      return;
+    }
+
+    // Validate systems are still active before proceeding
+    const world = this.physicsSystem.getWorld();
+    const playerBody = this.physicsSystem.getPlayerBody();
+    if (!world || !playerBody) {
+      console.warn('Physics systems not available, stopping game loop');
+      this.stop();
+      return;
+    }
+
+    // Request next frame only if still running
+    if (this.running && !this.disposed) {
+      this.animationFrameId = requestAnimationFrame(this.animate);
+    }
     
     // Debug animation and physics state every 60 frames
     if (this.frameCount % 60 === 0) {
       console.log('%cFrame:', 'color: #4CAF50; font-weight: bold', {
         number: this.frameCount,
         physics: {
-          world: this.physicsSystem.getWorld() ? 'exists' : 'null',
-          playerBody: this.physicsSystem.getPlayerBody() ? 'exists' : 'null'
+          world: world ? 'exists' : 'null',
+          playerBody: playerBody ? 'exists' : 'null'
         }
       });
     }
@@ -69,9 +93,8 @@ export class GameLoop {
     const deltaTime = (time - this.lastTime) / 1000; // Convert to seconds
     this.lastTime = time;
     
-    // Update physics world
-    const playerBody = this.physicsSystem.getPlayerBody();
-    if (this.physicsSystem.getWorld() && playerBody) {
+    // Update physics world (with additional safety check)
+    if (world && playerBody && !this.disposed) {
       // PHASE 1: Gather input and calculate intended movement
       const keys = this.inputController.getKeys();
       
@@ -94,6 +117,14 @@ export class GameLoop {
       // PHASE 2: Cache current physics state before any modifications
       const currentPos = this.physicsSystem.safeGetTranslation(playerBody);
       const currentVel = this.physicsSystem.safeGetLinvel(playerBody);
+      
+      // Check if physics operations failed (system disposed)
+      if (!currentPos || !currentVel) {
+        console.warn('Physics operations failed, stopping game loop');
+        this.stop();
+        return;
+      }
+      
       const velocityMagnitude = Math.sqrt(
         currentVel.x * currentVel.x + 
         currentVel.z * currentVel.z
@@ -101,6 +132,11 @@ export class GameLoop {
       
       // PHASE 3: Step the physics world once
       this.physicsSystem.step();
+      
+      // Check if we're still running after physics step
+      if (!this.running || this.disposed) {
+        return;
+      }
       
       // PHASE 4: Update physics body based on input (after stepping)
       // Calculate the new velocity based on input
@@ -160,6 +196,13 @@ export class GameLoop {
       // Get the updated position after velocity change
       const newPos = this.physicsSystem.safeGetTranslation(playerBody);
       
+      // Check if position retrieval failed
+      if (!newPos) {
+        console.warn('Failed to get updated position, stopping game loop');
+        this.stop();
+        return;
+      }
+      
       // Check collisions using the cached position
       const radius = 0.5;
       const isColliding = [
@@ -208,13 +251,15 @@ export class GameLoop {
       };
       
       // Notify the UI about state changes
-      if (this.onGameStateUpdate) {
+      if (this.onGameStateUpdate && !this.disposed) {
         this.onGameStateUpdate(this.gameState);
       }
     }
     
-    // Always render at the end with the final state
-    this.renderSystem.render();
+    // Always render at the end with the final state (if not disposed)
+    if (!this.disposed) {
+      this.renderSystem.render();
+    }
   };
 
   getGameState(): GameState {

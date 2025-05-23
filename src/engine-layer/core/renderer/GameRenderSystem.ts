@@ -163,7 +163,9 @@ export class GameRenderSystem {
       mountain.position.set(pos.x, pos.scale * 10 / 2, pos.z);
       mountain.scale.set(pos.scale, pos.scale, pos.scale);
       mountain.castShadow = true;
-      this.scene.add(mountain);
+      if (this.scene) {
+        this.scene.add(mountain);
+      }
     });
     
     // Add some distant trees
@@ -196,7 +198,9 @@ export class GameRenderSystem {
       const z = Math.cos(angle) * distance;
       
       treeGroup.position.set(x, 0, z);
-      this.scene.add(treeGroup);
+      if (this.scene) {
+        this.scene.add(treeGroup);
+      }
     }
   }
 
