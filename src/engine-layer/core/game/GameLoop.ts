@@ -192,6 +192,13 @@ export class GameLoop {
       // Handle collision feedback
       this.renderSystem.handleCollisionFeedback(isColliding);
       
+      // Get current ground position from renderer for physics sync
+      const groundPosition = this.renderSystem.getGroundPosition();
+      if (groundPosition && (groundPosition.x !== 0 || groundPosition.z !== 0)) {
+        // Reposition physics ground to match rendering ground
+        this.physicsSystem.repositionGround(groundPosition.x, groundPosition.z);
+      }
+      
       // Update game state
       this.gameState = {
         position: new THREE.Vector3(newPos.x, newPos.y, newPos.z),

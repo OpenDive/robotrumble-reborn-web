@@ -4,7 +4,9 @@ import * as THREE from 'three';
 export class GamePhysicsSystem {
   private world: RAPIER.World | null = null;
   private playerBody: RAPIER.RigidBody | null = null;
+  private groundCollider: RAPIER.Collider | null = null;
   private cleanup = false;
+  private groundSize = 500; // Match the size in RenderSystem
 
   async initialize(): Promise<void> {
     await RAPIER.init();
@@ -15,8 +17,7 @@ export class GamePhysicsSystem {
     this.world = new RAPIER.World({x: 0.0, y: -9.81, z: 0.0});
     
     // Create ground collider
-    const groundColliderDesc = RAPIER.ColliderDesc.cuboid(10.0, 0.1, 10.0);
-    this.world.createCollider(groundColliderDesc);
+    this.createGroundCollider();
     
     // Create walls
     const wallColliderDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 10.0);
@@ -45,6 +46,35 @@ export class GamePhysicsSystem {
     this.playerBody.setEnabledRotations(false, true, false, true);
   }
 
+  // Create the ground collider
+  private createGroundCollider(offsetX: number = 0, offsetZ: number = 0): void {
+    if (!this.world) return;
+    
+    // Remove existing ground collider if it exists
+    if (this.groundCollider && this.world) {
+      this.world.removeCollider(this.groundCollider, true);
+      this.groundCollider = null;
+    }
+    
+    // Create new ground collider
+    const groundColliderDesc = RAPIER.ColliderDesc.cuboid(
+      this.groundSize / 2, // half-width in x
+      0.1,                 // half-height in y
+      this.groundSize / 2  // half-depth in z
+    );
+    
+    // Apply offset if provided
+    groundColliderDesc.setTranslation(offsetX, -0.1, offsetZ);
+    
+    // Create the collider
+    this.groundCollider = this.world.createCollider(groundColliderDesc);
+  }
+
+  // Method to reposition the ground physics collider
+  repositionGround(x: number, z: number): void {
+    this.createGroundCollider(x, z);
+  }
+
   getPlayerBody(): RAPIER.RigidBody | null {
     return this.playerBody;
   }
@@ -63,6 +93,7 @@ export class GamePhysicsSystem {
       try {
         // First set the current player body reference to null
         this.playerBody = null;
+        this.groundCollider = null;
         
         // Safely remove and free all colliders
         if (this.world.colliders) {
