@@ -97,17 +97,21 @@ export class GameRenderSystem {
     const currentPosition = new THREE.Vector3();
     this.camera.getWorldPosition(currentPosition);
     
-    // Apply smooth lerping to camera position
-    const positionLerpFactor = velocityMagnitude < 0.1 
-      ? 0.1  // Quick response when stationary
-      : Math.max(0.01, 0.05 - (velocityMagnitude * 0.01)); // Smoother at higher speeds
+    // Apply smooth lerping to camera position with a more consistent factor
+    // Use a base smoothing factor that's less dependent on velocity
+    const baseSmoothFactor = 0.12;
+    // Add a small velocity influence but with less impact than before
+    const velocityInfluence = Math.min(0.02, velocityMagnitude * 0.005);
+    // Final lerp factor has a stable base with subtle velocity influence
+    const positionLerpFactor = baseSmoothFactor - velocityInfluence;
+    
     currentPosition.lerp(targetPosition, positionLerpFactor);
     this.camera.position.copy(currentPosition);
     
-    // Smoothly interpolate camera rotation
+    // Smoothly interpolate camera rotation with the same consistent approach
     const currentRotation = this.camera.rotation.y;
     const targetRotation = rotation;
-    const rotationLerpFactor = 0.05; // Reduced for smoother rotation
+    const rotationLerpFactor = 0.08; // Slightly increased for smoother rotation
     this.camera.rotation.y = currentRotation + (targetRotation - currentRotation) * rotationLerpFactor;
   }
 

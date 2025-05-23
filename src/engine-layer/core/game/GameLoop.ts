@@ -82,8 +82,10 @@ export class GameLoop {
       if (keys.right) newRotation -= rotationSpeed * deltaTime;
       
       // Handle movement
-      const speed = 8.0; 
+      const speed = 8.0;
       const maxVelocity = 3.0; // Maximum velocity
+      const accelerationFactor = 0.2; // How quickly to reach target velocity
+      const decelerationFactor = 0.15; // How quickly to slow down (smoother than before)
       const moveDirection = new THREE.Vector3(0, 0, 0);
       
       if (keys.forward) moveDirection.z = -1; // Forward
@@ -116,11 +118,10 @@ export class GameLoop {
         };
         
         // Smoothly interpolate current velocity toward target velocity
-        const lerpFactor = 0.2; // How quickly to reach target velocity
         newVelocity = {
-          x: currentVel.x + (targetVelocity.x - currentVel.x) * lerpFactor,
+          x: currentVel.x + (targetVelocity.x - currentVel.x) * accelerationFactor,
           y: currentVel.y,
-          z: currentVel.z + (targetVelocity.z - currentVel.z) * lerpFactor
+          z: currentVel.z + (targetVelocity.z - currentVel.z) * accelerationFactor
         };
         
         // Log movement info
@@ -131,18 +132,13 @@ export class GameLoop {
           keys: JSON.stringify(keys)
         });
       } else {
-        // Apply strong braking when no movement keys are pressed
+        // Apply gradual deceleration when no movement keys are pressed
+        const targetStopVelocity = { x: 0, y: currentVel.y, z: 0 };
         newVelocity = {
-          x: currentVel.x * 0.15,
+          x: currentVel.x + (targetStopVelocity.x - currentVel.x) * decelerationFactor,
           y: currentVel.y,
-          z: currentVel.z * 0.15
+          z: currentVel.z + (targetStopVelocity.z - currentVel.z) * decelerationFactor
         };
-        
-        // Stop completely if nearly stopped
-        if (velocityMagnitude < 0.1) {
-          newVelocity.x = 0;
-          newVelocity.z = 0;
-        }
       }
       
       // Apply velocity clamping
