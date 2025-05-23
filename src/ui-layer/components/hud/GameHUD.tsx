@@ -1,6 +1,7 @@
 import React from 'react';
+import { DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
-import { DetectedMarker } from '../../../engine-layer/core/ar/SimpleARDetector';
+import styles from './GameHUD.module.css';
 
 interface GameHUDProps {
   gameState: GameState;

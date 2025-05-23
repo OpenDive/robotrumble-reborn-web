@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DetectedMarker } from './SimpleARDetector';
+import { DetectedMarker } from './EnhancedARDetector';
 
 interface ARMarkerConfig {
   baseHeight: number;     // Base height in world units for scaling
@@ -231,9 +231,12 @@ export class ARMarkerRenderer {
     centerPos.set(0, 1, -3); // Right in front of camera at eye level
     console.log('DEBUG: Using fixed position:', centerPos);
 
-    // Apply pose data if available (using MarkerVisualizer's exact approach)
+    // Apply pose data if available (using EnhancedARDetector's Three.js format)
     if (false && marker.pose) { // Temporarily disabled for debugging
-      // Pose calculations disabled for debugging
+      // Note: EnhancedARDetector uses Three.js types (Vector3, Euler) instead of raw arrays
+      // If enabled, we would use marker.pose.translation and marker.pose.rotation directly
+      // since they are already Three.js objects
+      // console.log('Pose available:', marker.pose.translation, marker.pose.rotation, 'confidence:', marker.pose.confidence);
     } else {
       console.log('Using default rotation and scale for debugging');
       // Reset rotation and scale if no pose data

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DetectedMarker } from '../ar/SimpleARDetector';
+import { DetectedMarker } from '../ar/EnhancedARDetector';
 import { ARMarkerRenderer } from '../ar/ARMarkerRenderer';
 
 export class GameRenderSystem {
