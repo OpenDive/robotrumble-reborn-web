@@ -10,6 +10,7 @@ import { GameState, KeyState } from '../../../shared/types/GameTypes';
 
 export const TestGameScreen: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   
   // System refs
   const physicsSystemRef = useRef<GamePhysicsSystem | null>(null);
@@ -36,6 +37,72 @@ export const TestGameScreen: React.FC = () => {
     left: false,
     right: false
   });
+  
+  // AR mode state
+  const [arMode, setArMode] = useState(false);
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const [webcamError, setWebcamError] = useState<string | null>(null);
+  
+  // Debug state for testing video visibility
+  const [debugHideCanvas, setDebugHideCanvas] = useState(false);
+  
+  // AR mode toggle handler
+  const toggleARMode = async () => {
+    if (!arMode) {
+      // Entering AR mode - start webcam
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment' // Prefer back camera for AR
+          } 
+        });
+        setWebcamStream(stream);
+        setWebcamError(null);
+        
+        // Set up video element
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          
+          // Wait for video to load before enabling AR mode
+          const onVideoLoaded = () => {
+            console.log('Video loaded, setting up AR mode');
+            setArMode(true);
+            
+            // Update render system to AR mode (no video element needed for CSS approach)
+            if (renderSystemRef.current) {
+              renderSystemRef.current.setARMode(true);
+            }
+            
+            // Remove event listener
+            videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
+          };
+          
+          videoRef.current.addEventListener('loadeddata', onVideoLoaded);
+        }
+      } catch (error) {
+        console.error('Failed to access webcam:', error);
+        setWebcamError('Failed to access camera. Please check permissions.');
+      }
+    } else {
+      // Exiting AR mode - stop webcam
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+        setWebcamStream(null);
+      }
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      
+      setArMode(false);
+      setWebcamError(null);
+      
+      // Update render system to normal mode and remove video element
+      if (renderSystemRef.current) {
+        renderSystemRef.current.setARMode(false);
+      }
+    }
+  };
   
   useEffect(() => {
     // Prevent double initialization during React Strict Mode
@@ -126,6 +193,11 @@ export const TestGameScreen: React.FC = () => {
       console.log('Starting cleanup of game systems...');
       window.removeEventListener('resize', handleResize);
       
+      // Stop webcam stream if active
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+      }
+      
       // STEP 1: Stop and dispose game loop first (this prevents further system access)
       if (gameLoopRef.current) {
         console.log('Disposing game loop...');
@@ -159,19 +231,50 @@ export const TestGameScreen: React.FC = () => {
       cleanupInProgressRef.current = false;
       console.log('Game systems cleanup completed');
     };
-  }, []);
+  }, [webcamStream]);
 
   return (
     <div className={styles.container}>
+      {/* Video element for webcam feed - positioned behind canvas in AR mode */}
+      <video 
+        ref={videoRef}
+        style={{ 
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          zIndex: 1, // Behind canvas
+          display: arMode ? 'block' : 'none' // Only show in AR mode
+        }}
+        autoPlay
+        playsInline
+        muted
+      />
+      
       <canvas 
         ref={canvasRef} 
-        className={styles.canvas} 
+        className={`${styles.canvas} ${arMode ? styles.transparent : ''}`}
         tabIndex={0} 
+        style={{
+          position: 'relative',
+          zIndex: 2, // Above video
+          display: debugHideCanvas ? 'none' : 'block'
+        }}
       />
       
       {/* Game HUD */}
       <div className={styles.hud}>
-        <GameHUD gameState={gameState} keysState={keys} />
+        <GameHUD 
+          gameState={gameState} 
+          keysState={keys}
+          arMode={arMode}
+          onToggleAR={toggleARMode}
+          webcamError={webcamError}
+          debugHideCanvas={debugHideCanvas}
+          onToggleDebugCanvas={() => setDebugHideCanvas(!debugHideCanvas)}
+        />
       </div>
     </div>
   );

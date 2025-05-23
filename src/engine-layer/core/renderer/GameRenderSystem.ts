@@ -20,6 +20,10 @@ export class GameRenderSystem {
   private fogNear = 200;
   private fogFar = 500;
 
+  // AR mode support
+  private arMode = false;
+  private originalGroundMaterial: THREE.MeshStandardMaterial | null = null;
+
   initialize(canvas: HTMLCanvasElement): void {
     // Initialize Three.js scene
     this.scene = new THREE.Scene();
@@ -41,9 +45,12 @@ export class GameRenderSystem {
     // Setup renderer
     this.renderer = new THREE.WebGLRenderer({
       canvas: canvas,
-      antialias: true
+      antialias: true,
+      alpha: true, // Enable alpha channel for transparency
+      premultipliedAlpha: false // Proper alpha compositing with HTML elements
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setClearColor(0x87ceeb, 1); // Set initial clear color to sky blue
     this.renderer.shadowMap.enabled = true;
     
     // Add lighting
@@ -144,6 +151,10 @@ export class GameRenderSystem {
     this.ground = new THREE.Mesh(groundGeometry, groundMaterial);
     this.ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
     this.ground.receiveShadow = true;
+    
+    // Store original material for AR mode switching
+    this.originalGroundMaterial = groundMaterial;
+    
     this.scene.add(this.ground);
   }
 
@@ -436,5 +447,32 @@ export class GameRenderSystem {
       x: this.ground.position.x,
       z: this.ground.position.z
     };
+  }
+
+  setARMode(enabled: boolean): void {
+    this.arMode = enabled;
+    
+    if (!this.scene || !this.ground || !this.originalGroundMaterial || !this.renderer) return;
+    
+    if (enabled) {
+      // AR Mode: transparent background and semi-transparent ground
+      this.scene.background = null;
+      this.renderer.setClearColor(0x000000, 0); // Clear with transparent black
+      
+      // Create semi-transparent version of ground material
+      const arGroundMaterial = this.originalGroundMaterial.clone();
+      arGroundMaterial.transparent = true;
+      arGroundMaterial.opacity = 0.3; // Semi-transparent for AR
+      this.ground.material = arGroundMaterial;
+      
+      console.log('AR Mode enabled: transparent background and ground');
+    } else {
+      // Normal Mode: sky background and opaque ground
+      this.scene.background = new THREE.Color(0x87ceeb); // Sky blue background
+      this.renderer.setClearColor(0x87ceeb, 1); // Clear with opaque sky blue
+      this.ground.material = this.originalGroundMaterial;
+      
+      console.log('Normal Mode enabled: sky background and opaque ground');
+    }
   }
 } 
