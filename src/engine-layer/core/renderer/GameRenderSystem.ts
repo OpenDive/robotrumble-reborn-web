@@ -26,8 +26,9 @@ export class GameRenderSystem {
   private arMode = false;
   private originalGroundMaterial: THREE.MeshStandardMaterial | null = null;
   
-  // AR marker renderer
+  // AR marker renderer (optional, for debug visualization only)
   private arMarkerRenderer: ARMarkerRenderer | null = null;
+  private enableDebugMarkers = false; // Flag to control debug marker rendering
 
   initialize(canvas: HTMLCanvasElement): void {
     // Initialize Three.js scene
@@ -107,9 +108,11 @@ export class GameRenderSystem {
     // Add distant objects for testing
     this.addDistantObjects();
 
-    // Add AR marker renderer
-    this.arMarkerRenderer = new ARMarkerRenderer();
-    this.arMarkerRenderer.initialize(this.scene);
+    // Initialize AR marker renderer only if debug markers are enabled
+    if (this.enableDebugMarkers) {
+      this.arMarkerRenderer = new ARMarkerRenderer();
+      this.arMarkerRenderer.initialize(this.scene);
+    }
 
     // Add a trail visualization line with pre-allocated buffer
     const trailMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
@@ -377,7 +380,7 @@ export class GameRenderSystem {
       this.renderer = null;
     }
     
-    // Dispose AR marker renderer
+    // Dispose AR marker renderer if it exists
     if (this.arMarkerRenderer) {
       this.arMarkerRenderer.dispose();
       this.arMarkerRenderer = null;
@@ -389,6 +392,7 @@ export class GameRenderSystem {
     this.trailGeometry = null;
     this.trailPointsRef = [];
     this.ground = null;
+    this.enableDebugMarkers = false;
   }
 
   // Add the createGridTexture method later in the class
@@ -492,17 +496,18 @@ export class GameRenderSystem {
   }
   
   updateARMarkers(markers: DetectedMarker[]): void {
-    if (!this.arMarkerRenderer) {
+    // Only update debug markers if debug rendering is enabled
+    if (!this.enableDebugMarkers || !this.arMarkerRenderer) {
       return;
     }
 
-    // Set video element for coordinate calculations
-    // Note: We'll need to update this to get the video element reference
+    // Update debug marker visualization (for development/debugging purposes)
     this.arMarkerRenderer.updateMarkers(markers);
   }
 
   setVideoElement(videoElement: HTMLVideoElement | null): void {
-    if (this.arMarkerRenderer) {
+    // Only set video element for debug markers if enabled
+    if (this.enableDebugMarkers && this.arMarkerRenderer) {
       this.arMarkerRenderer.setVideoElement(videoElement);
     }
   }
@@ -519,5 +524,25 @@ export class GameRenderSystem {
    */
   getCamera(): THREE.Camera | null {
     return this.camera;
+  }
+
+  /**
+   * Enable or disable debug marker visualization
+   * @param enabled - Whether to show debug markers (cubes, axes, etc.)
+   */
+  setDebugMarkersEnabled(enabled: boolean): void {
+    if (enabled && !this.arMarkerRenderer && this.scene) {
+      // Create and initialize debug marker renderer
+      this.arMarkerRenderer = new ARMarkerRenderer();
+      this.arMarkerRenderer.initialize(this.scene);
+      this.enableDebugMarkers = true;
+      console.log('Debug markers enabled');
+    } else if (!enabled && this.arMarkerRenderer) {
+      // Dispose and remove debug marker renderer
+      this.arMarkerRenderer.dispose();
+      this.arMarkerRenderer = null;
+      this.enableDebugMarkers = false;
+      console.log('Debug markers disabled');
+    }
   }
 } 

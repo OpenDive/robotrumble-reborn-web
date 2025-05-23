@@ -16,6 +16,20 @@ export interface DetectedMarker {
 
 /**
  * Enhanced AR detector that integrates ArUco markers with 3D model rendering
+ * 
+ * ARCHITECTURE OVERVIEW:
+ * - This class handles BOTH marker detection AND 3D object management
+ * - Loads and positions GLTF models (keys, etc.) directly in the scene
+ * - Uses POSIT algorithm for accurate pose estimation with Three.js matrices
+ * - GameRenderSystem provides scene/camera but delegates AR object management here
+ * - ARMarkerRenderer is now optional and used only for debug visualization (cubes, axes)
+ * 
+ * RESPONSIBILITIES:
+ * - Marker detection using js-aruco
+ * - 3D model loading (GLTF with fallback procedural models)
+ * - Pose calculation and transformation matrix creation
+ * - Direct 3D object positioning and lifecycle management
+ * - Scene lighting for AR objects
  */
 export class EnhancedARDetector {
   private detector: any; // jsAruco.AR.Detector

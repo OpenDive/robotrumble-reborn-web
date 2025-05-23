@@ -12,6 +12,8 @@ interface GameHUDProps {
   debugHideCanvas: boolean;
   onToggleDebugCanvas: () => void;
   detectedMarkers: DetectedMarker[];
+  debugMarkersEnabled?: boolean;
+  onToggleDebugMarkers?: () => void;
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({ 
@@ -22,7 +24,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   webcamError,
   debugHideCanvas,
   onToggleDebugCanvas,
-  detectedMarkers
+  detectedMarkers,
+  debugMarkersEnabled = false,
+  onToggleDebugMarkers
 }) => {
   return (
     <>
@@ -102,6 +106,26 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             }}
           >
             {debugHideCanvas ? 'Show Canvas' : 'Hide Canvas'}
+          </button>
+        )}
+        
+        {/* Debug Markers Toggle (only show in AR mode) */}
+        {arMode && onToggleDebugMarkers && (
+          <button
+            onClick={onToggleDebugMarkers}
+            style={{
+              padding: '5px 10px',
+              backgroundColor: debugMarkersEnabled ? '#9C27B0' : '#607D8B',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              zIndex: 1001,
+              pointerEvents: 'auto'
+            }}
+          >
+            Debug Markers: {debugMarkersEnabled ? 'ON' : 'OFF'}
           </button>
         )}
       </div>

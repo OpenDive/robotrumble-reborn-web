@@ -49,6 +49,24 @@ export const TestGameScreen: React.FC = () => {
   // Debug state for testing video visibility
   const [debugHideCanvas, setDebugHideCanvas] = useState(false);
   
+  // Debug markers state
+  const [debugMarkersEnabled, setDebugMarkersEnabled] = useState(false);
+  
+  // Debug markers toggle handler
+  const toggleDebugMarkers = () => {
+    const newEnabled = !debugMarkersEnabled;
+    setDebugMarkersEnabled(newEnabled);
+    
+    if (renderSystemRef.current) {
+      renderSystemRef.current.setDebugMarkersEnabled(newEnabled);
+      
+      // If enabling debug markers in AR mode, update markers
+      if (newEnabled && arMode && detectedMarkers.length > 0) {
+        renderSystemRef.current.updateARMarkers(detectedMarkers);
+      }
+    }
+  };
+  
   // AR mode toggle handler
   const toggleARMode = async () => {
     if (!arMode) {
@@ -74,7 +92,6 @@ export const TestGameScreen: React.FC = () => {
             // Update render system to AR mode (no video element needed for CSS approach)
             if (renderSystemRef.current) {
               renderSystemRef.current.setARMode(true);
-              renderSystemRef.current.setVideoElement(videoRef.current);
             }
             
             // Remove event listener
@@ -104,7 +121,6 @@ export const TestGameScreen: React.FC = () => {
       // Update render system to normal mode and remove video element
       if (renderSystemRef.current) {
         renderSystemRef.current.setARMode(false);
-        renderSystemRef.current.setVideoElement(null);
       }
       
       // Clear AR objects when exiting AR mode
@@ -267,6 +283,7 @@ export const TestGameScreen: React.FC = () => {
     }
 
     // Set the rendering context for the AR detector when AR mode is enabled
+    // EnhancedARDetector handles all 3D AR object management directly
     if (renderSystemRef.current) {
       const scene = renderSystemRef.current.getScene();
       const camera = renderSystemRef.current.getCamera();
@@ -286,8 +303,9 @@ export const TestGameScreen: React.FC = () => {
         }
         setDetectedMarkers(markers);
         
-        // Update render system with detected markers (for border visualization)
-        if (renderSystemRef.current) {
+        // EnhancedARDetector handles all 3D AR object rendering directly
+        // Only update debug markers if debug visualization is enabled
+        if (debugMarkersEnabled && renderSystemRef.current) {
           renderSystemRef.current.updateARMarkers(markers);
         }
       }
@@ -350,6 +368,8 @@ export const TestGameScreen: React.FC = () => {
           debugHideCanvas={debugHideCanvas}
           onToggleDebugCanvas={() => setDebugHideCanvas(!debugHideCanvas)}
           detectedMarkers={detectedMarkers}
+          debugMarkersEnabled={debugMarkersEnabled}
+          onToggleDebugMarkers={toggleDebugMarkers}
         />
       </div>
     </div>
