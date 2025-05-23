@@ -296,3 +296,59 @@ npm run build
 ## License
 
 [License information pending]
+
+# Robot Rumble Reborn - Test Game
+
+This is a simple 3D game prototype built with React, Three.js and RAPIER physics.
+
+## Project Structure
+
+The codebase follows a modular architecture with clear separation of concerns:
+
+### Engine Layer
+- `core/physics/GamePhysicsSystem.ts` - RAPIER-based physics system
+- `core/renderer/GameRenderSystem.ts` - Three.js rendering and visual effects
+- `core/input/InputController.ts` - Keyboard input handling
+- `core/game/GameLoop.ts` - Main game loop and logic
+
+### UI Layer
+- `components/screens/TestGameScreen.tsx` - Main game screen component
+- `components/hud/GameHUD.tsx` - HUD display for game information
+
+### Shared
+- `shared/types/GameTypes.ts` - Common type definitions
+
+## Movement Configuration
+
+To adjust the movement and rotation settings, modify these values in `src/engine-layer/core/game/GameLoop.ts`:
+
+```typescript
+// Line ~82: Rotation speed (higher = faster turning)
+const rotationSpeed = 3.0;
+
+// Line ~87: Movement speed (higher = faster acceleration)
+const speed = 8.0;
+
+// Line ~88: Maximum velocity cap (higher = faster top speed)
+const maxVelocity = 3.0;
+
+// Line ~126: Acceleration smoothing (higher = more responsive)
+const lerpFactor = 0.2;
+
+// Line ~146: Braking strength (lower = slower braking)
+// currentVel.x * 0.15
+```
+
+## Controls
+
+- W / Up Arrow: Move forward
+- S / Down Arrow: Move backward
+- A / Left Arrow: Turn left
+- D / Right Arrow: Turn right
+
+## Development
+
+This game prototype uses React for the UI components and Three.js for 3D rendering, with RAPIER providing the physics simulation.
+
+To modify the game's visuals, such as the track and objects, see `GameRenderSystem.ts`.
+To adjust physics behavior or collision detection, see `GamePhysicsSystem.ts`.
