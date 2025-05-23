@@ -18,10 +18,10 @@ export class ARMarkerRenderer {
   constructor(config?: Partial<ARMarkerConfig>) {
     this.config = {
       baseHeight: 2.0,
-      cubeSize: 0.2,        // Larger for visibility
-      axesSize: 0.3,        // Larger axes
+      cubeSize: 0.5,        // Much larger for debugging
+      axesSize: 0.8,        // Much larger axes
       videoScale: 1.5,      // Match MarkerVisualizer
-      zDistance: 0.1,       // Close to camera like MarkerVisualizer
+      zDistance: 2.0,       // Much farther from camera for debugging
       ...config
     };
   }
@@ -111,15 +111,15 @@ export class ARMarkerRenderer {
 
     // Add wireframe for better visibility
     const wireframeGeometry = new THREE.BoxGeometry(
-      this.config.cubeSize * 1.01, 
-      this.config.cubeSize * 1.01, 
-      this.config.cubeSize * 1.01
+      this.config.cubeSize * 1.1, 
+      this.config.cubeSize * 1.1, 
+      this.config.cubeSize * 1.1
     );
     const wireframeMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       wireframe: true,
-      transparent: true,
-      opacity: 0.3
+      transparent: false,  // Make solid for debugging
+      opacity: 1.0        // Full opacity for debugging
     });
     const wireframe = new THREE.Mesh(wireframeGeometry, wireframeMaterial);
     wireframe.name = 'wireframe';
@@ -222,39 +222,34 @@ export class ARMarkerRenderer {
     const centerX = (0.5 - (marker.center.x / videoWidth)) * 2 * scaleX * this.config.videoScale;
     const centerY = (0.5 - (marker.center.y / videoHeight)) * 2 * scaleY * this.config.videoScale;
     
-    // Start with base distance from camera
-    let zDistance = this.config.zDistance;
+    // Start with base position (following MarkerVisualizer)
+    const centerPos = new THREE.Vector3(centerX, centerY, -this.config.zDistance);
+    
+    console.log('Base position for marker', marker.id, ':', centerPos);
 
-    // Apply pose data if available for depth positioning
-    if (marker.pose) {
-      // Use MarkerVisualizer's scaling approach
-      const zScale = 0.0001; // MarkerVisualizer's proven scale factor
-      const poseZ = Math.abs(marker.pose.translation.z * zScale);
-      zDistance = poseZ;
-      
-      // Apply rotation from pose
-      group.rotation.copy(marker.pose.rotation);
-      
-      // Scale compensation - farther objects appear smaller (correct perspective)
-      const baseDistance = this.config.zDistance;
-      const compensationScale = zDistance / baseDistance;
-      group.scale.setScalar(1 / compensationScale); // Inverse scaling like MarkerVisualizer
+    // TEMPORARY: Override with fixed position for debugging
+    centerPos.set(0, 1, -3); // Right in front of camera at eye level
+    console.log('DEBUG: Using fixed position:', centerPos);
+
+    // Apply pose data if available (using MarkerVisualizer's exact approach)
+    if (false && marker.pose) { // Temporarily disabled for debugging
+      // Pose calculations disabled for debugging
     } else {
+      console.log('Using default rotation and scale for debugging');
       // Reset rotation and scale if no pose data
       group.rotation.set(0, 0, 0);
       group.scale.setScalar(1);
     }
 
-    // Set final position (negative Z to be in front of camera)
-    group.position.set(centerX, centerY, -zDistance);
+    // Set final position
+    group.position.copy(centerPos);
+    console.log('Final marker', marker.id, 'position:', group.position, 'scale:', group.scale.x);
   }
 
   private disposeGroup(group: THREE.Group): void {
     group.traverse((object) => {
       if (object instanceof THREE.Mesh) {
-        if (object.geometry) {
-          object.geometry.dispose();
-        }
+        object.geometry.dispose();
         if (object.material) {
           if (Array.isArray(object.material)) {
             object.material.forEach(material => material.dispose());

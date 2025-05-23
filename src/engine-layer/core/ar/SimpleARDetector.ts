@@ -6,9 +6,9 @@ export interface DetectedMarker {
   corners: { x: number; y: number }[];
   center: { x: number; y: number };
   pose?: {
-    translation: THREE.Vector3;
-    rotation: THREE.Euler;
-    confidence: number;
+    bestTranslation: number[];      // Raw [x, y, z] array like MarkerDetector
+    bestRotation: number[][];       // Raw 3x3 matrix like MarkerDetector  
+    bestError: number;              // Raw error value
   };
 }
 
@@ -144,16 +144,16 @@ export class SimpleARDetector {
 
       const rawPose = this.posit.pose(centeredCorners);
       
-      // Convert to Three.js format
+      console.log('POSIT raw result for marker', rawMarker.id, ':', rawPose);
+      
+      // Keep raw POSIT data (no conversion to Three.js types)
       pose = {
-        translation: new THREE.Vector3(
-          rawPose.bestTranslation[0] / 100, // Convert mm to meters
-          rawPose.bestTranslation[1] / 100,
-          rawPose.bestTranslation[2] / 100
-        ),
-        rotation: this.matrixToEuler(rawPose.bestRotation),
-        confidence: 1.0 / (1.0 + rawPose.bestError) // Convert error to confidence
+        bestTranslation: rawPose.bestTranslation,
+        bestRotation: rawPose.bestRotation,
+        bestError: rawPose.bestError
       };
+      
+      console.log('Stored pose data:', pose);
     } catch (error) {
       console.warn('SimpleARDetector: Failed to calculate pose for marker', rawMarker.id, error);
     }
@@ -164,22 +164,6 @@ export class SimpleARDetector {
       center,
       pose
     };
-  }
-
-  /**
-   * Convert 3x3 rotation matrix to Euler angles
-   */
-  private matrixToEuler(matrix: number[][]): THREE.Euler {
-    const threeMatrix = new THREE.Matrix3();
-    threeMatrix.set(
-      matrix[0][0], matrix[0][1], matrix[0][2],
-      matrix[1][0], matrix[1][1], matrix[1][2],
-      matrix[2][0], matrix[2][1], matrix[2][2]
-    );
-    
-    const euler = new THREE.Euler();
-    euler.setFromRotationMatrix(new THREE.Matrix4().setFromMatrix3(threeMatrix));
-    return euler;
   }
 
   /**
