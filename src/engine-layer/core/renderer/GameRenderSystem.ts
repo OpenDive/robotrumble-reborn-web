@@ -532,4 +532,18 @@ export class GameRenderSystem {
       console.log(`AR Marker detected: ID ${marker.id} at`, marker.center);
     });
   }
+  
+  /**
+   * Get the ThreeJS scene for external access (e.g., AR detector)
+   */
+  getScene(): THREE.Scene | null {
+    return this.scene;
+  }
+  
+  /**
+   * Get the ThreeJS camera for external access (e.g., AR detector)
+   */
+  getCamera(): THREE.Camera | null {
+    return this.camera;
+  }
 } 

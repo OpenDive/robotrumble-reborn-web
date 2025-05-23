@@ -7,7 +7,7 @@ import { InputController } from '../../../engine-layer/core/input/InputControlle
 import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameHUD } from '../hud/GameHUD';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
-import { SimpleARDetector, DetectedMarker } from '../../../engine-layer/core/ar/SimpleARDetector';
+import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 
 export const TestGameScreen: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -18,7 +18,7 @@ export const TestGameScreen: React.FC = () => {
   const renderSystemRef = useRef<GameRenderSystem | null>(null);
   const inputControllerRef = useRef<InputController | null>(null);
   const gameLoopRef = useRef<GameLoop | null>(null);
-  const arDetectorRef = useRef<SimpleARDetector | null>(null);
+  const arDetectorRef = useRef<EnhancedARDetector | null>(null);
   
   // Add cleanup tracking to prevent race conditions
   const cleanupInProgressRef = useRef(false);
@@ -104,6 +104,11 @@ export const TestGameScreen: React.FC = () => {
       if (renderSystemRef.current) {
         renderSystemRef.current.setARMode(false);
       }
+      
+      // Clear AR objects when exiting AR mode
+      if (arDetectorRef.current) {
+        arDetectorRef.current.clearARObjects();
+      }
     }
   };
   
@@ -126,7 +131,9 @@ export const TestGameScreen: React.FC = () => {
     const physicsSystem = new GamePhysicsSystem();
     const renderSystem = new GameRenderSystem();
     const inputController = new InputController();
-    const arDetector = new SimpleARDetector();
+    const arDetector = new EnhancedARDetector((message) => {
+      console.log(`[AR] ${message}`);
+    });
 
     // Store refs
     physicsSystemRef.current = physicsSystem;
@@ -155,8 +162,10 @@ export const TestGameScreen: React.FC = () => {
         // Initialize renderer
         renderSystem.initialize(canvasRef.current!);
         
-        // Initialize AR detector
-        await arDetector.initialize();
+        // Initialize AR detector with scene and camera for 3D rendering
+        const scene = renderSystem.getScene();
+        const camera = renderSystem.getCamera();
+        await arDetector.initialize(scene || undefined, camera || undefined);
         
         // Initialize input controller
         inputController.initialize(canvasRef.current!, setKeys);
@@ -255,6 +264,15 @@ export const TestGameScreen: React.FC = () => {
       return;
     }
 
+    // Set the rendering context for the AR detector when AR mode is enabled
+    if (renderSystemRef.current) {
+      const scene = renderSystemRef.current.getScene();
+      const camera = renderSystemRef.current.getCamera();
+      if (scene && camera) {
+        arDetectorRef.current.setRenderingContext(scene, camera);
+      }
+    }
+
     let detectionAnimationFrame: number;
     
     const runDetection = () => {
@@ -262,7 +280,7 @@ export const TestGameScreen: React.FC = () => {
         const markers = arDetectorRef.current.detectMarkers(videoRef.current);
         setDetectedMarkers(markers);
         
-        // Update render system with detected markers
+        // Update render system with detected markers (for border visualization)
         if (renderSystemRef.current) {
           renderSystemRef.current.updateARMarkers(markers);
         }
