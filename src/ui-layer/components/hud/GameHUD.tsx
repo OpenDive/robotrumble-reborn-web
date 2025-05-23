@@ -1,5 +1,6 @@
 import React from 'react';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
+import { DetectedMarker } from '../../../engine-layer/core/ar/SimpleARDetector';
 
 interface GameHUDProps {
   gameState: GameState;
@@ -9,6 +10,7 @@ interface GameHUDProps {
   webcamError: string | null;
   debugHideCanvas: boolean;
   onToggleDebugCanvas: () => void;
+  detectedMarkers: DetectedMarker[];
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({ 
@@ -18,7 +20,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onToggleAR, 
   webcamError,
   debugHideCanvas,
-  onToggleDebugCanvas
+  onToggleDebugCanvas,
+  detectedMarkers
 }) => {
   return (
     <>
@@ -133,6 +136,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         <div>Keys: {JSON.stringify(keysState)}</div>
         <div>Position: X:{gameState.position.x.toFixed(2)} Y:{gameState.position.y.toFixed(2)} Z:{gameState.position.z.toFixed(2)}</div>
         <div>Rotation: {gameState.rotation.toFixed(2)}</div>
+        {arMode && (
+          <div>Markers: {detectedMarkers.length} detected</div>
+        )}
       </div>
     </>
   );

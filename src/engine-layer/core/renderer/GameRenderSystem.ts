@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DetectedMarker } from '../ar/SimpleARDetector';
 
 export class GameRenderSystem {
   private scene: THREE.Scene | null = null;
@@ -23,6 +24,9 @@ export class GameRenderSystem {
   // AR mode support
   private arMode = false;
   private originalGroundMaterial: THREE.MeshStandardMaterial | null = null;
+  
+  // AR markers visualization
+  private arMarkersGroup: THREE.Group = new THREE.Group();
 
   initialize(canvas: HTMLCanvasElement): void {
     // Initialize Three.js scene
@@ -101,6 +105,9 @@ export class GameRenderSystem {
 
     // Add distant objects for testing
     this.addDistantObjects();
+
+    // Add AR markers group to scene
+    this.scene.add(this.arMarkersGroup);
 
     // Add a trail visualization line with pre-allocated buffer
     const trailMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
@@ -368,6 +375,9 @@ export class GameRenderSystem {
       this.renderer = null;
     }
     
+    // Clear AR markers
+    this.arMarkersGroup.clear();
+    
     this.scene = null;
     this.camera = null;
     this.trailLine = null;
@@ -474,5 +484,52 @@ export class GameRenderSystem {
       
       console.log('Normal Mode enabled: sky background and opaque ground');
     }
+  }
+  
+  updateARMarkers(markers: DetectedMarker[]): void {
+    // Clear existing marker visualizations
+    this.arMarkersGroup.clear();
+    
+    if (!this.arMode || markers.length === 0) {
+      return;
+    }
+    
+    markers.forEach(marker => {
+      // Create marker border visualization
+      const borderGeometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(marker.corners.length * 3 * 2); // Each corner connects to next
+      
+      for (let i = 0; i < marker.corners.length; i++) {
+        const current = marker.corners[i];
+        const next = marker.corners[(i + 1) % marker.corners.length];
+        
+        // Convert screen coordinates to normalized device coordinates
+        // Note: This is a basic implementation - proper AR would need camera projection
+        const x1 = (current.x / window.innerWidth) * 2 - 1;
+        const y1 = -((current.y / window.innerHeight) * 2 - 1);
+        const x2 = (next.x / window.innerWidth) * 2 - 1;
+        const y2 = -((next.y / window.innerHeight) * 2 - 1);
+        
+        positions[i * 6] = x1;
+        positions[i * 6 + 1] = y1;
+        positions[i * 6 + 2] = -0.1; // Slightly in front of camera
+        positions[i * 6 + 3] = x2;
+        positions[i * 6 + 4] = y2;
+        positions[i * 6 + 5] = -0.1;
+      }
+      
+      borderGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      
+      const borderMaterial = new THREE.LineBasicMaterial({ 
+        color: 0x00ff00,
+        linewidth: 2
+      });
+      
+      const borderLine = new THREE.LineSegments(borderGeometry, borderMaterial);
+      this.arMarkersGroup.add(borderLine);
+      
+      // Add marker ID text (simplified - in a real implementation you'd use proper 3D text)
+      console.log(`AR Marker detected: ID ${marker.id} at`, marker.center);
+    });
   }
 } 

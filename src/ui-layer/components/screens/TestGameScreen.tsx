@@ -7,6 +7,7 @@ import { InputController } from '../../../engine-layer/core/input/InputControlle
 import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameHUD } from '../hud/GameHUD';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
+import { SimpleARDetector, DetectedMarker } from '../../../engine-layer/core/ar/SimpleARDetector';
 
 export const TestGameScreen: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -17,6 +18,7 @@ export const TestGameScreen: React.FC = () => {
   const renderSystemRef = useRef<GameRenderSystem | null>(null);
   const inputControllerRef = useRef<InputController | null>(null);
   const gameLoopRef = useRef<GameLoop | null>(null);
+  const arDetectorRef = useRef<SimpleARDetector | null>(null);
   
   // Add cleanup tracking to prevent race conditions
   const cleanupInProgressRef = useRef(false);
@@ -42,6 +44,7 @@ export const TestGameScreen: React.FC = () => {
   const [arMode, setArMode] = useState(false);
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
   const [webcamError, setWebcamError] = useState<string | null>(null);
+  const [detectedMarkers, setDetectedMarkers] = useState<DetectedMarker[]>([]);
   
   // Debug state for testing video visibility
   const [debugHideCanvas, setDebugHideCanvas] = useState(false);
@@ -123,11 +126,13 @@ export const TestGameScreen: React.FC = () => {
     const physicsSystem = new GamePhysicsSystem();
     const renderSystem = new GameRenderSystem();
     const inputController = new InputController();
+    const arDetector = new SimpleARDetector();
 
     // Store refs
     physicsSystemRef.current = physicsSystem;
     renderSystemRef.current = renderSystem;
     inputControllerRef.current = inputController;
+    arDetectorRef.current = arDetector;
 
     // Initialize physics system
     const initGame = async () => {
@@ -149,6 +154,9 @@ export const TestGameScreen: React.FC = () => {
         
         // Initialize renderer
         renderSystem.initialize(canvasRef.current!);
+        
+        // Initialize AR detector
+        await arDetector.initialize();
         
         // Initialize input controller
         inputController.initialize(canvasRef.current!, setKeys);
@@ -226,12 +234,54 @@ export const TestGameScreen: React.FC = () => {
         physicsSystemRef.current = null;
       }
       
+      // STEP 5: Dispose AR detector
+      if (arDetectorRef.current) {
+        console.log('Disposing AR detector...');
+        arDetectorRef.current.dispose();
+        arDetectorRef.current = null;
+      }
+      
       // Reset flags
       initializationInProgressRef.current = false;
       cleanupInProgressRef.current = false;
       console.log('Game systems cleanup completed');
     };
   }, [webcamStream]);
+
+  // AR Detection Loop
+  useEffect(() => {
+    if (!arMode || !videoRef.current || !arDetectorRef.current) {
+      setDetectedMarkers([]);
+      return;
+    }
+
+    let detectionAnimationFrame: number;
+    
+    const runDetection = () => {
+      if (arDetectorRef.current && videoRef.current && arMode) {
+        const markers = arDetectorRef.current.detectMarkers(videoRef.current);
+        setDetectedMarkers(markers);
+        
+        // Update render system with detected markers
+        if (renderSystemRef.current) {
+          renderSystemRef.current.updateARMarkers(markers);
+        }
+      }
+      
+      if (arMode) {
+        detectionAnimationFrame = requestAnimationFrame(runDetection);
+      }
+    };
+    
+    // Start detection loop
+    detectionAnimationFrame = requestAnimationFrame(runDetection);
+    
+    return () => {
+      if (detectionAnimationFrame) {
+        cancelAnimationFrame(detectionAnimationFrame);
+      }
+    };
+  }, [arMode]);
 
   return (
     <div className={styles.container}>
@@ -274,6 +324,7 @@ export const TestGameScreen: React.FC = () => {
           webcamError={webcamError}
           debugHideCanvas={debugHideCanvas}
           onToggleDebugCanvas={() => setDebugHideCanvas(!debugHideCanvas)}
+          detectedMarkers={detectedMarkers}
         />
       </div>
     </div>
