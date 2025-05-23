@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DetectedMarker } from '../ar/SimpleARDetector';
+import { ARMarkerRenderer } from '../ar/ARMarkerRenderer';
 
 export class GameRenderSystem {
   private scene: THREE.Scene | null = null;
@@ -25,8 +26,8 @@ export class GameRenderSystem {
   private arMode = false;
   private originalGroundMaterial: THREE.MeshStandardMaterial | null = null;
   
-  // AR markers visualization
-  private arMarkersGroup: THREE.Group = new THREE.Group();
+  // AR marker renderer
+  private arMarkerRenderer: ARMarkerRenderer | null = null;
 
   initialize(canvas: HTMLCanvasElement): void {
     // Initialize Three.js scene
@@ -106,8 +107,9 @@ export class GameRenderSystem {
     // Add distant objects for testing
     this.addDistantObjects();
 
-    // Add AR markers group to scene
-    this.scene.add(this.arMarkersGroup);
+    // Add AR marker renderer
+    this.arMarkerRenderer = new ARMarkerRenderer();
+    this.arMarkerRenderer.initialize(this.scene);
 
     // Add a trail visualization line with pre-allocated buffer
     const trailMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
@@ -375,8 +377,11 @@ export class GameRenderSystem {
       this.renderer = null;
     }
     
-    // Clear AR markers
-    this.arMarkersGroup.clear();
+    // Dispose AR marker renderer
+    if (this.arMarkerRenderer) {
+      this.arMarkerRenderer.dispose();
+      this.arMarkerRenderer = null;
+    }
     
     this.scene = null;
     this.camera = null;
@@ -487,49 +492,18 @@ export class GameRenderSystem {
   }
   
   updateARMarkers(markers: DetectedMarker[]): void {
-    // Clear existing marker visualizations
-    this.arMarkersGroup.clear();
-    
-    if (!this.arMode || markers.length === 0) {
+    if (!this.arMarkerRenderer) {
       return;
     }
-    
-    markers.forEach(marker => {
-      // Create marker border visualization
-      const borderGeometry = new THREE.BufferGeometry();
-      const positions = new Float32Array(marker.corners.length * 3 * 2); // Each corner connects to next
-      
-      for (let i = 0; i < marker.corners.length; i++) {
-        const current = marker.corners[i];
-        const next = marker.corners[(i + 1) % marker.corners.length];
-        
-        // Convert screen coordinates to normalized device coordinates
-        // Note: This is a basic implementation - proper AR would need camera projection
-        const x1 = (current.x / window.innerWidth) * 2 - 1;
-        const y1 = -((current.y / window.innerHeight) * 2 - 1);
-        const x2 = (next.x / window.innerWidth) * 2 - 1;
-        const y2 = -((next.y / window.innerHeight) * 2 - 1);
-        
-        positions[i * 6] = x1;
-        positions[i * 6 + 1] = y1;
-        positions[i * 6 + 2] = -0.1; // Slightly in front of camera
-        positions[i * 6 + 3] = x2;
-        positions[i * 6 + 4] = y2;
-        positions[i * 6 + 5] = -0.1;
-      }
-      
-      borderGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      
-      const borderMaterial = new THREE.LineBasicMaterial({ 
-        color: 0x00ff00,
-        linewidth: 2
-      });
-      
-      const borderLine = new THREE.LineSegments(borderGeometry, borderMaterial);
-      this.arMarkersGroup.add(borderLine);
-      
-      // Add marker ID text (simplified - in a real implementation you'd use proper 3D text)
-      console.log(`AR Marker detected: ID ${marker.id} at`, marker.center);
-    });
+
+    // Set video element for coordinate calculations
+    // Note: We'll need to update this to get the video element reference
+    this.arMarkerRenderer.updateMarkers(markers);
+  }
+
+  setVideoElement(videoElement: HTMLVideoElement | null): void {
+    if (this.arMarkerRenderer) {
+      this.arMarkerRenderer.setVideoElement(videoElement);
+    }
   }
 } 

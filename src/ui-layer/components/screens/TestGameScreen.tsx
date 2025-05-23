@@ -74,6 +74,7 @@ export const TestGameScreen: React.FC = () => {
             // Update render system to AR mode (no video element needed for CSS approach)
             if (renderSystemRef.current) {
               renderSystemRef.current.setARMode(true);
+              renderSystemRef.current.setVideoElement(videoRef.current);
             }
             
             // Remove event listener
@@ -103,6 +104,7 @@ export const TestGameScreen: React.FC = () => {
       // Update render system to normal mode and remove video element
       if (renderSystemRef.current) {
         renderSystemRef.current.setARMode(false);
+        renderSystemRef.current.setVideoElement(null);
       }
     }
   };
@@ -260,6 +262,10 @@ export const TestGameScreen: React.FC = () => {
     const runDetection = () => {
       if (arDetectorRef.current && videoRef.current && arMode) {
         const markers = arDetectorRef.current.detectMarkers(videoRef.current);
+        // Only log when markers are detected to reduce spam
+        if (markers.length > 0) {
+          console.log('AR Detection:', markers.length, 'markers found');
+        }
         setDetectedMarkers(markers);
         
         // Update render system with detected markers
@@ -296,7 +302,8 @@ export const TestGameScreen: React.FC = () => {
           height: '100%',
           objectFit: 'cover',
           zIndex: 1, // Behind canvas
-          display: arMode ? 'block' : 'none' // Only show in AR mode
+          display: arMode ? 'block' : 'none', // Only show in AR mode
+          transform: 'scaleX(-1)' // Fix mirroring - flip horizontally
         }}
         autoPlay
         playsInline
