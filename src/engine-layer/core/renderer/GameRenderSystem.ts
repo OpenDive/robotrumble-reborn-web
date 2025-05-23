@@ -95,9 +95,15 @@ export class GameRenderSystem {
     // Add distant objects for testing
     this.addDistantObjects();
 
-    // Add a trail visualization line
+    // Add a trail visualization line with pre-allocated buffer
     const trailMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
     this.trailGeometry = new THREE.BufferGeometry();
+    
+    // Pre-allocate position buffer for MAX_TRAIL_POINTS
+    const positions = new Float32Array(this.MAX_TRAIL_POINTS * 3);
+    this.trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.trailGeometry.setDrawRange(0, 0); // Initially draw 0 points
+    
     this.trailLine = new THREE.Line(this.trailGeometry, trailMaterial);
     this.scene.add(this.trailLine);
   }
@@ -294,8 +300,23 @@ export class GameRenderSystem {
         this.trailPointsRef.shift();
       }
       
-      // Update line geometry
-      this.trailGeometry.setFromPoints(this.trailPointsRef);
+      // Update the pre-allocated buffer with current trail points
+      const positionAttribute = this.trailGeometry.getAttribute('position') as THREE.BufferAttribute;
+      const positions = positionAttribute.array as Float32Array;
+      
+      // Fill the position buffer with current trail points
+      for (let i = 0; i < this.trailPointsRef.length; i++) {
+        const point = this.trailPointsRef[i];
+        positions[i * 3] = point.x;
+        positions[i * 3 + 1] = point.y;
+        positions[i * 3 + 2] = point.z;
+      }
+      
+      // Mark the attribute as needing update
+      positionAttribute.needsUpdate = true;
+      
+      // Set draw range to only render the points we have
+      this.trailGeometry.setDrawRange(0, this.trailPointsRef.length);
     }
   }
 
