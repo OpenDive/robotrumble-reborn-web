@@ -140,6 +140,31 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           <div>Markers: {detectedMarkers.length} detected</div>
         )}
       </div>
+      
+      {/* AR Debug Controls */}
+      {arMode && (
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          right: '20px',
+          padding: '10px',
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          color: 'white',
+          fontFamily: 'monospace',
+          borderRadius: '5px',
+          zIndex: 1000,
+          pointerEvents: 'auto',
+          minWidth: '200px'
+        }}>
+          <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>AR Debug Controls</div>
+          <div style={{ fontSize: '11px', marginBottom: '5px' }}>
+            Open Console to see coordinate logging
+          </div>
+          <div style={{ fontSize: '11px', color: '#ff9' }}>
+            Watch marker position tracking
+          </div>
+        </div>
+      )}
     </>
   );
 }; 

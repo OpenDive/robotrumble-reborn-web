@@ -217,21 +217,20 @@ export class ARMarkerRenderer {
     videoWidth: number,
     videoHeight: number
   ): void {
-    // Transform marker center to world coordinates (following MarkerVisualizer approach)
-    // Note: We need to flip X coordinate because video is mirrored
+    // Start with base position (following MarkerVisualizer)
     const centerX = (0.5 - (marker.center.x / videoWidth)) * 2 * scaleX * this.config.videoScale;
     const centerY = (0.5 - (marker.center.y / videoHeight)) * 2 * scaleY * this.config.videoScale;
-    
-    // Start with base position (following MarkerVisualizer)
     const centerPos = new THREE.Vector3(centerX, centerY, -this.config.zDistance);
     
-    console.log('Base position for marker', marker.id, ':', centerPos);
+    console.log('Coordinate Debug:', {
+      markerCenter: marker.center,
+      videoSize: { width: videoWidth, height: videoHeight },
+      scales: { scaleX, scaleY, videoScale: this.config.videoScale },
+      calculatedPos: { centerX, centerY },
+      finalPos: centerPos
+    });
 
-    // TEMPORARY: Override with fixed position for debugging
-    centerPos.set(0, 1, -3); // Right in front of camera at eye level
-    console.log('DEBUG: Using fixed position:', centerPos);
-
-    // Apply pose data if available (using MarkerVisualizer's exact approach)
+    // TEMPORARY: Keep pose disabled for coordinate debugging
     if (false && marker.pose) { // Temporarily disabled for debugging
       // Pose calculations disabled for debugging
     } else {
@@ -239,6 +238,14 @@ export class ARMarkerRenderer {
       // Reset rotation and scale if no pose data
       group.rotation.set(0, 0, 0);
       group.scale.setScalar(1);
+      
+      console.log('Scale Debug:', {
+        cubeSize: this.config.cubeSize,
+        axesSize: this.config.axesSize,
+        baseHeight: this.config.baseHeight,
+        zDistance: this.config.zDistance,
+        finalScale: group.scale.x
+      });
     }
 
     // Set final position

@@ -171,9 +171,9 @@ export const TestGameScreen: React.FC = () => {
         if (cleanupInProgressRef.current) {
           console.log('Cleanup started before game loop start, aborting');
           gameLoop.dispose();
-          return;
-        }
-        
+        return;
+      }
+      
         // Start game loop
         gameLoop.start(setGameState);
         
