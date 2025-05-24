@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { DetectedMarker } from '../ar/EnhancedARDetector';
-import { ARMarkerRenderer } from '../ar/ARMarkerRenderer';
+import { AREffectsRenderer } from '../ar/AREffectsRenderer';
 
 export class GameRenderSystem {
   private scene: THREE.Scene | null = null;
@@ -26,9 +26,9 @@ export class GameRenderSystem {
   private arMode = false;
   private originalGroundMaterial: THREE.MeshStandardMaterial | null = null;
   
-  // AR marker renderer (optional, for debug visualization only)
-  private arMarkerRenderer: ARMarkerRenderer | null = null;
-  private enableDebugMarkers = false; // Flag to control debug marker rendering
+  // AR effects renderer (for visual candy effects)
+  private arEffectsRenderer: AREffectsRenderer | null = null;
+  private enableAREffects = false;
 
   initialize(canvas: HTMLCanvasElement): void {
     // Initialize Three.js scene
@@ -81,37 +81,37 @@ export class GameRenderSystem {
     // Add extended ground plane
     this.createGround();
 
-    // Add target cube
-    const targetGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const targetMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00 });
-    const targetMesh = new THREE.Mesh(targetGeometry, targetMaterial);
-    targetMesh.position.set(0, 0.5, -5); // Place it 5 units ahead
-    targetMesh.castShadow = true;
-    this.scene.add(targetMesh);
+    // Removed target cube for cleaner AR overlay
+    // const targetGeometry = new THREE.BoxGeometry(1, 1, 1);
+    // const targetMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00 });
+    // const targetMesh = new THREE.Mesh(targetGeometry, targetMaterial);
+    // targetMesh.position.set(0, 0.5, -5); // Place it 5 units ahead
+    // targetMesh.castShadow = true;
+    // this.scene.add(targetMesh);
 
-    // Add track boundaries (simple walls for now)
-    const wallGeometry = new THREE.BoxGeometry(1, 1, 20);
-    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-    
-    // Left wall
-    const leftWall = new THREE.Mesh(wallGeometry, wallMaterial);
-    leftWall.position.set(-5, 0.5, 0);
-    leftWall.castShadow = true;
-    this.scene.add(leftWall);
-    
-    // Right wall
-    const rightWall = new THREE.Mesh(wallGeometry, wallMaterial);
-    rightWall.position.set(5, 0.5, 0);
-    rightWall.castShadow = true;
-    this.scene.add(rightWall);
+    // Removed track boundaries for cleaner AR overlay
+    // const wallGeometry = new THREE.BoxGeometry(1, 1, 20);
+    // const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    // 
+    // // Left wall
+    // const leftWall = new THREE.Mesh(wallGeometry, wallMaterial);
+    // leftWall.position.set(-5, 0.5, 0);
+    // leftWall.castShadow = true;
+    // this.scene.add(leftWall);
+    // 
+    // // Right wall
+    // const rightWall = new THREE.Mesh(wallGeometry, wallMaterial);
+    // rightWall.position.set(5, 0.5, 0);
+    // rightWall.castShadow = true;
+    // this.scene.add(rightWall);
 
-    // Add distant objects for testing
-    this.addDistantObjects();
+    // Removed distant objects for cleaner AR overlay
+    // this.addDistantObjects();
 
-    // Initialize AR marker renderer only if debug markers are enabled
-    if (this.enableDebugMarkers) {
-      this.arMarkerRenderer = new ARMarkerRenderer();
-      this.arMarkerRenderer.initialize(this.scene);
+    // Initialize AR effects renderer only if effects are enabled
+    if (this.enableAREffects) {
+      this.arEffectsRenderer = new AREffectsRenderer();
+      this.arEffectsRenderer.initialize(this.scene);
     }
 
     // Add a trail visualization line with pre-allocated buffer
@@ -363,6 +363,12 @@ export class GameRenderSystem {
 
   render(): void {
     if (!this.renderer || !this.scene || !this.camera) return;
+    
+    // Update AR effects animation if enabled
+    if (this.enableAREffects && this.arEffectsRenderer) {
+      this.arEffectsRenderer.update();
+    }
+    
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -380,10 +386,10 @@ export class GameRenderSystem {
       this.renderer = null;
     }
     
-    // Dispose AR marker renderer if it exists
-    if (this.arMarkerRenderer) {
-      this.arMarkerRenderer.dispose();
-      this.arMarkerRenderer = null;
+    // Dispose AR effects renderer if it exists
+    if (this.arEffectsRenderer) {
+      this.arEffectsRenderer.dispose();
+      this.arEffectsRenderer = null;
     }
     
     this.scene = null;
@@ -392,7 +398,7 @@ export class GameRenderSystem {
     this.trailGeometry = null;
     this.trailPointsRef = [];
     this.ground = null;
-    this.enableDebugMarkers = false;
+    this.enableAREffects = false;
   }
 
   // Add the createGridTexture method later in the class
@@ -474,42 +480,39 @@ export class GameRenderSystem {
     if (!this.scene || !this.ground || !this.originalGroundMaterial || !this.renderer) return;
     
     if (enabled) {
-      // AR Mode: transparent background and semi-transparent ground
+      // AR Mode: transparent background and invisible ground
       this.scene.background = null;
       this.renderer.setClearColor(0x000000, 0); // Clear with transparent black
       
-      // Create semi-transparent version of ground material
-      const arGroundMaterial = this.originalGroundMaterial.clone();
-      arGroundMaterial.transparent = true;
-      arGroundMaterial.opacity = 0.3; // Semi-transparent for AR
-      this.ground.material = arGroundMaterial;
+      // Make ground completely invisible in AR mode
+      this.ground.visible = false;
       
-      console.log('AR Mode enabled: transparent background and ground');
+      console.log('AR Mode enabled: transparent background and invisible ground');
     } else {
-      // Normal Mode: sky background and opaque ground
+      // Normal Mode: sky background and visible ground
       this.scene.background = new THREE.Color(0x87ceeb); // Sky blue background
       this.renderer.setClearColor(0x87ceeb, 1); // Clear with opaque sky blue
       this.ground.material = this.originalGroundMaterial;
+      this.ground.visible = true;
       
-      console.log('Normal Mode enabled: sky background and opaque ground');
+      console.log('Normal Mode enabled: sky background and visible ground');
     }
   }
   
-  updateARMarkers(markers: DetectedMarker[]): void {
-    // Only update debug markers if debug rendering is enabled
-    if (!this.enableDebugMarkers || !this.arMarkerRenderer) {
+  updateAREffects(markers: DetectedMarker[]): void {
+    // Only update effects if effects rendering is enabled
+    if (!this.enableAREffects || !this.arEffectsRenderer) {
       return;
     }
 
-    // Update debug marker visualization (for development/debugging purposes)
-    this.arMarkerRenderer.updateMarkers(markers);
+    // Update effect visualization based on detected markers
+    this.arEffectsRenderer.updateWithMarkers(markers);
   }
 
   setVideoElement(videoElement: HTMLVideoElement | null): void {
-    // Only set video element for debug markers if enabled
-    if (this.enableDebugMarkers && this.arMarkerRenderer) {
-      this.arMarkerRenderer.setVideoElement(videoElement);
-    }
+    // AR effects renderer doesn't need video element
+    // This method is kept for compatibility but doesn't do anything
+    // since effects are independent of video input
   }
   
   /**
@@ -527,22 +530,22 @@ export class GameRenderSystem {
   }
 
   /**
-   * Enable or disable debug marker visualization
-   * @param enabled - Whether to show debug markers (cubes, axes, etc.)
+   * Enable or disable effect visualization
+   * @param enabled - Whether to show effect visualization
    */
-  setDebugMarkersEnabled(enabled: boolean): void {
-    if (enabled && !this.arMarkerRenderer && this.scene) {
-      // Create and initialize debug marker renderer
-      this.arMarkerRenderer = new ARMarkerRenderer();
-      this.arMarkerRenderer.initialize(this.scene);
-      this.enableDebugMarkers = true;
-      console.log('Debug markers enabled');
-    } else if (!enabled && this.arMarkerRenderer) {
-      // Dispose and remove debug marker renderer
-      this.arMarkerRenderer.dispose();
-      this.arMarkerRenderer = null;
-      this.enableDebugMarkers = false;
-      console.log('Debug markers disabled');
+  setAREffectsEnabled(enabled: boolean): void {
+    if (enabled && !this.arEffectsRenderer && this.scene) {
+      // Create and initialize effect renderer
+      this.arEffectsRenderer = new AREffectsRenderer();
+      this.arEffectsRenderer.initialize(this.scene);
+      this.enableAREffects = true;
+      console.log('Effect visualization enabled');
+    } else if (!enabled && this.arEffectsRenderer) {
+      // Dispose and remove effect renderer
+      this.arEffectsRenderer.dispose();
+      this.arEffectsRenderer = null;
+      this.enableAREffects = false;
+      console.log('Effect visualization disabled');
     }
   }
 } 

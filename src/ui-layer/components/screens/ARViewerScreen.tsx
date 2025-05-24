@@ -19,11 +19,24 @@ interface RemoteUser {
   isHost?: boolean;
 }
 
+interface DeliveryPoint {
+  row: number;
+  col: number;
+  id: string;
+}
+
+interface Robot {
+  id: string;
+  name: string;
+  position: { x: number; y: number };
+  status: 'idle' | 'moving' | 'delivering' | 'offline';
+  battery: number;
+}
+
 export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack }) => {
   const mainViewRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
-  const participantGridRef = useRef<HTMLDivElement>(null);
   
   // Agora refs
   const rtcClientRef = useRef<IAgoraRTCClient | null>(null);
@@ -44,45 +57,49 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   // AR state
   const [arInitialized, setArInitialized] = useState(false);
   const [detectedMarkers, setDetectedMarkers] = useState<DetectedMarker[]>([]);
-  const [debugMarkersEnabled, setDebugMarkersEnabled] = useState(true);
+  const [arEffectsEnabled, setArEffectsEnabled] = useState(true);
 
-  // Create participant tile HTML (React version)
-  const createParticipantTile = (uid: number, username: string = `User ${uid}`) => {
-    const tileContainer = document.createElement('div');
-    tileContainer.className = 'participant-tile bg-gray-800 rounded-lg overflow-hidden border border-white/10';
-    tileContainer.id = `participant-${uid}`;
-    tileContainer.style.cssText = 'width: 200px; height: 150px; position: relative;';
+  // Delivery control state (read-only for viewers)
+  const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
+  const [endPoint, setEndPoint] = useState<DeliveryPoint | null>(null);
+  const [robots, setRobots] = useState<Robot[]>([
+    { id: 'robot-a', name: 'Robot A', position: { x: 10, y: 10 }, status: 'idle', battery: 85 },
+    { id: 'robot-b', name: 'Robot B', position: { x: 80, y: 60 }, status: 'idle', battery: 92 }
+  ]);
+  const [deliveryStatus, setDeliveryStatus] = useState<string>('waiting');
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'confirmed' | 'failed'>('pending');
+  const [deliveryCost] = useState(0.5);
+
+  // AR effects toggle handler
+  const toggleAREffects = () => {
+    const newEnabled = !arEffectsEnabled;
+    setArEffectsEnabled(newEnabled);
     
-    tileContainer.innerHTML = `
-      <div style="position: relative; width: 100%; height: 100%;">
-        <!-- Video element -->
-        <video 
-          id="video-${uid}" 
-          autoplay 
-          playsinline 
-          muted
-          style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1;"
-          class="hidden"
-        ></video>
-        
-        <!-- Avatar placeholder -->
-        <div 
-          id="avatar-${uid}"
-          style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;"
-        >
-          <div style="color: white; font-size: 24px; font-weight: bold;">${username.charAt(0).toUpperCase()}</div>
-        </div>
-        
-        <!-- User info overlay -->
-        <div style="position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; background: linear-gradient(transparent, rgba(0,0,0,0.7)); padding: 8px; color: white;">
-          <div style="font-size: 12px; font-weight: 500;">${username}</div>
-          <div id="status-${uid}" style="font-size: 10px; opacity: 0.7;">Connecting...</div>
-        </div>
-      </div>
-    `;
-    
-    return tileContainer;
+    if (renderSystemRef.current) {
+      renderSystemRef.current.setAREffectsEnabled(newEnabled);
+      
+      // If enabling AR effects, update with current markers
+      if (newEnabled && detectedMarkers.length > 0) {
+        renderSystemRef.current.updateAREffects(detectedMarkers);
+      }
+    }
   };
+
+  // Simulate delivery data for demo (in real app, this would come from host)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setStartPoint({ row: 2, col: 1, id: 'start' });
+      setEndPoint({ row: 5, col: 6, id: 'end' });
+      setDeliveryStatus('Ready to execute delivery');
+      setRobots(prev => prev.map(robot => 
+        robot.id === 'robot-a' 
+          ? { ...robot, status: 'moving' }
+          : robot
+      ));
+    }, 3000); // Show delivery points after 3 seconds
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // Initialize full AR system with complete 3D scene
   const initializeAROverlay = async () => {
@@ -90,6 +107,15 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
     
     try {
       console.log('Initializing full AR system for viewer...');
+      
+      // Ensure canvas matches its container size (like ARStreamScreen.tsx)
+      const container = canvasRef.current.parentElement;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        canvasRef.current.width = rect.width;
+        canvasRef.current.height = rect.height;
+        console.log(`AR Canvas sized to container: ${rect.width}x${rect.height}`);
+      }
       
       // Create full GameRenderSystem for complete 3D AR experience
       const renderSystem = new GameRenderSystem();
@@ -100,6 +126,9 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       
       // Set AR mode to enable transparent rendering
       renderSystem.setARMode(true);
+      
+      // Enable AR effects by default
+      renderSystem.setAREffectsEnabled(arEffectsEnabled);
       
       // Create AR detector for marker detection
       const arDetector = new EnhancedARDetector((message) => {
@@ -151,10 +180,10 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         
         // Update AR markers in the full 3D scene
         if (renderSystemRef.current) {
-          renderSystemRef.current.updateARMarkers(markers);
+          renderSystemRef.current.updateAREffects(markers);
           
-          // Set debug markers visibility
-          renderSystemRef.current.setDebugMarkersEnabled(debugMarkersEnabled);
+          // Set AR effects visibility
+          renderSystemRef.current.setAREffectsEnabled(arEffectsEnabled);
           
           // Render the complete 3D AR scene
           renderSystemRef.current.render();
@@ -214,13 +243,6 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           console.log(`📊 Updated remoteUsers, now has ${newMap.size} users:`, Array.from(newMap.keys()));
           return newMap;
         });
-        
-        // Create placeholder tile immediately for ALL users (not just viewers)
-        if (!document.getElementById(`participant-${user.uid}`)) {
-          const tile = createParticipantTile(user.uid as number);
-          participantGridRef.current?.appendChild(tile);
-          console.log(`🎯 Created placeholder tile for user ${user.uid} who just joined`);
-        }
       });
       
       client.on('user-published', async (user, mediaType) => {
@@ -423,15 +445,16 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         });
       });
       
-      // Set client role to audience
-      await client.setClientRole('audience');
+      // Set client role to host (not audience) so that host can detect when we join
+      // This follows the same pattern as the reference implementation
+      await client.setClientRole('host');
       
       // Generate UID
       const uid = Math.floor(Math.random() * 100000);
       setLocalUid(uid);
       
       // Join channel
-      const token = await fetchToken(session.id, uid, 'audience');
+      const token = await fetchToken(session.id, uid, 'host');
       await client.join(APP_ID, session.id, token, uid);
       console.log(`Joined channel ${session.id} with UID ${uid} as viewer`);
       
@@ -460,8 +483,9 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       if (mainViewRef.current) {
         mainViewRef.current.innerHTML = '';
       }
-      if (participantGridRef.current) {
-        participantGridRef.current.innerHTML = '';
+      const participantGrid = document.getElementById('participant-grid');
+      if (participantGrid) {
+        participantGrid.innerHTML = '';
       }
       
       setIsConnected(false);
@@ -495,14 +519,34 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
 
   // Handle window resize
   useEffect(() => {
-    const handleResize = () => {
-      if (renderSystemRef.current) {
-        renderSystemRef.current.resize();
+    // Set up resize observer for canvas sizing (like ARStreamScreen.tsx)
+    let resizeObserver: ResizeObserver | null = null;
+    
+    if (canvasRef.current) {
+      resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (canvasRef.current) {
+            canvasRef.current.width = width;
+            canvasRef.current.height = height;
+            console.log(`AR Canvas resized to: ${width}x${height}`);
+            
+            // Update render system if it exists
+            if (renderSystemRef.current) {
+              renderSystemRef.current.resize();
+            }
+          }
+        }
+      });
+      
+      resizeObserver.observe(canvasRef.current.parentElement || canvasRef.current);
+    }
+
+    return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect();
       }
     };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Cleanup on unmount
@@ -540,15 +584,15 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           </div>
           
           <div className="flex items-center gap-3">
-            {/* AR Markers Toggle */}
+            {/* AR Effects Toggle */}
             {arInitialized && (
               <Button
                 variant="secondary"
                 size="small"
-                onClick={() => setDebugMarkersEnabled(!debugMarkersEnabled)}
-                className={`${debugMarkersEnabled ? '!bg-blue-600 hover:!bg-blue-700' : '!bg-white/10 hover:!bg-white/20'}`}
+                onClick={toggleAREffects}
+                className={`${arEffectsEnabled ? '!bg-blue-600 hover:!bg-blue-700' : '!bg-white/10 hover:!bg-white/20'}`}
               >
-                {debugMarkersEnabled ? 'Hide Markers' : 'Show Markers'}
+                {arEffectsEnabled ? 'Hide Effects' : 'Show Effects'}
               </Button>
             )}
             
@@ -628,8 +672,8 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         )}
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative">
+      {/* Main Content Area - Explicitly sized to exclude bottom panel */}
+      <div className="flex" style={{ height: 'calc(100vh - 10rem)' }}>
         {!isConnected ? (
           /* Not Connected State */
           <div className="flex-1 flex items-center justify-center">
@@ -646,7 +690,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           </div>
         ) : (
           <>
-            {/* Main AR View Area */}
+            {/* Left Side: Main AR View Area */}
             <div className="flex-1 relative">
               {!hostUser ? (
                 /* Waiting for Host */
@@ -671,106 +715,245 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 style={{ zIndex: 1 }}
               />
 
-              {/* AR Overlay Canvas */}
-              <canvas 
-                ref={canvasRef}
-                className="absolute inset-0 w-full h-full pointer-events-none"
-                style={{
-                  zIndex: 20,
-                  background: 'transparent',
-                  display: arInitialized ? 'block' : 'none'
-                }}
-              />
+              {/* AR Overlay Canvas - Constrained to video area only */}
+              {hostUser && (
+                <canvas 
+                  ref={canvasRef}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  style={{
+                    zIndex: 2,
+                    background: 'transparent',
+                    display: arInitialized ? 'block' : 'none',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    maxWidth: '100%',
+                    maxHeight: '100%'
+                  }}
+                />
+              )}
+
+              {/* Stream Info Overlay */}
+              {isConnected && (
+                <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-sm font-medium">Watching Multi-Viewer AR Stream</span>
+                  </div>
+                  <div className="text-xs text-white/70">
+                    Channel: {session.id}<br />
+                    Your UID: {localUid}<br />
+                    Host: {hostUser ? `User ${hostUser.uid}` : 'None'}<br />
+                    Viewers: {remoteUsers.size}<br />
+                    {arInitialized && `AR Markers: ${detectedMarkers.length}`}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Participant Grid (Bottom Panel) */}
-            <div className="h-48 bg-black/30 backdrop-blur-sm border-t border-white/20 p-4 relative z-30 flex-shrink-0">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-white font-medium">
-                  Viewers ({isConnected ? Math.max(0, remoteUsers.size - (hostUser ? 1 : 0)) + 1 : 0}) {/* All remote users minus host, plus local viewer */}
-                </h3>
-                {localUid && (
-                  <div className="text-white/70 text-sm">You: {localUid}</div>
-                )}
+            {/* Right Side: Delivery Control Panel (Read-only for viewers) */}
+            <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden">
+              {/* Control Panel Header - Fixed */}
+              <div className="flex-shrink-0 p-4 border-b border-white/10">
+                <h2 className="text-lg font-bold text-white mb-1">Delivery Control</h2>
+                <p className="text-sm text-white/70">Watching host's delivery control</p>
               </div>
               
-              <div className="flex items-center gap-3 mb-3">
-                {/* Local viewer tile (you) */}
-                {localUid && (
-                  <div className="participant-tile bg-gray-700 rounded-lg overflow-hidden border border-blue-400 flex-shrink-0" style={{width: '200px', height: '120px', position: 'relative'}}>
-                    <div style={{position: 'relative', width: '100%', height: '100%'}}>
-                      {/* Avatar for local user */}
-                      <div style={{
-                        width: '100%', 
-                        height: '100%', 
-                        position: 'absolute', 
-                        top: 0, 
-                        left: 0, 
-                        background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center'
-                      }}>
-                        <div style={{color: 'white', fontSize: '24px', fontWeight: 'bold'}}>YOU</div>
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto">
+                {/* Delivery Grid */}
+                <div className="p-4 border-b border-white/10">
+                  <h3 className="text-sm font-medium text-white mb-3">Delivery Zone</h3>
+                  <div className="bg-gray-800 rounded-lg p-4 aspect-square relative overflow-hidden">
+                    {/* Grid */}
+                    <div className="absolute inset-0 grid grid-cols-8 grid-rows-8 gap-1">
+                      {Array.from({ length: 64 }).map((_, index) => {
+                        const row = Math.floor(index / 8);
+                        const col = index % 8;
+                        const isStart = startPoint && startPoint.row === row && startPoint.col === col;
+                        const isEnd = endPoint && endPoint.row === row && endPoint.col === col;
+                        
+                        return (
+                          <div
+                            key={index}
+                            className={`
+                              border border-white/20 transition-colors
+                              ${isStart ? 'bg-green-500' : ''}
+                              ${isEnd ? 'bg-red-500' : ''}
+                              ${!isStart && !isEnd ? 'bg-gray-700/30' : ''}
+                            `}
+                          />
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Robot Positions */}
+                    {robots.map((robot) => (
+                      <div
+                        key={robot.id}
+                        className={`
+                          absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2
+                          ${robot.status === 'idle' ? 'bg-blue-400' : 
+                            robot.status === 'moving' ? 'bg-yellow-400 animate-pulse' : 
+                            'bg-green-400'}
+                        `}
+                        style={{
+                          left: `${robot.position.x}%`,
+                          top: `${robot.position.y}%`
+                        }}
+                        title={robot.name}
+                      />
+                    ))}
+                    
+                    {/* Legend */}
+                    <div className="absolute bottom-2 left-2 text-xs">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-2 h-2 bg-green-500 rounded"></div>
+                        <span>Start</span>
                       </div>
-                      
-                      {/* User info overlay */}
-                      <div style={{
-                        position: 'absolute', 
-                        bottom: 0, 
-                        left: 0, 
-                        right: 0, 
-                        background: 'linear-gradient(transparent, rgba(0,0,0,0.8))', 
-                        padding: '8px', 
-                        color: 'white'
-                      }}>
-                        <div style={{fontSize: '12px', fontWeight: '500'}}>You (Viewer)</div>
-                        <div style={{fontSize: '10px', opacity: 0.7}}>Watching</div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-red-500 rounded"></div>
+                        <span>End</span>
                       </div>
                     </div>
+                    
+                    {/* Viewer Notice */}
+                    <div className="absolute top-2 right-2 text-xs text-white/50 bg-black/30 px-2 py-1 rounded">
+                      View Only
+                    </div>
                   </div>
-                )}
-                
-                {/* Other viewers */}
-                <div 
-                  ref={participantGridRef}
-                  className="flex gap-3 overflow-x-auto pb-2 flex-1"
-                  style={{ scrollbarWidth: 'thin' }}
-                >
-                  {/* Participant tiles will be added here dynamically */}
                 </div>
-              </div>
-              
-              {/* Instructions */}
-              <div className="text-white/50 text-xs">
-                {remoteUsers.size === 0 
-                  ? "Other viewers will appear here when they join"
-                  : hostUser 
-                    ? `${Math.max(0, remoteUsers.size - 1)} other viewer${Math.max(0, remoteUsers.size - 1) !== 1 ? 's' : ''} watching`
-                    : `${remoteUsers.size} participant${remoteUsers.size !== 1 ? 's' : ''} connected`
-                }
+                
+                {/* Robot Status */}
+                <div className="p-4 border-b border-white/10">
+                  <h3 className="text-sm font-medium text-white mb-3">Robot Status</h3>
+                  <div className="space-y-2">
+                    {robots.map((robot) => (
+                      <div key={robot.id} className="flex items-center justify-between bg-gray-800 rounded p-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`
+                            w-2 h-2 rounded-full
+                            ${robot.status === 'idle' ? 'bg-blue-400' : 
+                              robot.status === 'moving' ? 'bg-yellow-400' : 
+                              'bg-green-400'}
+                          `} />
+                          <span className="text-sm text-white">{robot.name}</span>
+                        </div>
+                        <div className="text-xs text-white/70">
+                          {robot.battery}% • {robot.status}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Delivery Status */}
+                <div className="p-4">
+                  <h3 className="text-sm font-medium text-white mb-3">Execution</h3>
+                  
+                  <div className="space-y-3">
+                    <div className="bg-gray-800 rounded p-3">
+                      <div className="text-xs text-white/70 mb-1">Delivery Cost</div>
+                      <div className="text-lg font-bold text-white">{deliveryCost} SUI</div>
+                    </div>
+                    
+                    <div className="bg-gray-800 rounded p-3">
+                      <div className="text-xs text-white/70 mb-1">Status</div>
+                      <div className="text-sm text-white">{deliveryStatus}</div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Button
+                        variant="primary"
+                        size="small"
+                        onClick={() => {}} // No-op for viewers
+                        disabled={!startPoint || !endPoint}
+                        className="w-full"
+                      >
+                        Tip to interact
+                      </Button>
+                      
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => {}} // No-op for viewers
+                        className="w-full !bg-gray-700 hover:!bg-gray-600"
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </>
         )}
+      </div>
 
-        {/* Stream Info Overlay */}
-        {isConnected && (
-          <div className="absolute top-4 left-4 z-30 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-sm font-medium">Watching Multi-Viewer AR Stream</span>
+      {/* Bottom Viewer Panel - Fixed Height, Always Present */}
+      {isConnected && (
+        <div className="h-24 bg-gray-900/90 backdrop-blur-sm border-t border-white/10 flex items-center px-4 flex-shrink-0">
+          <div className="flex items-center gap-3 w-full">
+            {/* Viewers Label */}
+            <div className="text-white/70 text-sm font-medium whitespace-nowrap">
+              Viewers ({isConnected ? Math.max(0, remoteUsers.size - (hostUser ? 1 : 0)) + 1 : 0})
             </div>
-            <div className="text-xs text-white/70">
-              Channel: {session.id}<br />
-              Your UID: {localUid}<br />
-              Host: {hostUser ? `User ${hostUser.uid}` : 'None'}<br />
-              Viewers: {remoteUsers.size}<br />
-              {arInitialized && `AR Markers: ${detectedMarkers.length}`}
+            
+            {/* Horizontal Scroll Container */}
+            <div className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-500">
+              <div className="flex gap-3 pb-2 min-w-max">
+                {/* Local viewer tile (you) */}
+                {localUid && (
+                  <div className="flex-shrink-0 w-16 h-16 relative">
+                    <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg flex items-center justify-center text-white font-semibold text-xs border-2 border-blue-400">
+                      YOU
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-blue-400 rounded-full border-2 border-gray-900"></div>
+                    <div className="absolute top-0 left-0 right-0 bg-black/60 text-white text-xs px-1 py-0.5 rounded-t-lg text-center truncate">
+                      {localUid}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Other viewers - Direct mapping like host */}
+                {Array.from(remoteUsers.entries())
+                  .filter(([uid, user]) => uid !== hostUser?.uid) // Exclude host from viewer tiles
+                  .map(([uid, user]) => (
+                    <div key={uid} className="flex-shrink-0 w-16 h-16 relative">
+                      <div className="w-full h-full bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center text-white font-semibold text-xs">
+                        {uid.toString().slice(-2)}
+                      </div>
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-gray-900"></div>
+                      <div className="absolute top-0 left-0 right-0 bg-black/60 text-white text-xs px-1 py-0.5 rounded-t-lg text-center truncate">
+                        {uid}
+                      </div>
+                    </div>
+                  ))
+                }
+                
+                {/* Host tile if present */}
+                {hostUser && (
+                  <div className="flex-shrink-0 w-16 h-16 relative">
+                    <div className="w-full h-full bg-gradient-to-br from-green-500 to-green-700 rounded-lg flex items-center justify-center text-white font-semibold text-xs border-2 border-green-400">
+                      HOST
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-gray-900"></div>
+                    <div className="absolute top-0 left-0 right-0 bg-black/60 text-white text-xs px-1 py-0.5 rounded-t-lg text-center truncate">
+                      {hostUser.uid}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Add More Placeholder */}
+                <div className="flex-shrink-0 w-16 h-16 border-2 border-dashed border-white/30 rounded-lg flex items-center justify-center text-white/50 text-xs">
+                  +
+                </div>
+              </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }; 
