@@ -30,6 +30,16 @@ interface Robot {
   battery: number;
 }
 
+interface RemoteUser {
+  uid: number;
+  role: 'audience';
+  joinTime: number;
+  hasVideo?: boolean;
+  hasAudio?: boolean;
+  videoTrack?: any;
+  audioTrack?: any;
+}
+
 export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -77,7 +87,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingError, setStreamingError] = useState<string | null>(null);
   const [localUid, setLocalUid] = useState<number | null>(null);
-  const [remoteUsers, setRemoteUsers] = useState<Map<number, any>>(new Map());
+  const [remoteUsers, setRemoteUsers] = useState<Map<number, RemoteUser>>(new Map());
   
   // Robotics control state
   const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
@@ -589,11 +599,40 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
       
       client.on('user-published', async (user, mediaType) => {
         console.log(`📺 User ${user.uid} published ${mediaType}`);
-        // For hosts in live mode, viewers typically don't publish, but we handle it just in case
+        
+        // Subscribe to the viewer's media to receive proper events
+        try {
+          await client.subscribe(user, mediaType);
+          console.log(`✅ Host subscribed to ${mediaType} from viewer ${user.uid}`);
+        } catch (error) {
+          console.error(`❌ Failed to subscribe to ${mediaType} from viewer ${user.uid}:`, error);
+        }
+        
+        // Update viewer media status
         setRemoteUsers(prev => {
           const newMap = new Map(prev);
-          const existingUser = newMap.get(user.uid as number) || { uid: user.uid as number };
-          existingUser.hasMedia = true;
+          const existingUser = newMap.get(user.uid as number) || { 
+            uid: user.uid as number, 
+            role: 'audience',
+            joinTime: Date.now(),
+            hasVideo: false,
+            hasAudio: false
+          };
+          
+          if (mediaType === 'video') {
+            existingUser.hasVideo = true;
+            existingUser.videoTrack = user.videoTrack;
+            console.log(`🎥 Viewer ${user.uid} camera is now ON`);
+          } else if (mediaType === 'audio') {
+            existingUser.hasAudio = true;
+            existingUser.audioTrack = user.audioTrack;
+            // Play audio for the host to hear
+            if (user.audioTrack) {
+              user.audioTrack.play();
+            }
+            console.log(`🎤 Viewer ${user.uid} microphone is now ON`);
+          }
+          
           newMap.set(user.uid as number, existingUser);
           return newMap;
         });
@@ -605,7 +644,15 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
           const newMap = new Map(prev);
           const existingUser = newMap.get(user.uid as number);
           if (existingUser) {
-            existingUser.hasMedia = false;
+            if (mediaType === 'video') {
+              existingUser.hasVideo = false;
+              existingUser.videoTrack = null;
+              console.log(`🎥❌ Viewer ${user.uid} camera is now OFF`);
+            } else if (mediaType === 'audio') {
+              existingUser.hasAudio = false;
+              existingUser.audioTrack = null;
+              console.log(`🎤❌ Viewer ${user.uid} microphone is now OFF`);
+            }
             newMap.set(user.uid as number, existingUser);
           }
           return newMap;
@@ -1026,10 +1073,35 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
               {/* Connected Viewers */}
               {Array.from(remoteUsers.entries()).map(([uid, user]) => (
                 <div key={uid} className="flex-shrink-0 w-16 h-16 relative">
-                  <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-semibold text-xs">
-                    {uid.toString().slice(-2)}
+                  <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg overflow-hidden flex items-center justify-center text-white font-semibold text-xs">
+                    {user.hasVideo && user.videoTrack ? (
+                      /* Show video if viewer has camera on */
+                      <video 
+                        ref={(videoEl) => {
+                          if (videoEl && user.videoTrack) {
+                            user.videoTrack.play(videoEl);
+                          }
+                        }}
+                        className="w-full h-full object-cover"
+                        autoPlay
+                        playsInline
+                        muted
+                      />
+                    ) : (
+                      /* Show UID if no video */
+                      uid.toString().slice(-2)
+                    )}
                   </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-gray-900"></div>
+                  
+                  {/* Status indicators */}
+                  <div className="absolute -bottom-1 -right-1 flex gap-1">
+                    {/* Camera status */}
+                    <div className={`w-3 h-3 rounded-full border border-gray-900 ${user.hasVideo ? 'bg-blue-400' : 'bg-gray-500'}`}></div>
+                    {/* Microphone status */}
+                    <div className={`w-3 h-3 rounded-full border border-gray-900 ${user.hasAudio ? 'bg-green-400' : 'bg-gray-500'}`}></div>
+                  </div>
+                  
+                  {/* UID label */}
                   <div className="absolute top-0 left-0 right-0 bg-black/60 text-white text-xs px-1 py-0.5 rounded-t-lg text-center truncate">
                     {uid}
                   </div>

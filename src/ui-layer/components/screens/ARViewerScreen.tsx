@@ -17,6 +17,8 @@ interface RemoteUser {
   videoTrack?: IRemoteVideoTrack;
   audioTrack?: IRemoteAudioTrack;
   isHost?: boolean;
+  hasVideo?: boolean;
+  hasAudio?: boolean;
 }
 
 interface DeliveryPoint {
@@ -37,6 +39,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   const mainViewRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
   
   // Agora refs
   const rtcClientRef = useRef<IAgoraRTCClient | null>(null);
@@ -53,6 +56,13 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   const [remoteUsers, setRemoteUsers] = useState<Map<number, RemoteUser>>(new Map());
   const [hostUser, setHostUser] = useState<RemoteUser | null>(null);
   const [viewerUsers, setViewerUsers] = useState<Map<number, RemoteUser>>(new Map());
+  
+  // Local media state for viewer chat
+  const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
+  const [localAudioTrack, setLocalAudioTrack] = useState<any>(null);
+  const [isCameraEnabled, setIsCameraEnabled] = useState(false);
+  const [isMicEnabled, setIsMicEnabled] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   
   // AR state
   const [arInitialized, setArInitialized] = useState(false);
@@ -82,6 +92,103 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       if (newEnabled && detectedMarkers.length > 0) {
         renderSystemRef.current.updateAREffects(detectedMarkers);
       }
+    }
+  };
+
+  // Toggle camera for viewer chat
+  const toggleCamera = async () => {
+    try {
+      setMediaError(null);
+      
+      if (!isCameraEnabled) {
+        // Enable camera
+        console.log('🎥 Enabling camera...');
+        const videoTrack = await AgoraRTC.createCameraVideoTrack({
+          optimizationMode: 'detail',
+          encoderConfig: '480p_1'
+        });
+        
+        setLocalVideoTrack(videoTrack);
+        setIsCameraEnabled(true);
+        
+        // Publish the video track if connected
+        if (rtcClientRef.current && isConnected) {
+          await rtcClientRef.current.publish([videoTrack]);
+          console.log('📤 Published camera video');
+        }
+        
+        // Play video in local viewer tile
+        if (localVideoRef.current) {
+          videoTrack.play(localVideoRef.current);
+          console.log('📺 Playing local video in viewer tile');
+        }
+      } else {
+        // Disable camera
+        console.log('🎥❌ Disabling camera...');
+        
+        if (localVideoTrack) {
+          // Unpublish first if connected
+          if (rtcClientRef.current && isConnected) {
+            await rtcClientRef.current.unpublish([localVideoTrack]);
+            console.log('📤❌ Unpublished camera video');
+          }
+          
+          // Stop and close the track
+          localVideoTrack.stop();
+          localVideoTrack.close();
+          setLocalVideoTrack(null);
+        }
+        
+        setIsCameraEnabled(false);
+      }
+    } catch (error) {
+      console.error('Error toggling camera:', error);
+      setMediaError(`Camera error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  // Toggle microphone for viewer chat
+  const toggleMicrophone = async () => {
+    try {
+      setMediaError(null);
+      
+      if (!isMicEnabled) {
+        // Enable microphone
+        console.log('🎤 Enabling microphone...');
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+          encoderConfig: 'music_standard'
+        });
+        
+        setLocalAudioTrack(audioTrack);
+        setIsMicEnabled(true);
+        
+        // Publish the audio track if connected
+        if (rtcClientRef.current && isConnected) {
+          await rtcClientRef.current.publish([audioTrack]);
+          console.log('📤 Published microphone audio');
+        }
+      } else {
+        // Disable microphone
+        console.log('🎤❌ Disabling microphone...');
+        
+        if (localAudioTrack) {
+          // Unpublish first if connected
+          if (rtcClientRef.current && isConnected) {
+            await rtcClientRef.current.unpublish([localAudioTrack]);
+            console.log('📤❌ Unpublished microphone audio');
+          }
+          
+          // Stop and close the track
+          localAudioTrack.stop();
+          localAudioTrack.close();
+          setLocalAudioTrack(null);
+        }
+        
+        setIsMicEnabled(false);
+      }
+    } catch (error) {
+      console.error('Error toggling microphone:', error);
+      setMediaError(`Microphone error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -255,6 +362,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           
           if (mediaType === 'video' && user.videoTrack) {
             existingUser.videoTrack = user.videoTrack;
+            existingUser.hasVideo = true;
             
             // Determine if this is the host (first video publisher or has higher authority)
             // For simplicity, treat the first video publisher as host
@@ -351,6 +459,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           
           if (mediaType === 'audio' && user.audioTrack) {
             existingUser.audioTrack = user.audioTrack;
+            existingUser.hasAudio = true;
             user.audioTrack.play();
             console.log(`🔊 Playing audio for user ${user.uid}`);
           }
@@ -396,9 +505,11 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           if (existingUser) {
             if (mediaType === 'video') {
               delete existingUser.videoTrack;
+              existingUser.hasVideo = false;
             }
             if (mediaType === 'audio') {
               delete existingUser.audioTrack;
+              existingUser.hasAudio = false;
             }
             
             // Keep the user in remoteUsers even if they're not publishing
@@ -458,6 +569,22 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       await client.join(APP_ID, session.id, token, uid);
       console.log(`Joined channel ${session.id} with UID ${uid} as viewer`);
       
+      // Auto-publish local media if already enabled
+      const tracksToPublish = [];
+      if (localVideoTrack && isCameraEnabled) {
+        tracksToPublish.push(localVideoTrack);
+        console.log('📤 Auto-publishing existing camera video');
+      }
+      if (localAudioTrack && isMicEnabled) {
+        tracksToPublish.push(localAudioTrack);
+        console.log('📤 Auto-publishing existing microphone audio');
+      }
+      
+      if (tracksToPublish.length > 0) {
+        await client.publish(tracksToPublish);
+        console.log(`📤 Published ${tracksToPublish.length} existing media tracks`);
+      }
+      
       setIsConnected(true);
     } catch (error) {
       console.error('Error connecting to stream:', error);
@@ -471,6 +598,23 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       // Clean up AR overlay first
       cleanupAROverlay();
       
+      // Clean up local media tracks
+      if (localVideoTrack) {
+        localVideoTrack.stop();
+        localVideoTrack.close();
+        setLocalVideoTrack(null);
+      }
+      
+      if (localAudioTrack) {
+        localAudioTrack.stop();
+        localAudioTrack.close();
+        setLocalAudioTrack(null);
+      }
+      
+      setIsCameraEnabled(false);
+      setIsMicEnabled(false);
+      setMediaError(null);
+
       if (rtcClientRef.current) {
         // Leave channel
         await rtcClientRef.current.leave();
@@ -584,6 +728,44 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           </div>
           
           <div className="flex items-center gap-3">
+            {/* Camera Toggle */}
+            {isConnected && (
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={toggleCamera}
+                className={`${isCameraEnabled ? '!bg-blue-600 hover:!bg-blue-700' : '!bg-white/10 hover:!bg-white/20'}`}
+              >
+                <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {isCameraEnabled ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18 21l-4.95-4.95m0 0L5.636 5.636M18.364 18.364L12 12" />
+                  )}
+                </svg>
+                {isCameraEnabled ? 'Camera On' : 'Camera Off'}
+              </Button>
+            )}
+
+            {/* Microphone Toggle */}
+            {isConnected && (
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={toggleMicrophone}
+                className={`${isMicEnabled ? '!bg-green-600 hover:!bg-green-700' : '!bg-white/10 hover:!bg-white/20'}`}
+              >
+                <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {isMicEnabled ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-3a1 1 0 011-1h1m0 0V7a3 3 0 013-3m3 3v3m0 0a1 1 0 001 1h1m-1 0v3a1 1 0 01-1 1H9a1 1 0 01-1-1v-3m0 0a1 1 0 011-1h1m0 0V7a3 3 0 013-3m3 3v3" />
+                  )}
+                </svg>
+                {isMicEnabled ? 'Mic On' : 'Mic Off'}
+              </Button>
+            )}
+
             {/* AR Effects Toggle */}
             {arInitialized && (
               <Button
@@ -668,6 +850,12 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         {connectionError && (
           <div className="mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded text-red-400 text-sm">
             {connectionError}
+          </div>
+        )}
+        
+        {mediaError && (
+          <div className="mt-2 p-2 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-400 text-sm">
+            {mediaError}
           </div>
         )}
       </div>
@@ -906,10 +1094,35 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 {/* Local viewer tile (you) */}
                 {localUid && (
                   <div className="flex-shrink-0 w-16 h-16 relative">
-                    <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg flex items-center justify-center text-white font-semibold text-xs border-2 border-blue-400">
-                      YOU
+                    {/* Video container */}
+                    <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg overflow-hidden border-2 border-blue-400 relative">
+                      {isCameraEnabled ? (
+                        /* Show video when camera is on */
+                        <video 
+                          ref={localVideoRef}
+                          className="w-full h-full object-cover"
+                          autoPlay
+                          playsInline
+                          muted
+                          style={{ transform: 'scaleX(-1)' }} // Mirror the video
+                        />
+                      ) : (
+                        /* Show "YOU" text when camera is off */
+                        <div className="w-full h-full flex items-center justify-center text-white font-semibold text-xs">
+                          YOU
+                        </div>
+                      )}
                     </div>
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-blue-400 rounded-full border-2 border-gray-900"></div>
+                    
+                    {/* Status indicators */}
+                    <div className="absolute -bottom-1 -right-1 flex gap-1">
+                      {/* Camera status */}
+                      <div className={`w-3 h-3 rounded-full border border-gray-900 ${isCameraEnabled ? 'bg-blue-400' : 'bg-gray-500'}`}></div>
+                      {/* Microphone status */}
+                      <div className={`w-3 h-3 rounded-full border border-gray-900 ${isMicEnabled ? 'bg-green-400' : 'bg-gray-500'}`}></div>
+                    </div>
+                    
+                    {/* UID label */}
                     <div className="absolute top-0 left-0 right-0 bg-black/60 text-white text-xs px-1 py-0.5 rounded-t-lg text-center truncate">
                       {localUid}
                     </div>
@@ -921,10 +1134,35 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                   .filter(([uid, user]) => uid !== hostUser?.uid) // Exclude host from viewer tiles
                   .map(([uid, user]) => (
                     <div key={uid} className="flex-shrink-0 w-16 h-16 relative">
-                      <div className="w-full h-full bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center text-white font-semibold text-xs">
-                        {uid.toString().slice(-2)}
+                      <div className="w-full h-full bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center text-white font-semibold text-xs overflow-hidden">
+                        {user.hasVideo && user.videoTrack ? (
+                          /* Show video if participant has camera on */
+                          <video 
+                            ref={(videoEl) => {
+                              if (videoEl && user.videoTrack) {
+                                user.videoTrack.play(videoEl);
+                              }
+                            }}
+                            className="w-full h-full object-cover"
+                            autoPlay
+                            playsInline
+                            muted
+                          />
+                        ) : (
+                          /* Show UID if no video */
+                          uid.toString().slice(-2)
+                        )}
                       </div>
-                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-gray-900"></div>
+                      
+                      {/* Status indicators */}
+                      <div className="absolute -bottom-1 -right-1 flex gap-1">
+                        {/* Camera status */}
+                        <div className={`w-3 h-3 rounded-full border border-gray-900 ${user.hasVideo ? 'bg-blue-400' : 'bg-gray-500'}`}></div>
+                        {/* Microphone status */}
+                        <div className={`w-3 h-3 rounded-full border border-gray-900 ${user.hasAudio ? 'bg-green-400' : 'bg-gray-500'}`}></div>
+                      </div>
+                      
+                      {/* UID label */}
                       <div className="absolute top-0 left-0 right-0 bg-black/60 text-white text-xs px-1 py-0.5 rounded-t-lg text-center truncate">
                         {uid}
                       </div>
