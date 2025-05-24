@@ -10,9 +10,17 @@ interface LobbyScreenProps {
   onStartRace: () => void;
   onBack: () => void;
   onTestGame?: () => void;
+  onStartARStream?: (session: RaceSession) => void;
+  onJoinARStream?: (session: RaceSession) => void;
 }
 
-export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStartRace, onBack, onTestGame }) => {
+export const LobbyScreen: React.FC<LobbyScreenProps> = ({ 
+  onStartRace, 
+  onBack, 
+  onTestGame,
+  onStartARStream,
+  onJoinARStream
+}) => {
   const [sessions, setSessions] = useState<RaceSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState<RaceSession | null>(null);
@@ -67,10 +75,24 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStartRace, onBack, o
         }
       });
 
-      // Close modal and start race if driver
+      // Close modal
       setRoleModalOpen(false);
+      
+      // Navigate to appropriate AR streaming screen
       if (role === 'driver') {
-        onStartRace();
+        if (onStartARStream) {
+          onStartARStream(selectedSession);
+        } else {
+          // Fallback to original behavior
+          onStartRace();
+        }
+      } else {
+        if (onJoinARStream) {
+          onJoinARStream(selectedSession);
+        } else {
+          // For now, just log the action since there's no fallback for spectators
+          console.log('Joining as spectator for session:', selectedSession.id);
+        }
       }
     } catch (error) {
       console.error('Failed to update session:', error);

@@ -19,11 +19,15 @@ const MOCK_TRACKS = [
   }
 ];
 
-// Generate a mock session for a track
+// Generate a mock session for a track with static ID
 const createMockSession = (trackIndex: number): RaceSession => {
   const track = MOCK_TRACKS[trackIndex];
+  // Use static session ID based on track ID for consistent channel names
+  // This allows hosts and viewers to join the same Agora channel
+  const sessionId = `${track.id}-session-001`;
+  
   return {
-    id: `${track.id}-${Date.now()}`,
+    id: sessionId,
     trackId: track.id,
     trackName: track.name,
     thumbnailUrl: track.thumbnail,
@@ -41,7 +45,7 @@ const createMockSession = (trackIndex: number): RaceSession => {
   };
 };
 
-// Create initial set of sessions
+// Create initial set of sessions - these will persist for streaming consistency
 let mockSessions: RaceSession[] = Array(3)
   .fill(null)
   .map((_, index) => createMockSession(index));
