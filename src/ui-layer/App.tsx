@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { LoginScreen } from './components/screens/LoginScreen';
 import { DriversLicenseScreen } from './components/screens/DriversLicenseScreen';
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
@@ -36,16 +36,6 @@ function AppContent() {
   const navigate = useNavigate();
   const { user, isLoading } = useAuth();
   const [selectedSession, setSelectedSession] = useState<RaceSession | null>(null);
-
-  // Redirect to login if user is not authenticated
-  useEffect(() => {
-    if (!isLoading && !user) {
-      // Always redirect to root login page when not authenticated
-      if (window.location.pathname !== '/') {
-        navigate('/');
-      }
-    }
-  }, [user, isLoading, navigate]);
 
   // Show loading screen while checking authentication
   if (isLoading) {

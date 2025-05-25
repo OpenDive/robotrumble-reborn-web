@@ -3,6 +3,7 @@ import { SplitLayout } from '../layout/SplitLayout';
 import { MenuButton } from '../buttons/MenuButton';
 import { NavigationButton } from '../buttons/NavigationButton';
 import { FaUser, FaUsers, FaInfoCircle, FaStar } from 'react-icons/fa';
+import SuiWalletConnect from '../shared/SuiWalletConnect';
 
 interface GameMenuScreenProps {
   onBack?: () => void;
@@ -89,6 +90,12 @@ export const GameMenuScreen: React.FC<GameMenuScreenProps> = ({
 
       {/* Radial gradient overlay */}
       <div className="absolute inset-0 bg-gradient-radial from-transparent via-[#0B0B1A]/80 to-[#0B0B1A]"/>
+      
+      {/* Wallet address button - positioned at top right */}
+      <div className="absolute top-6 right-6 z-50">
+        <SuiWalletConnect />
+      </div>
+
       <SplitLayout
         className="relative z-10"
         leftContent={
@@ -174,13 +181,7 @@ export const GameMenuScreen: React.FC<GameMenuScreenProps> = ({
         }
       />
 
-      {/* Navigation buttons */}
-      <NavigationButton
-        label="Back"
-        buttonKey="B"
-        position="left"
-        onClick={onBack}
-      />
+      {/* Navigation buttons - only show OK button now */}
       <NavigationButton
         label="OK"
         buttonKey="A"

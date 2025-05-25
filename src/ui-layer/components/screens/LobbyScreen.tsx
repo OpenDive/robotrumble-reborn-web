@@ -5,6 +5,7 @@ import { RaceCardGrid } from './lobby/RaceCard/RaceCardGrid';
 import { RoleModal } from './lobby/RoleModal/RoleModal';
 import { Header } from '../layout/Header';
 import { PageContainer } from '../layout/PageContainer';
+import SuiWalletConnect from '../shared/SuiWalletConnect';
 
 interface LobbyScreenProps {
   onStartRace: () => void;
@@ -118,11 +119,16 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       </div>
       {/* Radial gradient overlay */}
       <div className="absolute inset-0 bg-gradient-radial from-transparent via-[#0B0B1A]/80 to-[#0B0B1A]"/>
+      
+      {/* Wallet address button - positioned at top right */}
+      <div className="absolute top-6 right-6 z-50">
+        <SuiWalletConnect />
+      </div>
+      
       {/* Header */}
       <Header
         title="Race Lobby"
         subtitle="Select a race to join"
-        onBack={onBack}
         className="relative z-10 bg-gradient-to-r from-game-900/50 via-game-800/50 to-game-900/50 backdrop-blur-sm border-b border-white/5"
       />
 

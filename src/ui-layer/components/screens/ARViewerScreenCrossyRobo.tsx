@@ -6,6 +6,7 @@ import { RaceSession } from '../../../shared/types/race';
 import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
 import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
+import SuiWalletConnect from '../shared/SuiWalletConnect';
 
 interface ARViewerScreenCrossyRoboProps {
   session: RaceSession;
@@ -869,18 +870,6 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
               </Button>
             )}
 
-            {/* AR Effects Toggle */}
-            {arInitialized && (
-              <Button
-                variant="secondary"
-                size="small"
-                onClick={toggleAREffects}
-                className={`${arEffectsEnabled ? '!bg-blue-600 hover:!bg-blue-700' : '!bg-white/10 hover:!bg-white/20'}`}
-              >
-                {arEffectsEnabled ? 'Hide Effects' : 'Show Effects'}
-              </Button>
-            )}
-            
             {/* Debug State Button */}
             {isConnected && (
               <Button
@@ -946,6 +935,11 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                 Leave Stream
               </Button>
             )}
+            
+            {/* Wallet Connect */}
+            <div className="ml-2">
+              <SuiWalletConnect />
+            </div>
           </div>
         </div>
         

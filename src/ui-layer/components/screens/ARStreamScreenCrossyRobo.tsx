@@ -10,6 +10,7 @@ import { GamePhysicsSystem } from '../../../engine-layer/core/physics/GamePhysic
 import { InputController } from '../../../engine-layer/core/input/InputController';
 import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
+import SuiWalletConnect from '../shared/SuiWalletConnect';
 
 interface ARStreamScreenCrossyRoboProps {
   session: RaceSession;
@@ -866,16 +867,6 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
               </div>
               
               <div className="flex items-center gap-3">
-                {/* AR Effects Toggle */}
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={toggleAREffects}
-                  className={`${arEffectsEnabled ? '!bg-blue-600 hover:!bg-blue-700' : '!bg-white/10 hover:!bg-white/20'}`}
-                >
-                  {arEffectsEnabled ? 'Hide Effects' : 'Show Effects'}
-                </Button>
-                
                 {/* AR Mode Toggle */}
                 <Button
                   variant="secondary"
@@ -914,6 +905,11 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                     Stop Stream
                   </Button>
                 )}
+                
+                {/* Wallet Connect */}
+                <div className="ml-2">
+                  <SuiWalletConnect />
+                </div>
               </div>
             </div>
             

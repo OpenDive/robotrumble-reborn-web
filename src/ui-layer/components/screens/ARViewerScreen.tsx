@@ -6,6 +6,7 @@ import { RaceSession } from '../../../shared/types/race';
 import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
 import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
+import SuiWalletConnect from '../shared/SuiWalletConnect';
 
 interface ARViewerScreenProps {
   session: RaceSession;
@@ -765,18 +766,6 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 {isMicEnabled ? 'Mic On' : 'Mic Off'}
               </Button>
             )}
-
-            {/* AR Effects Toggle */}
-            {arInitialized && (
-              <Button
-                variant="secondary"
-                size="small"
-                onClick={toggleAREffects}
-                className={`${arEffectsEnabled ? '!bg-blue-600 hover:!bg-blue-700' : '!bg-white/10 hover:!bg-white/20'}`}
-              >
-                {arEffectsEnabled ? 'Hide Effects' : 'Show Effects'}
-              </Button>
-            )}
             
             {/* Debug State Button */}
             {isConnected && (
@@ -843,6 +832,11 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 Leave Stream
               </Button>
             )}
+            
+            {/* Wallet Connect */}
+            <div className="ml-2">
+              <SuiWalletConnect />
+            </div>
           </div>
         </div>
         
