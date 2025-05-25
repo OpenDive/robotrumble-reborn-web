@@ -4,6 +4,7 @@ import { MenuButton } from '../buttons/MenuButton';
 import { NavigationButton } from '../buttons/NavigationButton';
 import { FaUser, FaUsers, FaInfoCircle, FaStar } from 'react-icons/fa';
 import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { WorldGlobe } from '../shared/WorldGlobe';
 
 interface GameMenuScreenProps {
   onBack?: () => void;
@@ -99,22 +100,12 @@ export const GameMenuScreen: React.FC<GameMenuScreenProps> = ({
       <SplitLayout
         className="relative z-10"
         leftContent={
-          <div className="w-full h-full flex items-center justify-center">
-            {/* Placeholder for 3D model with glow effect */}
+          <div className="w-full h-full flex flex-col items-center justify-center">
+            {/* 3D World Globe with Robot Locations */}
             <div className="relative group animate-float">
               <div className="absolute inset-0 bg-neon-purple blur-xl opacity-20 group-hover:opacity-30 transition-opacity duration-500" />
-              <div className="w-80 h-80 rounded-full bg-gradient-to-br from-game-800 to-game-900 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-radial from-neon-purple/20 to-transparent opacity-75" />
-                <div 
-                  className="absolute inset-0 opacity-10"
-                  style={{
-                    backgroundImage: `
-                      linear-gradient(to right, white 1px, transparent 1px),
-                      linear-gradient(to bottom, white 1px, transparent 1px)
-                    `,
-                    backgroundSize: '20px 20px',
-                  }}
-                />
+              <div className="w-96 h-80 relative">
+                <WorldGlobe className="w-full h-full" />
               </div>
             </div>
           </div>

@@ -114,7 +114,8 @@ export default function GoogleSignIn() {
             name: userData.name,
             picture: userData.picture,
             suiAddress,
-            zkLoginState: zkState
+            zkLoginState: zkState,
+            loginMethod: 'google' as const
           };
           
           setUser(newUser);

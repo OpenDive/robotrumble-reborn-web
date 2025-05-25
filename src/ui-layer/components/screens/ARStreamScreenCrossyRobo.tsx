@@ -795,11 +795,6 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
         localVideoTrackRef.current = videoTrack;
         localAudioTrackRef.current = audioTrack;
         
-        // Play local video preview
-        if (localVideoRef.current) {
-          videoTrack.play(localVideoRef.current);
-        }
-        
         // Publish tracks
         await client.publish([videoTrack, audioTrack]);
         console.log('Published Crossy Robo stream');
@@ -1003,18 +998,6 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                   AR Markers: {detectedMarkers.length}
                 </div>
               </div>
-            )}
-            
-            {/* Local Video Preview */}
-            {isStreaming && (
-              <video
-                ref={localVideoRef}
-                className="absolute bottom-4 right-4 w-48 h-36 bg-black rounded-lg border-2 border-white/20 z-20"
-                style={{ transform: 'scaleX(-1)' }}
-                autoPlay
-                playsInline
-                muted
-              />
             )}
           </div>
         </div>

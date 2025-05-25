@@ -1017,18 +1017,6 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
                 </div>
               </div>
             )}
-            
-            {/* Local Video Preview */}
-            {isStreaming && (
-              <video
-                ref={localVideoRef}
-                className="absolute bottom-4 right-4 w-48 h-36 bg-black rounded-lg border-2 border-white/20 z-20"
-                style={{ transform: 'scaleX(-1)' }}
-                autoPlay
-                playsInline
-                muted
-              />
-            )}
           </div>
         </div>
 

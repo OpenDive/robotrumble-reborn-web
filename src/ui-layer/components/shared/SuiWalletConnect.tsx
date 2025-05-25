@@ -4,7 +4,7 @@ import { useAuth } from '../../../shared/contexts/AuthContext';
 import { FaWallet, FaChevronDown, FaCopy, FaSignOutAlt } from 'react-icons/fa';
 
 export default function SuiWalletConnect() {
-  const { user, setUser } = useAuth();
+  const { user, setUser, logout } = useAuth();
   const currentAccount = useCurrentAccount();
   const { mutate: connectWallet } = useConnectWallet();
   const { mutate: disconnectWallet } = useDisconnectWallet();
@@ -29,6 +29,20 @@ export default function SuiWalletConnect() {
   }, [currentAccount, user, setUser]);
 
   const handleDisconnect = () => {
+    console.log('handleDisconnect called');
+    console.log('user:', user);
+    console.log('user?.loginMethod:', user?.loginMethod);
+    
+    // Handle both wallet and ZkLogin disconnection
+    if (user?.loginMethod === 'google') {
+      // Clear ZkLogin data
+      console.log('Disconnecting ZkLogin user...');
+      logout();
+      setShowDropdown(false);
+      console.log('ZkLogin user disconnected');
+      return;
+    }
+    
     // Clear any stored wallet connection data
     try {
       // Clear dApp Kit storage
@@ -53,8 +67,9 @@ export default function SuiWalletConnect() {
   };
 
   const handleCopyAddress = () => {
-    if (currentAccount?.address) {
-      navigator.clipboard.writeText(currentAccount.address);
+    const address = currentAccount?.address || user?.suiAddress;
+    if (address) {
+      navigator.clipboard.writeText(address);
       // You could add a toast notification here
       console.log('Address copied to clipboard');
     }
@@ -79,7 +94,12 @@ export default function SuiWalletConnect() {
     }
   }, [showDropdown]);
 
-  if (currentAccount) {
+  // Check if user is connected via wallet or ZkLogin
+  const isConnected = currentAccount || user;
+  const displayAddress = currentAccount?.address || user?.suiAddress;
+  const displayName = currentAccount?.label || user?.name || 'User';
+
+  if (isConnected && displayAddress) {
     return (
       <div className="relative wallet-dropdown">
         <button
@@ -91,8 +111,11 @@ export default function SuiWalletConnect() {
           </div>
           <div className="text-left">
             <div className="text-sm font-medium">
-              {currentAccount.address.slice(0, 6)}...{currentAccount.address.slice(-4)}
+              {displayAddress.slice(0, 6)}...{displayAddress.slice(-4)}
             </div>
+            {user?.loginMethod === 'google' && (
+              <div className="text-xs text-white/60">ZkLogin</div>
+            )}
           </div>
           <FaChevronDown className={`text-xs transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
         </button>
@@ -101,10 +124,12 @@ export default function SuiWalletConnect() {
         {showDropdown && (
           <div className="absolute top-full right-0 mt-2 w-64 bg-black/90 backdrop-blur-sm border border-white/10 rounded-lg shadow-xl z-50">
             <div className="p-4">
-              <div className="text-white text-sm font-medium mb-2">Wallet Address</div>
+              <div className="text-white text-sm font-medium mb-2">
+                {user?.loginMethod === 'google' ? 'ZkLogin Address' : 'Wallet Address'}
+              </div>
               <div className="flex items-center gap-2 p-2 bg-white/5 rounded border border-white/10">
                 <span className="text-white/80 text-xs font-mono flex-1 break-all">
-                  {currentAccount.address}
+                  {displayAddress}
                 </span>
                 <button
                   onClick={handleCopyAddress}
@@ -114,15 +139,30 @@ export default function SuiWalletConnect() {
                   <FaCopy className="text-white/60 text-xs" />
                 </button>
               </div>
+              {user?.name && (
+                <div className="mt-3">
+                  <div className="text-white text-sm font-medium mb-1">Name</div>
+                  <div className="text-white/80 text-sm">{user.name}</div>
+                </div>
+              )}
+              {user?.email && (
+                <div className="mt-2">
+                  <div className="text-white text-sm font-medium mb-1">Email</div>
+                  <div className="text-white/80 text-sm">{user.email}</div>
+                </div>
+              )}
             </div>
             
             <div className="border-t border-white/10">
               <button
-                onClick={handleDisconnect}
+                onClick={() => {
+                  console.log('Disconnect button clicked');
+                  handleDisconnect();
+                }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 transition-colors text-sm"
               >
                 <FaSignOutAlt className="text-sm" />
-                Disconnect Wallet
+                {user?.loginMethod === 'google' ? 'Sign Out' : 'Disconnect Wallet'}
               </button>
             </div>
           </div>

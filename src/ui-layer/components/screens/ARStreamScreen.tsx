@@ -506,18 +506,9 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
 
   // Robotics control functions
   const handleGridClick = (row: number, col: number) => {
-    if (!startPoint) {
-      setStartPoint({ row, col, id: 'start' });
-      setDeliveryStatus('Select end point');
-    } else if (!endPoint) {
-      setEndPoint({ row, col, id: 'end' });
-      setDeliveryStatus('Ready to execute delivery');
-    } else {
-      // Reset selection
-      setStartPoint({ row, col, id: 'start' });
-      setEndPoint(null);
-      setDeliveryStatus('Select end point');
-    }
+    // Only set start point, no end point needed
+    setStartPoint({ row, col, id: 'start' });
+    setDeliveryStatus('Ready to execute delivery');
   };
 
   // Add periodic debug logging for streaming state
@@ -536,7 +527,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   }, [isStreaming, localUid, remoteUsers, session.id]);
 
   const executeDelivery = async () => {
-    if (!startPoint || !endPoint) return;
+    if (!startPoint) return;
     
     setPaymentStatus('processing');
     setDeliveryStatus('Processing payment...');
@@ -561,6 +552,20 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
         }, 2000);
       }, 3000);
     }, 2000);
+  };
+
+  const completeDelivery = () => {
+    setDeliveryStatus('Delivery completed! Payment released to robot.');
+    setRobots(prev => prev.map(robot => 
+      robot.id === 'robot-a' 
+        ? { ...robot, status: 'idle' }
+        : robot
+    ));
+    
+    // After a moment, reset everything for next delivery
+    setTimeout(() => {
+      resetDelivery();
+    }, 3000);
   };
 
   const resetDelivery = () => {
@@ -905,18 +910,6 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                 </div>
               </div>
             )}
-            
-            {/* Local Video Preview */}
-            {isStreaming && (
-              <video
-                ref={localVideoRef}
-                className="absolute bottom-4 right-4 w-48 h-36 bg-black rounded-lg border-2 border-white/20 z-20"
-                style={{ transform: 'scaleX(-1)' }}
-                autoPlay
-                playsInline
-                muted
-              />
-            )}
           </div>
         </div>
 
@@ -940,7 +933,6 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                     const row = Math.floor(index / 8);
                     const col = index % 8;
                     const isStart = startPoint && startPoint.row === row && startPoint.col === col;
-                    const isEnd = endPoint && endPoint.row === row && endPoint.col === col;
                     
                     return (
                       <div
@@ -948,8 +940,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                         className={`
                           border border-white/20 cursor-pointer transition-colors
                           ${isStart ? 'bg-green-500' : ''}
-                          ${isEnd ? 'bg-red-500' : ''}
-                          ${!isStart && !isEnd ? 'hover:bg-white/10' : ''}
+                          ${!isStart ? 'hover:bg-white/10' : ''}
                         `}
                         onClick={() => handleGridClick(row, col)}
                       />
@@ -980,10 +971,6 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                   <div className="flex items-center gap-2 mb-1">
                     <div className="w-2 h-2 bg-green-500 rounded"></div>
                     <span>Start</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-red-500 rounded"></div>
-                    <span>End</span>
                   </div>
                 </div>
               </div>
@@ -1032,7 +1019,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                     variant="primary"
                     size="small"
                     onClick={executeDelivery}
-                    disabled={!startPoint || !endPoint || paymentStatus === 'processing'}
+                    disabled={!startPoint || paymentStatus === 'processing'}
                     className="w-full"
                   >
                     {paymentStatus === 'processing' ? 'Processing...' : 
@@ -1043,10 +1030,14 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                   <Button
                     variant="secondary"
                     size="small"
-                    onClick={resetDelivery}
-                    className="w-full !bg-gray-700 hover:!bg-gray-600"
+                    onClick={deliveryStatus === 'Delivery in progress...' ? completeDelivery : resetDelivery}
+                    className={`w-full ${
+                      deliveryStatus === 'Delivery in progress...' 
+                        ? '!bg-yellow-600 hover:!bg-yellow-700 !text-black font-semibold' 
+                        : '!bg-gray-700 hover:!bg-gray-600'
+                    }`}
                   >
-                    Reset
+                    {deliveryStatus === 'Delivery in progress...' ? 'Delivery completed' : 'Reset'}
                   </Button>
                 </div>
               </div>
