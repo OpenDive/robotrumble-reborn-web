@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FaCamera, FaRedo } from 'react-icons/fa';
+import { FaCamera, FaRedo, FaSignOutAlt } from 'react-icons/fa';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGamepad } from '@fortawesome/free-solid-svg-icons';
 import { DriversLicenseCard } from '../cards/DriversLicenseCard';
 import { CountdownOverlay } from '../overlays/CountdownOverlay';
 import { triggerNeonConfetti } from '../../utils/confetti';
+import { useAuth } from '../../../shared/contexts/AuthContext';
+import { useDisconnectWallet } from '@mysten/dapp-kit';
 
 type CaptureState = 'camera' | 'preview';
 type CountdownState = 'idle' | 'counting' | 'capturing';
@@ -14,6 +16,8 @@ interface DriversLicenseScreenProps {
 }
 
 export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onComplete }) => {
+  const { logout, user } = useAuth();
+  const { mutate: disconnectWallet } = useDisconnectWallet();
 
   const [captureState, setCaptureState] = useState<CaptureState>('camera');
   const [photoData, setPhotoData] = useState<string | null>(null);
@@ -166,6 +170,40 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
     onComplete();
   };
 
+  const handleDisconnect = () => {
+    console.log('Disconnect button clicked');
+    console.log('Current user:', user);
+    
+    // If user was connected via wallet, disconnect the wallet first
+    if (user?.loginMethod === 'wallet') {
+      console.log('Disconnecting wallet...');
+      disconnectWallet();
+    }
+    
+    // Clear any stored wallet connection data
+    try {
+      // Clear dApp Kit storage
+      localStorage.removeItem('sui-dapp-kit:wallet-connection-info');
+      localStorage.removeItem('sui-dapp-kit:last-connected-wallet-name');
+      localStorage.removeItem('sui-dapp-kit:wallet-connection-status');
+      
+      // Clear any other wallet-related storage
+      Object.keys(localStorage).forEach(key => {
+        if (key.includes('wallet') || key.includes('sui') || key.includes('dapp')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      console.log('Cleared wallet storage');
+    } catch (error) {
+      console.error('Error clearing wallet storage:', error);
+    }
+    
+    // Then call logout to clear auth state
+    logout();
+    console.log('Logout called');
+  };
+
   const renderCamera = () => (
     <div className="relative w-full max-w-2xl mx-auto space-y-6">
       {/* Speech bubble */}
@@ -284,6 +322,16 @@ export const DriversLicenseScreen: React.FC<DriversLicenseScreenProps> = ({ onCo
         className={`fixed inset-0 bg-white pointer-events-none transition-opacity duration-750 z-50
           ${isFlashing ? 'opacity-60' : 'opacity-0'}`}
       />
+      
+      {/* Disconnect button - positioned at top right */}
+      <button
+        onClick={handleDisconnect}
+        className="fixed top-6 right-6 z-50 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 transition-all duration-200 active:scale-95 shadow-lg"
+      >
+        <FaSignOutAlt className="text-sm" />
+        Disconnect
+      </button>
+
       <div className="min-h-screen flex items-center justify-center bg-[#0B0B1A] relative overflow-hidden">
         {/* Background grid effect */}
         <div className="absolute inset-0 w-[200%] h-[200%] -top-1/2 -left-1/2">

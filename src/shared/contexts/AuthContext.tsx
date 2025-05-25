@@ -10,13 +10,15 @@ export interface ZkLoginState {
 }
 
 export interface User {
-  accessToken: string;
-  idToken: string;
+  accessToken?: string;
+  idToken?: string;
   email?: string;
   name?: string;
   picture?: string;
   suiAddress: string;
-  zkLoginState: ZkLoginState;
+  zkLoginState?: ZkLoginState;
+  walletAddress?: string;
+  loginMethod: 'google' | 'wallet';
 }
 
 interface AuthContextType {
@@ -61,10 +63,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const logout = () => {
+    console.log('Logout function called');
+    
+    // Clear user state and localStorage
     setUser(null);
     localStorage.removeItem('auth_user');
     localStorage.removeItem('sui_address');
     localStorage.removeItem('zk_login_state');
+    
+    console.log('User state cleared');
   };
 
   const handleSetUser = (newUser: User | null) => {
@@ -75,7 +82,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email: newUser.email,
         name: newUser.name,
         picture: newUser.picture,
-        zkLoginState: newUser.zkLoginState
+        zkLoginState: newUser.zkLoginState,
+        walletAddress: newUser.walletAddress,
+        loginMethod: newUser.loginMethod
       };
       localStorage.setItem('auth_user', JSON.stringify(userToStore));
       localStorage.setItem('sui_address', newUser.suiAddress);

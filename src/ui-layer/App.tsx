@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LoginScreen } from './components/screens/LoginScreen';
 import { DriversLicenseScreen } from './components/screens/DriversLicenseScreen';
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
@@ -16,22 +16,53 @@ import { RouteTransition } from './components/transitions/RouteTransition';
 import { RaceScreen } from './components/screens/RaceScreen';
 import BabylonTestScreen from './components/screens/BabylonTestScreen';
 import { RaceSession } from '../shared/types/race';
-import { AuthProvider } from '../shared/contexts/AuthContext';
+import { AuthProvider, useAuth } from '../shared/contexts/AuthContext';
+import { SuiClientProvider, WalletProvider } from '@mysten/dapp-kit';
+import { getFullnodeUrl } from '@mysten/sui/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './App.css';
+
+// Create a query client for React Query
+const queryClient = new QueryClient();
+
+// Sui network configuration
+const networks = {
+  devnet: { url: getFullnodeUrl('devnet') },
+  testnet: { url: getFullnodeUrl('testnet') },
+  mainnet: { url: getFullnodeUrl('mainnet') },
+};
 
 function AppContent() {
   const navigate = useNavigate();
+  const { user, isLoading } = useAuth();
   const [selectedSession, setSelectedSession] = useState<RaceSession | null>(null);
+
+  // Redirect to login if user is not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      // Always redirect to root login page when not authenticated
+      if (window.location.pathname !== '/') {
+        navigate('/');
+      }
+    }
+  }, [user, isLoading, navigate]);
+
+  // Show loading screen while checking authentication
+  if (isLoading) {
+    return (
+      <div className="w-full h-screen bg-[#0B0B1A] flex items-center justify-center text-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleLoginComplete = () => {
     // For new users, go to license screen
-    // TODO: Check if user is new
-    const isNewUser = true;
-    if (isNewUser) {
-      navigate('/drivers-license');
-    } else {
-      navigate('/welcome');
-    }
+    // TODO: Check if user is new - for now, always go to license for demo
+    navigate('/drivers-license');
   };
 
   const handleLicenseComplete = () => {
@@ -229,11 +260,17 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <AppContent />
-      </Router>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <SuiClientProvider networks={networks} defaultNetwork="devnet">
+        <WalletProvider>
+          <AuthProvider>
+            <Router>
+              <AppContent />
+            </Router>
+          </AuthProvider>
+        </WalletProvider>
+      </SuiClientProvider>
+    </QueryClientProvider>
   );
 }
 

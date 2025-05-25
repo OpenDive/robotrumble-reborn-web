@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaWallet, FaChevronLeft } from 'react-icons/fa';
+import { FaChevronLeft } from 'react-icons/fa';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import GoogleSignIn from '../shared/GoogleSignIn';
+import SuiWalletConnect from '../shared/SuiWalletConnect';
 
 interface LoginScreenProps {
   onLoginComplete: () => void;
@@ -19,12 +20,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
       onLoginComplete();
     }
   }, [user, onLoginComplete]);
-
-  const handleWalletConnect = () => {
-    // TODO: Implement wallet connection
-    console.log('Wallet connect clicked');
-    onLoginComplete();
-  };
 
   const handleReferralChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setReferralCode(e.target.value);
@@ -78,27 +73,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
         
         <div className="space-y-4">
           <GoogleSignIn />
-
-          <button
-            onClick={handleWalletConnect}
-            className="relative w-full group flex items-center justify-center px-6 py-4 text-lg font-bold rounded-xl text-white bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-all duration-300 overflow-hidden"
-          >
-            {/* Animated background gradient */}
-            <div 
-              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-neon-purple/20 via-white/5 to-neon-purple/20"
-              style={{
-                backgroundSize: '200% 100%',
-                animation: 'shimmer 2s linear infinite',
-              }}
-            />
-            <div className="relative flex items-center gap-4 w-full">
-              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-white/5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[-5deg]">
-                <FaWallet />
-              </div>
-              <span className="flex-1 text-left transition-transform duration-300 group-hover:translate-x-1">Connect Wallet</span>
-              <div className="w-2 h-8 rounded-full bg-neon-purple scale-y-0 group-hover:scale-y-100 transition-transform duration-300" />
-            </div>
-          </button>
+          <SuiWalletConnect />
         </div>
 
         <div className="relative">
