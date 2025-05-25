@@ -7,7 +7,7 @@ import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
 import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
 
-interface ARViewerScreenProps {
+interface ARViewerScreenRoboRumbleProps {
   session: RaceSession;
   onBack: () => void;
 }
@@ -21,7 +21,7 @@ interface RemoteUser {
   hasAudio?: boolean;
 }
 
-interface DeliveryPoint {
+interface BattlePoint {
   row: number;
   col: number;
   id: string;
@@ -31,11 +31,11 @@ interface Robot {
   id: string;
   name: string;
   position: { x: number; y: number };
-  status: 'idle' | 'moving' | 'delivering' | 'offline';
+  status: 'idle' | 'moving' | 'battling' | 'offline';
   battery: number;
 }
 
-export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack }) => {
+export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> = ({ session, onBack }) => {
   const mainViewRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
@@ -69,16 +69,28 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   const [detectedMarkers, setDetectedMarkers] = useState<DetectedMarker[]>([]);
   const [arEffectsEnabled, setArEffectsEnabled] = useState(true);
 
-  // Delivery control state (read-only for viewers)
-  const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
-  const [endPoint, setEndPoint] = useState<DeliveryPoint | null>(null);
+  // Battle control state (read-only for viewers)
+  const [startPoint, setStartPoint] = useState<BattlePoint | null>(null);
+  const [endPoint, setEndPoint] = useState<BattlePoint | null>(null);
   const [robots, setRobots] = useState<Robot[]>([
     { id: 'robot-a', name: 'Robot A', position: { x: 10, y: 10 }, status: 'idle', battery: 85 },
     { id: 'robot-b', name: 'Robot B', position: { x: 80, y: 60 }, status: 'idle', battery: 92 }
   ]);
-  const [deliveryStatus, setDeliveryStatus] = useState<string>('waiting');
+  const [battleStatus, setBattleStatus] = useState<string>('waiting');
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'confirmed' | 'failed'>('pending');
-  const [deliveryCost] = useState(0.5);
+  const [battleCost] = useState(0.5);
+
+  // Chat system state
+  const [chatMessages, setChatMessages] = useState<Array<{
+    id: string;
+    timestamp: string;
+    sender: string;
+    senderUid: number;
+    message: string;
+    isHost: boolean;
+  }>>([]);
+  const [currentMessage, setCurrentMessage] = useState<string>('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   // AR effects toggle handler
   const toggleAREffects = () => {
@@ -192,30 +204,158 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
     }
   };
 
-  // Simulate delivery data for demo (in real app, this would come from host)
+  // Simulate battle data for demo (in real app, this would come from host)
   useEffect(() => {
     const timer = setTimeout(() => {
       setStartPoint({ row: 2, col: 1, id: 'start' });
       setEndPoint({ row: 5, col: 6, id: 'end' });
-      setDeliveryStatus('Ready to execute delivery');
+      setBattleStatus('Ready to engage');
       setRobots(prev => prev.map(robot => 
         robot.id === 'robot-a' 
           ? { ...robot, status: 'moving' }
           : robot
       ));
-    }, 3000); // Show delivery points after 3 seconds
+    }, 3000); // Show battle points after 3 seconds
 
     return () => clearTimeout(timer);
   }, []);
+
+  // Send chat message to host and other viewers
+  const sendChatMessage = async () => {
+    if (!currentMessage.trim() || isSendingMessage || !isConnected || !localUid) return;
+    
+    setIsSendingMessage(true);
+    
+    try {
+      const timestamp = new Date().toLocaleTimeString();
+      const messageId = `msg-${Date.now()}`;
+      
+      // Add message to local chat immediately
+      const newMessage = {
+        id: messageId,
+        timestamp,
+        sender: `Viewer${localUid.toString().slice(-2)}`,
+        senderUid: localUid,
+        message: currentMessage.trim(),
+        isHost: false
+      };
+      
+      setChatMessages(prev => [newMessage, ...prev].slice(0, 100)); // Keep last 100 messages
+      
+      // Send message to host and other viewers via Agora data channel (simulate for now)
+      // In a real implementation, you would use Agora's data stream or a separate messaging service
+      console.log(`📤 Viewer sent message: "${currentMessage}" to host and ${remoteUsers.size - 1} other viewers`);
+      
+      // Clear input
+      setCurrentMessage('');
+      
+    } catch (error) {
+      console.error('Failed to send chat message:', error);
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
+  // Handle Enter key press in chat input
+  const handleChatKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  };
+
+  // Simulate receiving messages from host and other viewers
+  useEffect(() => {
+    if (!isConnected) return;
+    
+    const simulateMessages = () => {
+      const hostMessages = [
+        "Welcome to the battle arena! 🤖",
+        "Robot A is looking strong today",
+        "Let's see who wins this round!",
+        "Thanks for watching everyone!",
+        "The battle is about to begin...",
+        "Great crowd today! 🎉",
+        "Robot B has some new upgrades",
+        "This should be an epic battle!"
+      ];
+      
+      const viewerMessages = [
+        "This is so exciting! 🔥",
+        "Go Robot A!",
+        "Robot B for the win!",
+        "Amazing AR effects!",
+        "When does it start?",
+        "Best stream ever! 💯",
+        "The arena looks incredible",
+        "Can't wait to see the battle!"
+      ];
+      
+      const viewerNames = ["BattleFan", "RoboWatcher", "TechLover", "GameMaster", "ArenaKing"];
+      
+      // 60% chance for host message, 40% for viewer message
+      const isHostMessage = Math.random() > 0.4;
+      const messages = isHostMessage ? hostMessages : viewerMessages;
+      const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+      
+      const timestamp = new Date().toLocaleTimeString();
+      const messageId = `sim-msg-${Date.now()}`;
+      
+      if (isHostMessage) {
+        // Host message
+        const hostMessage = {
+          id: messageId,
+          timestamp,
+          sender: 'Host',
+          senderUid: hostUser?.uid || 1,
+          message: randomMessage,
+          isHost: true
+        };
+        
+        setChatMessages(prev => [hostMessage, ...prev].slice(0, 100));
+        console.log(`📥 Received host message: "${randomMessage}"`);
+      } else {
+        // Other viewer message
+        const randomName = viewerNames[Math.floor(Math.random() * viewerNames.length)];
+        const randomUid = Math.floor(Math.random() * 90000) + 10000; // Random 5-digit UID
+        
+        const viewerMessage = {
+          id: messageId,
+          timestamp,
+          sender: randomName,
+          senderUid: randomUid,
+          message: randomMessage,
+          isHost: false
+        };
+        
+        setChatMessages(prev => [viewerMessage, ...prev].slice(0, 100));
+        console.log(`📥 Received viewer message from ${randomName}: "${randomMessage}"`);
+      }
+    };
+    
+    // Start simulating messages after 8 seconds, then every 6-12 seconds
+    const initialTimer = setTimeout(() => {
+      simulateMessages();
+      const interval = setInterval(() => {
+        if (Math.random() > 0.2) { // 80% chance to send a message
+          simulateMessages();
+        }
+      }, 6000 + Math.random() * 6000); // 6-12 seconds
+      
+      return () => clearInterval(interval);
+    }, 8000);
+    
+    return () => clearTimeout(initialTimer);
+  }, [isConnected, hostUser]);
 
   // Initialize full AR system with complete 3D scene
   const initializeAROverlay = async () => {
     if (!canvasRef.current || arInitialized) return;
     
     try {
-      console.log('Initializing full AR system for viewer...');
+      console.log('Initializing full AR system for Robo Rumble viewer...');
       
-      // Ensure canvas matches its container size (like ARStreamScreen.tsx)
+      // Ensure canvas matches its container size
       const container = canvasRef.current.parentElement;
       if (container) {
         const rect = container.getBoundingClientRect();
@@ -239,7 +379,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       
       // Create AR detector for marker detection
       const arDetector = new EnhancedARDetector((message) => {
-        console.log(`[AR Viewer] ${message}`);
+        console.log(`[AR Robo Rumble Viewer] ${message}`);
       });
       arDetectorRef.current = arDetector;
       
@@ -254,7 +394,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       startARRenderingLoop();
       
       setArInitialized(true);
-      console.log('Full AR system initialized for viewer');
+      console.log('Full AR system initialized for Robo Rumble viewer');
     } catch (error) {
       console.error('Failed to initialize AR system:', error);
     }
@@ -280,7 +420,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         const markers = arDetectorRef.current.detectMarkers(hostVideoRef.current);
         
         if (markers.length > 0) {
-          console.log(`[AR Viewer] Detected ${markers.length} markers on host stream`);
+          console.log(`[AR Robo Rumble Viewer] Detected ${markers.length} markers on host stream`);
         }
         
         setDetectedMarkers(markers);
@@ -332,7 +472,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   const connectToStream = async () => {
     try {
       setConnectionError(null);
-      console.log('Connecting to stream...');
+      console.log('Connecting to Robo Rumble stream...');
       
       // Create Agora client
       const client = AgoraRTC.createClient({ mode: 'live', codec: 'h264' });
@@ -340,7 +480,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       
       // Set up client events
       client.on('user-joined', (user) => {
-        console.log(`🟢 User ${user.uid} joined the channel`);
+        console.log(`🟢 User ${user.uid} joined the Robo Rumble channel`);
         
         // Add user to remoteUsers immediately when they join
         setRemoteUsers(prev => {
@@ -367,17 +507,10 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             // Determine if this is the host (first video publisher or has higher authority)
             // For simplicity, treat the first video publisher as host
             if (!hostUser) {
-              console.log(`👑 User ${user.uid} is now the HOST`);
+              console.log(`👑 User ${user.uid} is now the Robo Rumble HOST`);
               // This is the host - display in main view with AR
               existingUser.isHost = true;
               setHostUser(existingUser);
-              
-              // Remove this user's tile from participant grid since they're now the host
-              const existingTile = document.getElementById(`participant-${user.uid}`);
-              if (existingTile) {
-                existingTile.remove();
-                console.log(`🗑️ Removed host tile from participant grid for user ${user.uid}`);
-              }
               
               setTimeout(() => {
                 // Create main host video view
@@ -404,7 +537,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                   // Play video in main view
                   user.videoTrack!.play(hostVideo);
                   
-                  console.log(`🎮 Host video displayed in main view for user ${user.uid}`);
+                  console.log(`🎮 Robo Rumble host video displayed in main view for user ${user.uid}`);
                   
                   // Initialize AR overlay for host stream
                   setTimeout(() => {
@@ -431,29 +564,9 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
               }, 100);
             } else {
               console.log(`👥 User ${user.uid} is a VIEWER with video`);
-              // This is a viewer - display in participant tile (tile already exists from user-joined)
+              // This is a viewer - display in participant tile
               existingUser.isHost = false;
               setViewerUsers(prev => new Map(prev.set(user.uid as number, existingUser)));
-              
-              setTimeout(() => {
-                const videoElement = document.getElementById(`video-${user.uid}`) as HTMLVideoElement;
-                const avatarElement = document.getElementById(`avatar-${user.uid}`);
-                const statusElement = document.getElementById(`status-${user.uid}`);
-                
-                if (videoElement && avatarElement && statusElement) {
-                  // Play video in tile
-                  user.videoTrack!.play(videoElement);
-                  
-                  // Show video, hide avatar
-                  videoElement.classList.remove('hidden');
-                  avatarElement.style.display = 'none';
-                  statusElement.textContent = 'Live';
-                  
-                  console.log(`📱 Viewer video displayed in tile for user ${user.uid}`);
-                } else {
-                  console.log(`❌ Could not find video elements for user ${user.uid}`);
-                }
-              }, 100);
             }
           }
           
@@ -465,7 +578,6 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           }
           
           newMap.set(user.uid as number, existingUser);
-          console.log(`📊 After user-published, remoteUsers has ${newMap.size} users:`, Array.from(newMap.keys()));
           return newMap;
         });
       });
@@ -483,19 +595,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             }
             cleanupAROverlay();
             setHostUser(null);
-            console.log(`👑❌ Host ${user.uid} stopped streaming`);
-          } else {
-            // Viewer stopped streaming - update tile
-            const videoElement = document.getElementById(`video-${user.uid}`) as HTMLVideoElement;
-            const avatarElement = document.getElementById(`avatar-${user.uid}`);
-            const statusElement = document.getElementById(`status-${user.uid}`);
-            
-            if (videoElement && avatarElement && statusElement) {
-              videoElement.classList.add('hidden');
-              avatarElement.style.display = 'flex';
-              statusElement.textContent = 'Offline';
-            }
-            console.log(`👥📴 Viewer ${user.uid} stopped video`);
+            console.log(`👑❌ Robo Rumble host ${user.uid} stopped streaming`);
           }
         }
         
@@ -515,20 +615,12 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             // Keep the user in remoteUsers even if they're not publishing
             newMap.set(user.uid as number, existingUser);
           }
-          console.log(`📊 After user-unpublished, remoteUsers has ${newMap.size} users:`, Array.from(newMap.keys()));
           return newMap;
         });
       });
       
       client.on('user-left', (user) => {
-        console.log(`🔴 User ${user.uid} left the channel`);
-        
-        // Remove participant tile
-        const userTile = document.getElementById(`participant-${user.uid}`);
-        if (userTile) {
-          userTile.remove();
-          console.log(`🗑️ Removed tile for user ${user.uid}`);
-        }
+        console.log(`🔴 User ${user.uid} left the Robo Rumble channel`);
         
         // If host left, clean up main view
         const remoteUser = remoteUsers.get(user.uid as number);
@@ -539,13 +631,12 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           }
           cleanupAROverlay();
           setHostUser(null);
-          console.log(`👑🚪 Host ${user.uid} left`);
+          console.log(`👑🚪 Robo Rumble host ${user.uid} left`);
         }
         
         setRemoteUsers(prev => {
           const newMap = new Map(prev);
           newMap.delete(user.uid as number);
-          console.log(`📊 After user-left, remoteUsers has ${newMap.size} users:`, Array.from(newMap.keys()));
           return newMap;
         });
         
@@ -557,7 +648,6 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       });
       
       // Set client role to host (not audience) so that host can detect when we join
-      // This follows the same pattern as the reference implementation
       await client.setClientRole('host');
       
       // Generate UID
@@ -567,7 +657,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       // Join channel
       const token = await fetchToken(session.id, uid, 'host');
       await client.join(APP_ID, session.id, token, uid);
-      console.log(`Joined channel ${session.id} with UID ${uid} as viewer`);
+      console.log(`Joined channel ${session.id} with UID ${uid} as Robo Rumble viewer`);
       
       // Auto-publish local media if already enabled
       const tracksToPublish = [];
@@ -627,43 +717,21 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       if (mainViewRef.current) {
         mainViewRef.current.innerHTML = '';
       }
-      const participantGrid = document.getElementById('participant-grid');
-      if (participantGrid) {
-        participantGrid.innerHTML = '';
-      }
       
       setIsConnected(false);
       setLocalUid(null);
       setRemoteUsers(new Map());
       setHostUser(null);
       setViewerUsers(new Map());
-      console.log('Disconnected from stream');
+      console.log('Disconnected from Robo Rumble stream');
     } catch (error) {
       console.error('Error disconnecting from stream:', error);
     }
   };
 
-  // Add periodic debug logging
-  useEffect(() => {
-    if (!isConnected) return;
-    
-    const debugInterval = setInterval(() => {
-      console.log(`🔍 DEBUG STATE CHECK:`);
-      console.log(`  - Local UID: ${localUid}`);
-      console.log(`  - Remote Users: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
-      console.log(`  - Host User: ${hostUser ? hostUser.uid : 'None'}`);
-      console.log(`  - Viewer Users: ${viewerUsers.size}`, Array.from(viewerUsers.keys()));
-      console.log(`  - Participant tiles in DOM:`, 
-        Array.from(document.querySelectorAll('[id^="participant-"]')).map(el => el.id)
-      );
-    }, 10000); // Every 10 seconds
-    
-    return () => clearInterval(debugInterval);
-  }, [isConnected, localUid, remoteUsers, hostUser, viewerUsers]);
-
   // Handle window resize
   useEffect(() => {
-    // Set up resize observer for canvas sizing (like ARStreamScreen.tsx)
+    // Set up resize observer for canvas sizing
     let resizeObserver: ResizeObserver | null = null;
     
     if (canvasRef.current) {
@@ -723,7 +791,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             </Button>
             <div>
               <h1 className="text-xl font-bold text-white">{session.trackName}</h1>
-              <p className="text-sm text-white/70">Multi-Viewer AR Stream {arInitialized && '(AR Active)'}</p>
+              <p className="text-sm text-white/70">Robo Rumble Viewer {arInitialized && '(AR Active)'}</p>
             </div>
           </div>
           
@@ -775,28 +843,6 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 className={`${arEffectsEnabled ? '!bg-blue-600 hover:!bg-blue-700' : '!bg-white/10 hover:!bg-white/20'}`}
               >
                 {arEffectsEnabled ? 'Hide Effects' : 'Show Effects'}
-              </Button>
-            )}
-            
-            {/* Debug State Button */}
-            {isConnected && (
-              <Button
-                variant="secondary"
-                size="small"
-                onClick={() => {
-                  console.log(`🔍 MANUAL DEBUG CHECK:`);
-                  console.log(`  - Local UID: ${localUid}`);
-                  console.log(`  - Remote Users: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
-                  console.log(`  - Host User: ${hostUser ? hostUser.uid : 'None'}`);
-                  console.log(`  - Viewer Users: ${viewerUsers.size}`, Array.from(viewerUsers.keys()));
-                  console.log(`  - Participant tiles in DOM:`, 
-                    Array.from(document.querySelectorAll('[id^="participant-"]')).map(el => el.id)
-                  );
-                  console.log(`  - Agora client state:`, rtcClientRef.current?.connectionState);
-                }}
-                className="!bg-gray-600 hover:!bg-gray-700 text-xs"
-              >
-                Debug
               </Button>
             )}
             
@@ -860,7 +906,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         )}
       </div>
 
-      {/* Main Content Area - Explicitly sized to exclude bottom panel */}
+      {/* Main Content Area */}
       <div className="flex" style={{ height: 'calc(100vh - 10rem)' }}>
         {!isConnected ? (
           /* Not Connected State */
@@ -871,8 +917,8 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">Ready to Watch AR Stream</h3>
-              <p className="text-sm mb-4">Join to watch the host's AR experience with other viewers</p>
+              <h3 className="text-lg font-medium text-white mb-2">Ready to Watch Robo Rumble</h3>
+              <p className="text-sm mb-4">Join to watch the host's battle experience with other viewers</p>
               <p className="text-xs text-white/50">Channel: {session.id}</p>
             </div>
           </div>
@@ -889,7 +935,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-medium text-white mb-2">Waiting for Host</h3>
+                    <h3 className="text-lg font-medium text-white mb-2">Waiting for Robo Rumble Host</h3>
                     <p className="text-sm mb-4">Host will appear here with AR overlay</p>
                     <p className="text-xs text-white/50">Participants: {remoteUsers.size}</p>
                   </div>
@@ -903,7 +949,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 style={{ zIndex: 1 }}
               />
 
-              {/* AR Overlay Canvas - Constrained to video area only */}
+              {/* AR Overlay Canvas */}
               {hostUser && (
                 <canvas 
                   ref={canvasRef}
@@ -927,7 +973,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-sm font-medium">Watching Multi-Viewer AR Stream</span>
+                    <span className="text-sm font-medium">Watching Robo Rumble Stream</span>
                   </div>
                   <div className="text-xs text-white/70">
                     Channel: {session.id}<br />
@@ -940,143 +986,115 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
               )}
             </div>
 
-            {/* Right Side: Delivery Control Panel (Read-only for viewers) */}
+            {/* Right Side: Battle Control Panel (Read-only for viewers) */}
             <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden">
-              {/* Control Panel Header - Fixed */}
+              {/* Chat Header - Fixed */}
               <div className="flex-shrink-0 p-4 border-b border-white/10">
-                <h2 className="text-lg font-bold text-white mb-1">Delivery Control</h2>
-                <p className="text-sm text-white/70">Watching host's delivery control</p>
+                <h2 className="text-lg font-bold text-white mb-1">Battle Chat</h2>
+                <p className="text-sm text-white/70">Chat with host and other viewers</p>
+                {isConnected && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-xs text-green-400">
+                      {hostUser ? 'Host online' : 'Waiting for host'} • {Math.max(0, remoteUsers.size - (hostUser ? 1 : 0))} viewers
+                    </span>
+                  </div>
+                )}
               </div>
               
-              {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto">
-                {/* Delivery Grid */}
-                <div className="p-4 border-b border-white/10">
-                  <h3 className="text-sm font-medium text-white mb-3">Delivery Zone</h3>
-                  <div className="bg-gray-800 rounded-lg p-4 aspect-square relative overflow-hidden">
-                    {/* Grid */}
-                    <div className="absolute inset-0 grid grid-cols-8 grid-rows-8 gap-1">
-                      {Array.from({ length: 64 }).map((_, index) => {
-                        const row = Math.floor(index / 8);
-                        const col = index % 8;
-                        const isStart = startPoint && startPoint.row === row && startPoint.col === col;
-                        const isEnd = endPoint && endPoint.row === row && endPoint.col === col;
-                        
-                        return (
-                          <div
-                            key={index}
-                            className={`
-                              border border-white/20 transition-colors
-                              ${isStart ? 'bg-green-500' : ''}
-                              ${isEnd ? 'bg-red-500' : ''}
-                              ${!isStart && !isEnd ? 'bg-gray-700/30' : ''}
-                            `}
-                          />
-                        );
-                      })}
+              {/* Chat Messages - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="space-y-3">
+                  {chatMessages.length === 0 ? (
+                    <div className="text-center text-white/50 text-sm py-8">
+                      {isConnected ? 'Chat is ready! Say hello...' : 'Connect to join the chat'}
                     </div>
-                    
-                    {/* Robot Positions */}
-                    {robots.map((robot) => (
-                      <div
-                        key={robot.id}
-                        className={`
-                          absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2
-                          ${robot.status === 'idle' ? 'bg-blue-400' : 
-                            robot.status === 'moving' ? 'bg-yellow-400 animate-pulse' : 
-                            'bg-green-400'}
-                        `}
-                        style={{
-                          left: `${robot.position.x}%`,
-                          top: `${robot.position.y}%`
-                        }}
-                        title={robot.name}
-                      />
-                    ))}
-                    
-                    {/* Legend */}
-                    <div className="absolute bottom-2 left-2 text-xs">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="w-2 h-2 bg-green-500 rounded"></div>
-                        <span>Start</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-red-500 rounded"></div>
-                        <span>End</span>
-                      </div>
-                    </div>
-                    
-                    {/* Viewer Notice */}
-                    <div className="absolute top-2 right-2 text-xs text-white/50 bg-black/30 px-2 py-1 rounded">
-                      View Only
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Robot Status */}
-                <div className="p-4 border-b border-white/10">
-                  <h3 className="text-sm font-medium text-white mb-3">Robot Status</h3>
-                  <div className="space-y-2">
-                    {robots.map((robot) => (
-                      <div key={robot.id} className="flex items-center justify-between bg-gray-800 rounded p-2">
-                        <div className="flex items-center gap-2">
-                          <div className={`
-                            w-2 h-2 rounded-full
-                            ${robot.status === 'idle' ? 'bg-blue-400' : 
-                              robot.status === 'moving' ? 'bg-yellow-400' : 
-                              'bg-green-400'}
-                          `} />
-                          <span className="text-sm text-white">{robot.name}</span>
+                  ) : (
+                    chatMessages.map((msg) => (
+                      <div key={msg.id} className={`
+                        flex flex-col gap-1 p-3 rounded-lg
+                        ${msg.isHost 
+                          ? 'bg-blue-600/20 border-l-4 border-blue-400 mr-4' 
+                          : msg.senderUid === localUid
+                            ? 'bg-green-600/20 border-l-4 border-green-400 ml-4'
+                            : 'bg-gray-800/50 border-l-4 border-purple-400 mr-4'
+                        }
+                      `}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium ${
+                              msg.isHost ? 'text-blue-400' : 
+                              msg.senderUid === localUid ? 'text-green-400' : 'text-purple-400'
+                            }`}>
+                              {msg.senderUid === localUid ? 'You' : msg.sender}
+                            </span>
+                            {msg.isHost && (
+                              <span className="text-xs bg-blue-600 text-white px-1 py-0.5 rounded">
+                                HOST
+                              </span>
+                            )}
+                            {msg.senderUid === localUid && (
+                              <span className="text-xs bg-green-600 text-white px-1 py-0.5 rounded">
+                                YOU
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-white/50">{msg.timestamp}</span>
                         </div>
-                        <div className="text-xs text-white/70">
-                          {robot.battery}% • {robot.status}
+                        <div className="text-sm text-white break-words">
+                          {msg.message}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              
+              {/* Chat Input - Fixed at bottom */}
+              <div className="flex-shrink-0 p-4 border-t border-white/10">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={currentMessage}
+                    onChange={(e) => setCurrentMessage(e.target.value)}
+                    onKeyPress={handleChatKeyPress}
+                    placeholder={isConnected ? "Type a message..." : "Connect to chat"}
+                    disabled={!isConnected || isSendingMessage}
+                    className="flex-1 bg-gray-800 border border-white/20 rounded px-3 py-2 text-white text-sm
+                              placeholder-white/50 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400
+                              disabled:opacity-50 disabled:cursor-not-allowed"
+                    maxLength={200}
+                  />
+                  <button
+                    onClick={sendChatMessage}
+                    disabled={!isConnected || !currentMessage.trim() || isSendingMessage}
+                    className={`
+                      px-4 py-2 rounded text-sm font-medium transition-all duration-150
+                      ${(!isConnected || !currentMessage.trim() || isSendingMessage)
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                        : 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg hover:shadow-xl'
+                      }
+                    `}
+                  >
+                    {isSendingMessage ? (
+                      <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
                 
-                {/* Delivery Status */}
-                <div className="p-4">
-                  <h3 className="text-sm font-medium text-white mb-3">Execution</h3>
-                  
-                  <div className="space-y-3">
-                    <div className="bg-gray-800 rounded p-3">
-                      <div className="text-xs text-white/70 mb-1">Delivery Cost</div>
-                      <div className="text-lg font-bold text-white">{deliveryCost} SUI</div>
-                    </div>
-                    
-                    <div className="bg-gray-800 rounded p-3">
-                      <div className="text-xs text-white/70 mb-1">Status</div>
-                      <div className="text-sm text-white">{deliveryStatus}</div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Button
-                        variant="primary"
-                        size="small"
-                        onClick={() => {
-                          // Show a tip or interaction message for viewers
-                          alert('💡 Tip: This is a view-only mode. You can watch the host control the delivery system in real-time!');
-                        }}
-                        className="w-full"
-                      >
-                        Tip to interact
-                      </Button>
-                      
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        onClick={() => {
-                          // Show reset info for viewers
-                          alert('ℹ️ Only the host can reset the delivery system. You are in view-only mode.');
-                        }}
-                        className="w-full !bg-gray-700 hover:!bg-gray-600"
-                      >
-                        Reset
-                      </Button>
-                    </div>
-                  </div>
+                {/* Chat Status */}
+                <div className="mt-2 text-xs text-white/50">
+                  {isConnected ? (
+                    <>
+                      Press Enter to send • {currentMessage.length}/200 characters
+                    </>
+                  ) : (
+                    'Connect to stream to enable chat'
+                  )}
                 </div>
               </div>
             </div>
@@ -1084,7 +1102,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         )}
       </div>
 
-      {/* Bottom Viewer Panel - Fixed Height, Always Present */}
+      {/* Bottom Viewer Panel */}
       {isConnected && (
         <div className="h-24 bg-gray-900/90 backdrop-blur-sm border-t border-white/10 flex items-center px-4 flex-shrink-0">
           <div className="flex items-center gap-3 w-full">
@@ -1099,20 +1117,17 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 {/* Local viewer tile (you) */}
                 {localUid && (
                   <div className="flex-shrink-0 w-16 h-16 relative">
-                    {/* Video container */}
                     <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg overflow-hidden border-2 border-blue-400 relative">
                       {isCameraEnabled ? (
-                        /* Show video when camera is on */
                         <video 
                           ref={localVideoRef}
                           className="w-full h-full object-cover"
                           autoPlay
                           playsInline
                           muted
-                          style={{ transform: 'scaleX(-1)' }} // Mirror the video
+                          style={{ transform: 'scaleX(-1)' }}
                         />
                       ) : (
-                        /* Show "YOU" text when camera is off */
                         <div className="w-full h-full flex items-center justify-center text-white font-semibold text-xs">
                           YOU
                         </div>
@@ -1121,9 +1136,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                     
                     {/* Status indicators */}
                     <div className="absolute -bottom-1 -right-1 flex gap-1">
-                      {/* Camera status */}
                       <div className={`w-3 h-3 rounded-full border border-gray-900 ${isCameraEnabled ? 'bg-blue-400' : 'bg-gray-500'}`}></div>
-                      {/* Microphone status */}
                       <div className={`w-3 h-3 rounded-full border border-gray-900 ${isMicEnabled ? 'bg-green-400' : 'bg-gray-500'}`}></div>
                     </div>
                     
@@ -1134,14 +1147,13 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                   </div>
                 )}
                 
-                {/* Other viewers - Direct mapping like host */}
+                {/* Other viewers */}
                 {Array.from(remoteUsers.entries())
-                  .filter(([uid, user]) => uid !== hostUser?.uid) // Exclude host from viewer tiles
+                  .filter(([uid, user]) => uid !== hostUser?.uid)
                   .map(([uid, user]) => (
                     <div key={uid} className="flex-shrink-0 w-16 h-16 relative">
                       <div className="w-full h-full bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center text-white font-semibold text-xs overflow-hidden">
                         {user.hasVideo && user.videoTrack ? (
-                          /* Show video if participant has camera on */
                           <video 
                             ref={(videoEl) => {
                               if (videoEl && user.videoTrack) {
@@ -1154,16 +1166,13 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                             muted
                           />
                         ) : (
-                          /* Show UID if no video */
                           uid.toString().slice(-2)
                         )}
                       </div>
                       
                       {/* Status indicators */}
                       <div className="absolute -bottom-1 -right-1 flex gap-1">
-                        {/* Camera status */}
                         <div className={`w-3 h-3 rounded-full border border-gray-900 ${user.hasVideo ? 'bg-blue-400' : 'bg-gray-500'}`}></div>
-                        {/* Microphone status */}
                         <div className={`w-3 h-3 rounded-full border border-gray-900 ${user.hasAudio ? 'bg-green-400' : 'bg-gray-500'}`}></div>
                       </div>
                       

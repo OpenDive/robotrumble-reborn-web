@@ -19,6 +19,18 @@ app.use(cors({
 
 app.use(express.json());
 
+// Helper function to get current epoch from Sui network
+async function getCurrentEpoch() {
+  try {
+    // For development, return a mock epoch
+    // In production, you would fetch this from Sui network
+    return Math.floor(Date.now() / 1000 / 86400); // Rough epoch calculation
+  } catch (error) {
+    console.error('Error getting current epoch:', error);
+    return Math.floor(Date.now() / 1000 / 86400);
+  }
+}
+
 // Get Agora credentials from environment
 const getAgoraCredentials = () => {
   const appId = process.env.VITE_AGORA_APP_ID || process.env.APP_ID;
@@ -34,6 +46,119 @@ const getAgoraCredentials = () => {
   
   return { appId, appCertificate };
 };
+
+// ZK Login API route
+app.post('/api/zk-login', async (req, res) => {
+  try {
+    const body = req.body;
+    const { action, jwt, salt, publicKey, maxEpoch, randomness } = body;
+
+    // Step 1: Initialize ZK Login
+    if (action === 'init') {
+      // Dynamic imports for Sui packages
+      const { Ed25519Keypair } = await import('@mysten/sui/keypairs/ed25519');
+      const { generateNonce, generateRandomness, getExtendedEphemeralPublicKey } = await import('@mysten/sui/zklogin');
+      
+      // Generate ephemeral keypair for this session
+      const keypair = new Ed25519Keypair();
+      const extendedEphemeralPublicKey = getExtendedEphemeralPublicKey(keypair.getPublicKey());
+      console.log("SUI PUBKEY: " + keypair.getPublicKey().toBase64());
+
+      // Generate random values for the ZK proof
+      const randomness = generateRandomness();
+      const userSalt = generateRandomness();
+      
+      // Get current epoch and set max epoch
+      const currentEpoch = await getCurrentEpoch();
+      const maxEpoch = currentEpoch + 2;
+      
+      // Generate nonce for OAuth flow
+      const nonce = generateNonce(
+        keypair.getPublicKey(),
+        maxEpoch,
+        randomness
+      );
+
+      // Return all necessary values for the frontend
+      const response = {
+        success: true,
+        data: {
+          publicKey: keypair.getPublicKey().toBase64(),
+          extendedEphemeralPublicKey,
+          randomness,
+          nonce,
+          maxEpoch,
+          userSalt
+        }
+      };
+
+      return res.json(response);
+    }
+
+    // Step 2: Complete ZK Login
+    if (action === 'complete') {
+      if (!jwt || !salt) {
+        const response = {
+          success: false,
+          error: 'Missing jwt or salt'
+        };
+        return res.status(400).json(response);
+      }
+
+      try {
+        // Get Sui address from JWT
+        const { jwtToAddress } = await import('@mysten/sui/zklogin');
+        const address = jwtToAddress(jwt, salt);
+        
+        // Return address without proof for now
+        const response = {
+          success: true,
+          data: { 
+            address
+          }
+        };
+
+        return res.json(response);
+
+        /* TODO: ZK Proof generation (currently not working)
+        const proof = await getProof(
+          jwt,
+          body.extendedEphemeralPublicKey,
+          body.maxEpoch,
+          body.randomness,
+          salt
+        );
+
+        return res.json({
+          success: true,
+          data: { 
+            address,
+            proof
+          }
+        });
+        */
+      } catch (error) {
+        console.error('ZK Login error:', error);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to complete ZK Login'
+        });
+      }
+    }
+
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Invalid action' 
+    });
+
+  } catch (error) {
+    console.error('ZK Login error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
+});
 
 app.get('/api/token', (req, res) => {
   try {
@@ -92,6 +217,7 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Development token server running on http://localhost:${PORT}`);
   console.log(`📡 Ready to generate Agora tokens for local development`);
+  console.log(`🔐 ZK Login API available at /api/zk-login`);
   
   // Test environment variables on startup
   try {

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaGoogle, FaWallet, FaChevronLeft } from 'react-icons/fa';
+import { FaWallet, FaChevronLeft } from 'react-icons/fa';
+import { useAuth } from '../../../shared/contexts/AuthContext';
+import GoogleSignIn from '../shared/GoogleSignIn';
 
 interface LoginScreenProps {
   onLoginComplete: () => void;
@@ -8,13 +10,15 @@ interface LoginScreenProps {
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [referralCode, setReferralCode] = useState('');
 
-  const handleGoogleLogin = () => {
-    // TODO: Implement Google login
-    console.log('Google login clicked');
-    onLoginComplete();
-  };
+  // If user is already logged in, call onLoginComplete
+  React.useEffect(() => {
+    if (user) {
+      onLoginComplete();
+    }
+  }, [user, onLoginComplete]);
 
   const handleWalletConnect = () => {
     // TODO: Implement wallet connection
@@ -73,26 +77,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
         </div>
         
         <div className="space-y-4">
-          <button 
-            onClick={handleGoogleLogin}
-            className="relative w-full group flex items-center justify-center px-6 py-4 text-lg font-bold rounded-xl text-white bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-all duration-300 overflow-hidden"
-          >
-            {/* Animated background gradient */}
-            <div 
-              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-neon-purple/20 via-white/5 to-neon-purple/20"
-              style={{
-                backgroundSize: '200% 100%',
-                animation: 'shimmer 2s linear infinite',
-              }}
-            />
-            <div className="relative flex items-center gap-4 w-full">
-              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-white/5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[-5deg]">
-                <FaGoogle />
-              </div>
-              <span className="flex-1 text-left transition-transform duration-300 group-hover:translate-x-1">Login with Google</span>
-              <div className="w-2 h-8 rounded-full bg-neon-purple scale-y-0 group-hover:scale-y-100 transition-transform duration-300" />
-            </div>
-          </button>
+          <GoogleSignIn />
 
           <button
             onClick={handleWalletConnect}

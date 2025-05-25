@@ -7,7 +7,7 @@ import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
 import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
 
-interface ARViewerScreenProps {
+interface ARViewerScreenCrossyRoboProps {
   session: RaceSession;
   onBack: () => void;
 }
@@ -35,7 +35,7 @@ interface Robot {
   battery: number;
 }
 
-export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack }) => {
+export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> = ({ session, onBack }) => {
   const mainViewRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
@@ -79,6 +79,16 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   const [deliveryStatus, setDeliveryStatus] = useState<string>('waiting');
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'confirmed' | 'failed'>('pending');
   const [deliveryCost] = useState(0.5);
+
+  // Crossy Robo control state (read-only for viewers)
+  const [messageLog, setMessageLog] = useState<Array<{
+    id: string;
+    timestamp: string;
+    command: string;
+    status: 'sent' | 'acknowledged' | 'failed';
+  }>>([]);
+  const [isControlEnabled, setIsControlEnabled] = useState(false); // Disabled for viewers
+  const [selectedRobot, setSelectedRobot] = useState<string>('robot-a');
 
   // AR effects toggle handler
   const toggleAREffects = () => {
@@ -197,23 +207,110 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
     const timer = setTimeout(() => {
       setStartPoint({ row: 2, col: 1, id: 'start' });
       setEndPoint({ row: 5, col: 6, id: 'end' });
-      setDeliveryStatus('Ready to execute delivery');
+      setDeliveryStatus('Ready to navigate');
       setRobots(prev => prev.map(robot => 
         robot.id === 'robot-a' 
           ? { ...robot, status: 'moving' }
           : robot
       ));
-    }, 3000); // Show delivery points after 3 seconds
+    }, 3000); // Show navigation points after 3 seconds
 
     return () => clearTimeout(timer);
   }, []);
+
+  // Simulate host commands for demo
+  useEffect(() => {
+    if (!isConnected) return;
+    
+    const commands = ['right', 'up', 'right', 'down', 'stop', 'left', 'up'];
+    let commandIndex = 0;
+    
+    const simulateHostCommand = () => {
+      if (commandIndex >= commands.length) {
+        commandIndex = 0; // Reset to loop
+      }
+      
+      const command = commands[commandIndex];
+      const sendTimestamp = new Date().toLocaleTimeString();
+      const commandId = `host-cmd-${Date.now()}`;
+      
+      // Add "sent" command to log immediately
+      const sentCommand = {
+        id: commandId,
+        timestamp: sendTimestamp,
+        command: `Sent command: ${command}`,
+        status: 'sent' as const
+      };
+      
+      setMessageLog(prev => [sentCommand, ...prev].slice(0, 20));
+      
+      // Simulate realistic acknowledgment after 2-3 seconds
+      const processingTime = 2000 + Math.random() * 1000; // 2-3 seconds
+      setTimeout(() => {
+        const ackTimestamp = new Date().toLocaleTimeString();
+        const acknowledgedCommand = {
+          id: `${commandId}-ack`,
+          timestamp: ackTimestamp,
+          command: `Command acknowledged: received`,
+          status: 'acknowledged' as const
+        };
+        
+        setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
+        
+        // Update robot position
+        setRobots(prev => prev.map(robot => {
+          if (robot.id === selectedRobot) {
+            let newPosition = { ...robot.position };
+            const moveAmount = 3;
+            
+            switch (command) {
+              case 'up':
+                newPosition.y = Math.max(0, newPosition.y - moveAmount);
+                break;
+              case 'down':
+                newPosition.y = Math.min(100, newPosition.y + moveAmount);
+                break;
+              case 'left':
+                newPosition.x = Math.max(0, newPosition.x - moveAmount);
+                break;
+              case 'right':
+                newPosition.x = Math.min(100, newPosition.x + moveAmount);
+                break;
+              case 'stop':
+                // No position change for stop
+                break;
+            }
+            
+            return {
+              ...robot,
+              position: newPosition,
+              status: command === 'stop' ? 'idle' : 'moving'
+            };
+          }
+          return robot;
+        }));
+      }, processingTime);
+      
+      commandIndex++;
+    };
+    
+    // Start simulation after 5 seconds, then every 4 seconds
+    const initialTimer = setTimeout(() => {
+      simulateHostCommand();
+      const interval = setInterval(simulateHostCommand, 4000);
+      
+      return () => clearInterval(interval);
+    }, 5000);
+    
+    return () => clearTimeout(initialTimer);
+  }, [isConnected, selectedRobot]);
 
   // Initialize full AR system with complete 3D scene
   const initializeAROverlay = async () => {
     if (!canvasRef.current || arInitialized) return;
     
     try {
-      console.log('Initializing full AR system for viewer...');
+      console.log('Initializing full AR system for Crossy Robo viewer...');
       
       // Ensure canvas matches its container size (like ARStreamScreen.tsx)
       const container = canvasRef.current.parentElement;
@@ -239,7 +336,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       
       // Create AR detector for marker detection
       const arDetector = new EnhancedARDetector((message) => {
-        console.log(`[AR Viewer] ${message}`);
+        console.log(`[AR Crossy Robo Viewer] ${message}`);
       });
       arDetectorRef.current = arDetector;
       
@@ -254,7 +351,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       startARRenderingLoop();
       
       setArInitialized(true);
-      console.log('Full AR system initialized for viewer');
+      console.log('Full AR system initialized for Crossy Robo viewer');
     } catch (error) {
       console.error('Failed to initialize AR system:', error);
     }
@@ -280,7 +377,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         const markers = arDetectorRef.current.detectMarkers(hostVideoRef.current);
         
         if (markers.length > 0) {
-          console.log(`[AR Viewer] Detected ${markers.length} markers on host stream`);
+          console.log(`[AR Crossy Robo Viewer] Detected ${markers.length} markers on host stream`);
         }
         
         setDetectedMarkers(markers);
@@ -332,7 +429,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   const connectToStream = async () => {
     try {
       setConnectionError(null);
-      console.log('Connecting to stream...');
+      console.log('Connecting to Crossy Robo stream...');
       
       // Create Agora client
       const client = AgoraRTC.createClient({ mode: 'live', codec: 'h264' });
@@ -340,7 +437,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       
       // Set up client events
       client.on('user-joined', (user) => {
-        console.log(`🟢 User ${user.uid} joined the channel`);
+        console.log(`🟢 User ${user.uid} joined the Crossy Robo channel`);
         
         // Add user to remoteUsers immediately when they join
         setRemoteUsers(prev => {
@@ -367,7 +464,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             // Determine if this is the host (first video publisher or has higher authority)
             // For simplicity, treat the first video publisher as host
             if (!hostUser) {
-              console.log(`👑 User ${user.uid} is now the HOST`);
+              console.log(`👑 User ${user.uid} is now the Crossy Robo HOST`);
               // This is the host - display in main view with AR
               existingUser.isHost = true;
               setHostUser(existingUser);
@@ -404,7 +501,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                   // Play video in main view
                   user.videoTrack!.play(hostVideo);
                   
-                  console.log(`🎮 Host video displayed in main view for user ${user.uid}`);
+                  console.log(`🎮 Crossy Robo host video displayed in main view for user ${user.uid}`);
                   
                   // Initialize AR overlay for host stream
                   setTimeout(() => {
@@ -483,7 +580,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             }
             cleanupAROverlay();
             setHostUser(null);
-            console.log(`👑❌ Host ${user.uid} stopped streaming`);
+            console.log(`👑❌ Crossy Robo host ${user.uid} stopped streaming`);
           } else {
             // Viewer stopped streaming - update tile
             const videoElement = document.getElementById(`video-${user.uid}`) as HTMLVideoElement;
@@ -521,7 +618,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       });
       
       client.on('user-left', (user) => {
-        console.log(`🔴 User ${user.uid} left the channel`);
+        console.log(`🔴 User ${user.uid} left the Crossy Robo channel`);
         
         // Remove participant tile
         const userTile = document.getElementById(`participant-${user.uid}`);
@@ -539,7 +636,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           }
           cleanupAROverlay();
           setHostUser(null);
-          console.log(`👑🚪 Host ${user.uid} left`);
+          console.log(`👑🚪 Crossy Robo host ${user.uid} left`);
         }
         
         setRemoteUsers(prev => {
@@ -567,7 +664,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       // Join channel
       const token = await fetchToken(session.id, uid, 'host');
       await client.join(APP_ID, session.id, token, uid);
-      console.log(`Joined channel ${session.id} with UID ${uid} as viewer`);
+      console.log(`Joined channel ${session.id} with UID ${uid} as Crossy Robo viewer`);
       
       // Auto-publish local media if already enabled
       const tracksToPublish = [];
@@ -637,7 +734,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       setRemoteUsers(new Map());
       setHostUser(null);
       setViewerUsers(new Map());
-      console.log('Disconnected from stream');
+      console.log('Disconnected from Crossy Robo stream');
     } catch (error) {
       console.error('Error disconnecting from stream:', error);
     }
@@ -648,7 +745,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
     if (!isConnected) return;
     
     const debugInterval = setInterval(() => {
-      console.log(`🔍 DEBUG STATE CHECK:`);
+      console.log(`🔍 CROSSY ROBO DEBUG STATE CHECK:`);
       console.log(`  - Local UID: ${localUid}`);
       console.log(`  - Remote Users: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
       console.log(`  - Host User: ${hostUser ? hostUser.uid : 'None'}`);
@@ -701,6 +798,12 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
     };
   }, []);
 
+  // Send directional command (viewer version - shows info message)
+  const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
+    // Show viewer info message
+    alert(`💡 Tip: You are watching the host control the robot. Only the host can send ${direction} commands!`);
+  };
+
   return (
     <div className="w-full h-screen bg-[#0B0B1A] relative overflow-hidden flex flex-col">
       {/* Background */}
@@ -723,7 +826,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             </Button>
             <div>
               <h1 className="text-xl font-bold text-white">{session.trackName}</h1>
-              <p className="text-sm text-white/70">Multi-Viewer AR Stream {arInitialized && '(AR Active)'}</p>
+              <p className="text-sm text-white/70">Crossy Robo Viewer {arInitialized && '(AR Active)'}</p>
             </div>
           </div>
           
@@ -784,7 +887,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 variant="secondary"
                 size="small"
                 onClick={() => {
-                  console.log(`🔍 MANUAL DEBUG CHECK:`);
+                  console.log(`🔍 CROSSY ROBO MANUAL DEBUG CHECK:`);
                   console.log(`  - Local UID: ${localUid}`);
                   console.log(`  - Remote Users: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
                   console.log(`  - Host User: ${hostUser ? hostUser.uid : 'None'}`);
@@ -871,8 +974,8 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">Ready to Watch AR Stream</h3>
-              <p className="text-sm mb-4">Join to watch the host's AR experience with other viewers</p>
+              <h3 className="text-lg font-medium text-white mb-2">Ready to Watch Crossy Robo</h3>
+              <p className="text-sm mb-4">Join to watch the host's navigation experience with other viewers</p>
               <p className="text-xs text-white/50">Channel: {session.id}</p>
             </div>
           </div>
@@ -889,7 +992,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-medium text-white mb-2">Waiting for Host</h3>
+                    <h3 className="text-lg font-medium text-white mb-2">Waiting for Crossy Robo Host</h3>
                     <p className="text-sm mb-4">Host will appear here with AR overlay</p>
                     <p className="text-xs text-white/50">Participants: {remoteUsers.size}</p>
                   </div>
@@ -927,7 +1030,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-sm font-medium">Watching Multi-Viewer AR Stream</span>
+                    <span className="text-sm font-medium">Watching Crossy Robo Stream</span>
                   </div>
                   <div className="text-xs text-white/70">
                     Channel: {session.id}<br />
@@ -940,93 +1043,161 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
               )}
             </div>
 
-            {/* Right Side: Delivery Control Panel (Read-only for viewers) */}
+            {/* Right Side: Navigation Control Panel (Read-only for viewers) */}
             <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden">
               {/* Control Panel Header - Fixed */}
               <div className="flex-shrink-0 p-4 border-b border-white/10">
-                <h2 className="text-lg font-bold text-white mb-1">Delivery Control</h2>
-                <p className="text-sm text-white/70">Watching host's delivery control</p>
+                <h2 className="text-lg font-bold text-white mb-1">Crossy Control</h2>
+                <p className="text-sm text-white/70">Watching host's navigation control</p>
               </div>
               
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto">
-                {/* Delivery Grid */}
+                {/* Directional Control Pad (View Only) */}
                 <div className="p-4 border-b border-white/10">
-                  <h3 className="text-sm font-medium text-white mb-3">Delivery Zone</h3>
-                  <div className="bg-gray-800 rounded-lg p-4 aspect-square relative overflow-hidden">
-                    {/* Grid */}
-                    <div className="absolute inset-0 grid grid-cols-8 grid-rows-8 gap-1">
-                      {Array.from({ length: 64 }).map((_, index) => {
-                        const row = Math.floor(index / 8);
-                        const col = index % 8;
-                        const isStart = startPoint && startPoint.row === row && startPoint.col === col;
-                        const isEnd = endPoint && endPoint.row === row && endPoint.col === col;
-                        
-                        return (
-                          <div
-                            key={index}
-                            className={`
-                              border border-white/20 transition-colors
-                              ${isStart ? 'bg-green-500' : ''}
-                              ${isEnd ? 'bg-red-500' : ''}
-                              ${!isStart && !isEnd ? 'bg-gray-700/30' : ''}
-                            `}
-                          />
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Robot Positions */}
-                    {robots.map((robot) => (
-                      <div
-                        key={robot.id}
-                        className={`
-                          absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2
-                          ${robot.status === 'idle' ? 'bg-blue-400' : 
-                            robot.status === 'moving' ? 'bg-yellow-400 animate-pulse' : 
-                            'bg-green-400'}
-                        `}
-                        style={{
-                          left: `${robot.position.x}%`,
-                          top: `${robot.position.y}%`
-                        }}
-                        title={robot.name}
-                      />
-                    ))}
-                    
-                    {/* Legend */}
-                    <div className="absolute bottom-2 left-2 text-xs">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="w-2 h-2 bg-green-500 rounded"></div>
-                        <span>Start</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-red-500 rounded"></div>
-                        <span>End</span>
-                      </div>
-                    </div>
-                    
-                    {/* Viewer Notice */}
+                  <h3 className="text-sm font-medium text-white mb-3">Robot Control</h3>
+                  
+                  {/* Robot Selection (View Only) */}
+                  <div className="mb-4">
+                    <label className="text-xs text-white/70 mb-2 block">Selected Robot</label>
+                    <select 
+                      value={selectedRobot}
+                      onChange={(e) => setSelectedRobot(e.target.value)}
+                      className="w-full bg-gray-800 border border-white/20 rounded px-3 py-2 text-white text-sm"
+                      disabled
+                    >
+                      {robots.map(robot => (
+                        <option key={robot.id} value={robot.id}>
+                          {robot.name} ({robot.battery}%)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Control Pad (View Only) */}
+                  <div className="bg-gray-800 rounded-lg p-6 flex flex-col items-center relative">
+                    {/* View Only Overlay */}
                     <div className="absolute top-2 right-2 text-xs text-white/50 bg-black/30 px-2 py-1 rounded">
                       View Only
                     </div>
+                    
+                    {/* Up Button */}
+                    <button
+                      onClick={() => sendCommand('up')}
+                      className="w-16 h-16 rounded-lg mb-2 flex items-center justify-center text-white font-bold text-xl
+                                 bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                    >
+                      ↑
+                    </button>
+                    
+                    {/* Middle Row: Left, Stop, Right */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <button
+                        onClick={() => sendCommand('left')}
+                        className="w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl
+                                   bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                      >
+                        ←
+                      </button>
+                      
+                      <button
+                        onClick={() => sendCommand('stop')}
+                        className="w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-sm
+                                   bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                      >
+                        ■
+                      </button>
+                      
+                      <button
+                        onClick={() => sendCommand('right')}
+                        className="w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl
+                                   bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                      >
+                        →
+                      </button>
+                    </div>
+                    
+                    {/* Down Button */}
+                    <button
+                      onClick={() => sendCommand('down')}
+                      className="w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl
+                                 bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                  
+                  {/* Control Status */}
+                  <div className="mt-3 text-center">
+                    <span className="text-xs px-2 py-1 rounded bg-gray-600/20 text-gray-400">
+                      Watching Host Control
+                    </span>
                   </div>
                 </div>
-                
-                {/* Robot Status */}
+
+                {/* Message Log */}
                 <div className="p-4 border-b border-white/10">
+                  <h3 className="text-sm font-medium text-white mb-3">Message Log</h3>
+                  <div className="bg-gray-800 rounded-lg p-3 h-48 overflow-y-auto">
+                    {messageLog.length === 0 ? (
+                      <div className="text-center text-white/50 text-sm py-8">
+                        Waiting for host commands...
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {messageLog.map((message) => (
+                          <div key={message.id} className="text-xs">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-white/70">{message.timestamp}</span>
+                              <div className="flex items-center gap-1">
+                                <div className={`w-2 h-2 rounded-full ${
+                                  message.status === 'sent' ? 'bg-yellow-400' :
+                                  message.status === 'acknowledged' ? 'bg-green-400' :
+                                  'bg-red-400'
+                                }`} />
+                                <span className={`text-xs ${
+                                  message.status === 'sent' ? 'text-yellow-400' :
+                                  message.status === 'acknowledged' ? 'text-green-400' :
+                                  'text-red-400'
+                                }`}>
+                                  {message.status === 'sent' ? 'Sending' :
+                                   message.status === 'acknowledged' ? 'Received' :
+                                   'Failed'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-white font-medium">
+                              {message.command}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Robot Status */}
+                <div className="p-4">
                   <h3 className="text-sm font-medium text-white mb-3">Robot Status</h3>
                   <div className="space-y-2">
                     {robots.map((robot) => (
-                      <div key={robot.id} className="flex items-center justify-between bg-gray-800 rounded p-2">
+                      <div key={robot.id} className={`
+                        flex items-center justify-between bg-gray-800 rounded p-2 border-l-4
+                        ${robot.id === selectedRobot ? 'border-blue-400' : 'border-transparent'}
+                      `}>
                         <div className="flex items-center gap-2">
                           <div className={`
                             w-2 h-2 rounded-full
                             ${robot.status === 'idle' ? 'bg-blue-400' : 
-                              robot.status === 'moving' ? 'bg-yellow-400' : 
+                              robot.status === 'moving' ? 'bg-yellow-400 animate-pulse' : 
                               'bg-green-400'}
                           `} />
                           <span className="text-sm text-white">{robot.name}</span>
+                          {robot.id === selectedRobot && (
+                            <span className="text-xs bg-blue-600 text-white px-1 py-0.5 rounded">
+                              WATCHING
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-white/70">
                           {robot.battery}% • {robot.status}
@@ -1034,48 +1205,15 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                       </div>
                     ))}
                   </div>
-                </div>
-                
-                {/* Delivery Status */}
-                <div className="p-4">
-                  <h3 className="text-sm font-medium text-white mb-3">Execution</h3>
                   
-                  <div className="space-y-3">
-                    <div className="bg-gray-800 rounded p-3">
-                      <div className="text-xs text-white/70 mb-1">Delivery Cost</div>
-                      <div className="text-lg font-bold text-white">{deliveryCost} SUI</div>
-                    </div>
-                    
-                    <div className="bg-gray-800 rounded p-3">
-                      <div className="text-xs text-white/70 mb-1">Status</div>
-                      <div className="text-sm text-white">{deliveryStatus}</div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Button
-                        variant="primary"
-                        size="small"
-                        onClick={() => {
-                          // Show a tip or interaction message for viewers
-                          alert('💡 Tip: This is a view-only mode. You can watch the host control the delivery system in real-time!');
-                        }}
-                        className="w-full"
-                      >
-                        Tip to interact
-                      </Button>
-                      
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        onClick={() => {
-                          // Show reset info for viewers
-                          alert('ℹ️ Only the host can reset the delivery system. You are in view-only mode.');
-                        }}
-                        className="w-full !bg-gray-700 hover:!bg-gray-600"
-                      >
-                        Reset
-                      </Button>
-                    </div>
+                  {/* Position Display */}
+                  <div className="mt-4 bg-gray-800 rounded-lg p-3">
+                    <div className="text-xs text-white/70 mb-2">Current Position</div>
+                    {robots.filter(robot => robot.id === selectedRobot).map(robot => (
+                      <div key={robot.id} className="text-sm text-white">
+                        X: {Math.round(robot.position.x)}, Y: {Math.round(robot.position.y)}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

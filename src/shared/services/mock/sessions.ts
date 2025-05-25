@@ -4,17 +4,17 @@ import { RaceSession, RaceSessionStatus } from '../../types/race';
 const MOCK_TRACKS = [
   {
     id: 'circuit-alpha',
-    name: 'Circuit Alpha',
+    name: 'Robo Delivery',
     thumbnail: '/tracks/circuit-alpha.jpg'
   },
   {
     id: 'desert-sprint',
-    name: 'Desert Sprint',
+    name: 'Crossy Robo',
     thumbnail: '/tracks/desert-sprint.jpg'
   },
   {
     id: 'city-rush',
-    name: 'City Rush',
+    name: 'Robo Rumble',
     thumbnail: '/tracks/city-rush.jpg'
   }
 ];

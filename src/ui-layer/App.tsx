@@ -8,10 +8,15 @@ import { GameMenuScreen } from './components/screens/GameMenuScreen';
 import { TestGameScreen } from './components/screens/TestGameScreen';
 import { ARStreamScreen } from './components/screens/ARStreamScreen';
 import { ARViewerScreen } from './components/screens/ARViewerScreen';
+import { ARStreamScreenCrossyRobo } from './components/screens/ARStreamScreenCrossyRobo';
+import { ARViewerScreenCrossyRobo } from './components/screens/ARViewerScreenCrossyRobo';
+import { ARStreamScreenRoboRumble } from './components/screens/ARStreamScreenRoboRumble';
+import { ARViewerScreenRoboRumble } from './components/screens/ARViewerScreenRoboRumble';
 import { RouteTransition } from './components/transitions/RouteTransition';
 import { RaceScreen } from './components/screens/RaceScreen';
 import BabylonTestScreen from './components/screens/BabylonTestScreen';
 import { RaceSession } from '../shared/types/race';
+import { AuthProvider } from '../shared/contexts/AuthContext';
 import './App.css';
 
 function AppContent() {
@@ -73,6 +78,62 @@ function AppContent() {
     navigate('/lobby');
   };
 
+  // Helper function to get the correct AR Stream component based on track name
+  const getARStreamComponent = (session: RaceSession) => {
+    switch (session.trackName) {
+      case 'Crossy Robo':
+        return (
+          <ARStreamScreenCrossyRobo 
+            session={session}
+            onBack={handleBackToLobby}
+          />
+        );
+      case 'Robo Rumble':
+        return (
+          <ARStreamScreenRoboRumble 
+            session={session}
+            onBack={handleBackToLobby}
+          />
+        );
+      case 'Robo Delivery':
+      default:
+        return (
+          <ARStreamScreen 
+            session={session}
+            onBack={handleBackToLobby}
+          />
+        );
+    }
+  };
+
+  // Helper function to get the correct AR Viewer component based on track name
+  const getARViewerComponent = (session: RaceSession) => {
+    switch (session.trackName) {
+      case 'Crossy Robo':
+        return (
+          <ARViewerScreenCrossyRobo 
+            session={session}
+            onBack={handleBackToLobby}
+          />
+        );
+      case 'Robo Rumble':
+        return (
+          <ARViewerScreenRoboRumble 
+            session={session}
+            onBack={handleBackToLobby}
+          />
+        );
+      case 'Robo Delivery':
+      default:
+        return (
+          <ARViewerScreen 
+            session={session}
+            onBack={handleBackToLobby}
+          />
+        );
+    }
+  };
+
   return (
     <Routes>
       <Route path="/" element={
@@ -118,10 +179,7 @@ function AppContent() {
       <Route path="/ar-stream" element={
         selectedSession ? (
           <RouteTransition route="ar-stream">
-            <ARStreamScreen 
-              session={selectedSession}
-              onBack={handleBackToLobby}
-            />
+            {getARStreamComponent(selectedSession)}
           </RouteTransition>
         ) : (
           <div className="w-full h-screen bg-[#0B0B1A] flex items-center justify-center text-white">
@@ -141,10 +199,7 @@ function AppContent() {
       <Route path="/ar-viewer" element={
         selectedSession ? (
           <RouteTransition route="ar-viewer">
-            <ARViewerScreen 
-              session={selectedSession}
-              onBack={handleBackToLobby}
-            />
+            {getARViewerComponent(selectedSession)}
           </RouteTransition>
         ) : (
           <div className="w-full h-screen bg-[#0B0B1A] flex items-center justify-center text-white">
@@ -163,15 +218,22 @@ function AppContent() {
       } />
       <Route path="/race" element={<RaceScreen onBack={handleBackToMenu} />} />
       <Route path="/babylon-test" element={<BabylonTestScreen />} />
+      <Route path="/auth/callback" element={
+        <RouteTransition route="login">
+          <LoginScreen onLoginComplete={handleLoginComplete} />
+        </RouteTransition>
+      } />
     </Routes>
   );
 }
 
 function App() {
   return (
-    <Router>
-      <AppContent />
-    </Router>
+    <AuthProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </AuthProvider>
   );
 }
 
