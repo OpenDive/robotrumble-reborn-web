@@ -6,7 +6,9 @@ import { RaceSession } from '../../../shared/types/race';
 import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
 import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
+import { suiCrossyRobotService, GameState as SuiGameState } from '../../../shared/services/suiCrossyRobotService';
 import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 
 interface ARViewerScreenCrossyRoboProps {
   session: RaceSession;
@@ -81,15 +83,24 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'confirmed' | 'failed'>('pending');
   const [deliveryCost] = useState(0.5);
 
-  // Crossy Robo control state (read-only for viewers)
+  // Crossy Robo control state (now enabled for viewers too)
   const [messageLog, setMessageLog] = useState<Array<{
     id: string;
     timestamp: string;
     command: string;
     status: 'sent' | 'acknowledged' | 'failed';
   }>>([]);
-  const [isControlEnabled, setIsControlEnabled] = useState(false); // Disabled for viewers
+  const [isControlEnabled, setIsControlEnabled] = useState(true); // Enabled for viewers
   const [selectedRobot, setSelectedRobot] = useState<string>('robot-a');
+  
+  // Blockchain integration state
+  const [suiGameState, setSuiGameState] = useState<SuiGameState | null>(null);
+  const [blockchainInitialized, setBlockchainInitialized] = useState(false);
+  const [blockchainError, setBlockchainError] = useState<string | null>(null);
+  
+  // Wallet connection hooks
+  const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
 
   // AR effects toggle handler
   const toggleAREffects = () => {
@@ -202,109 +213,6 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       setMediaError(`Microphone error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
-
-  // Simulate delivery data for demo (in real app, this would come from host)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setStartPoint({ row: 2, col: 1, id: 'start' });
-      setEndPoint({ row: 5, col: 6, id: 'end' });
-      setDeliveryStatus('Ready to navigate');
-      setRobots(prev => prev.map(robot => 
-        robot.id === 'robot-a' 
-          ? { ...robot, status: 'moving' }
-          : robot
-      ));
-    }, 3000); // Show navigation points after 3 seconds
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Simulate host commands for demo
-  useEffect(() => {
-    if (!isConnected) return;
-    
-    const commands = ['right', 'up', 'right', 'down', 'stop', 'left', 'up'];
-    let commandIndex = 0;
-    
-    const simulateHostCommand = () => {
-      if (commandIndex >= commands.length) {
-        commandIndex = 0; // Reset to loop
-      }
-      
-      const command = commands[commandIndex];
-      const sendTimestamp = new Date().toLocaleTimeString();
-      const commandId = `host-cmd-${Date.now()}`;
-      
-      // Add "sent" command to log immediately
-      const sentCommand = {
-        id: commandId,
-        timestamp: sendTimestamp,
-        command: `Sent command: ${command}`,
-        status: 'sent' as const
-      };
-      
-      setMessageLog(prev => [sentCommand, ...prev].slice(0, 20));
-      
-      // Simulate realistic acknowledgment after 2-3 seconds
-      const processingTime = 2000 + Math.random() * 1000; // 2-3 seconds
-      setTimeout(() => {
-        const ackTimestamp = new Date().toLocaleTimeString();
-        const acknowledgedCommand = {
-          id: `${commandId}-ack`,
-          timestamp: ackTimestamp,
-          command: `Command acknowledged: received`,
-          status: 'acknowledged' as const
-        };
-        
-        setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
-        
-        // Update robot position
-        setRobots(prev => prev.map(robot => {
-          if (robot.id === selectedRobot) {
-            let newPosition = { ...robot.position };
-            const moveAmount = 3;
-            
-            switch (command) {
-              case 'up':
-                newPosition.y = Math.max(0, newPosition.y - moveAmount);
-                break;
-              case 'down':
-                newPosition.y = Math.min(100, newPosition.y + moveAmount);
-                break;
-              case 'left':
-                newPosition.x = Math.max(0, newPosition.x - moveAmount);
-                break;
-              case 'right':
-                newPosition.x = Math.min(100, newPosition.x + moveAmount);
-                break;
-              case 'stop':
-                // No position change for stop
-                break;
-            }
-            
-            return {
-              ...robot,
-              position: newPosition,
-              status: command === 'stop' ? 'idle' : 'moving'
-            };
-          }
-          return robot;
-        }));
-      }, processingTime);
-      
-      commandIndex++;
-    };
-    
-    // Start simulation after 5 seconds, then every 4 seconds
-    const initialTimer = setTimeout(() => {
-      simulateHostCommand();
-      const interval = setInterval(simulateHostCommand, 4000);
-      
-      return () => clearInterval(interval);
-    }, 5000);
-    
-    return () => clearTimeout(initialTimer);
-  }, [isConnected, selectedRobot]);
 
   // Initialize full AR system with complete 3D scene
   const initializeAROverlay = async () => {
@@ -684,6 +592,35 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       }
       
       setIsConnected(true);
+      console.log('✅ Connected to stream successfully');
+      
+      // Add initial game creation messages when joining
+      setTimeout(() => {
+        const gameId = 9538; // Hardcoded game ID for synchronization with host
+        const timestamp1 = new Date().toLocaleTimeString();
+        const timestamp2 = new Date(Date.now() + 3000).toLocaleTimeString();
+        
+        // Add game creation command
+        const gameCreationCommand = {
+          id: `initial-game-${Date.now()}`,
+          timestamp: timestamp1,
+          command: `Sent command: Create game: ${gameId}`,
+          status: 'sent' as const
+        };
+        
+        // Add robot acceptance command
+        const robotAcceptanceCommand = {
+          id: `initial-accept-${Date.now()}`,
+          timestamp: timestamp2,
+          command: `Command acknowledged: Robot A accepts the offer`,
+          status: 'acknowledged' as const
+        };
+        
+        setMessageLog([robotAcceptanceCommand, gameCreationCommand]);
+        console.log(`🎮 Added initial game creation messages for game ${gameId}`);
+      }, 1000);
+      
+      // Start playing crossy video immediately when connected
     } catch (error) {
       console.error('Error connecting to stream:', error);
       setConnectionError(`Failed to connect: ${error instanceof Error ? error.message : String(error)}`);
@@ -799,10 +736,213 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     };
   }, []);
 
-  // Send directional command (viewer version - shows info message)
+  // Initialize blockchain service
+  useEffect(() => {
+    const initializeBlockchain = async () => {
+      try {
+        setBlockchainError(null);
+        console.log('🔗 Initializing blockchain integration for viewer...');
+        
+        // Connect wallet if available
+        if (currentAccount && signAndExecuteTransaction) {
+          // Wrap the mutate function to return a Promise
+          const wrappedSignAndExecute = (transaction: any): Promise<any> => {
+            return new Promise((resolve, reject) => {
+              signAndExecuteTransaction(
+                { transaction },
+                {
+                  onSuccess: (result) => resolve(result),
+                  onError: (error) => reject(error)
+                }
+              );
+            });
+          };
+          
+          suiCrossyRobotService.setWalletConnection(
+            currentAccount.address,
+            wrappedSignAndExecute
+          );
+          console.log('✅ Wallet connected to blockchain service');
+        }
+        
+        const success = await suiCrossyRobotService.initialize();
+        if (success) {
+          setBlockchainInitialized(true);
+          setSuiGameState(suiCrossyRobotService.getGameState());
+          console.log('✅ Blockchain integration ready for viewer');
+        } else {
+          throw new Error('Failed to initialize blockchain service');
+        }
+      } catch (error) {
+        console.error('❌ Blockchain initialization failed:', error);
+        setBlockchainError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    
+    initializeBlockchain();
+  }, [currentAccount, signAndExecuteTransaction]);
+
+  // Send directional command or create game (viewer can now send commands)
   const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
-    // Show viewer info message
-    alert(`💡 Tip: You are watching the host control the robot. Only the host can send ${direction} commands!`);
+    if (!isControlEnabled) return;
+    
+    // Check wallet connection
+    if (!currentAccount) {
+      const errorMsg = 'Please connect your wallet first';
+      setMessageLog(prev => [{
+        id: `error-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        command: `Error: ${errorMsg}`,
+        status: 'failed' as const
+      }, ...prev].slice(0, 20));
+      return;
+    }
+    
+    const sendTimestamp = new Date().toLocaleTimeString();
+    const commandId = `cmd-${Date.now()}`;
+    
+    // Handle game creation when stop button is pressed
+    if (direction === 'stop') {
+      // Add "sent" command to log immediately
+      const sentCommand = {
+        id: commandId,
+        timestamp: sendTimestamp,
+        command: `Sent command: Create game`,
+        status: 'sent' as const
+      };
+      
+      setMessageLog(prev => [sentCommand, ...prev].slice(0, 20));
+      
+      // Disable controls temporarily to prevent spam
+      setIsControlEnabled(false);
+      
+      try {
+        // Create game using real blockchain service
+        const result = await suiCrossyRobotService.createGame();
+        
+        if (result.success) {
+          // Add "acknowledged" command to log with new timestamp
+          const ackTimestamp = new Date().toLocaleTimeString();
+          const acknowledgedCommand = {
+            id: `${commandId}-ack`,
+            timestamp: ackTimestamp,
+            command: `Game created! TX: ${suiCrossyRobotService.getShortTransactionId(result.transactionId!)}`,
+            status: 'acknowledged' as const
+          };
+          
+          setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
+          
+          // Update game state
+          setSuiGameState(suiCrossyRobotService.getGameState());
+          
+          console.log(`Crossy Robo Viewer: Created game with transaction ${result.transactionId}`);
+          
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+        
+      } catch (error) {
+        // Add "failed" command to log with new timestamp
+        const failTimestamp = new Date().toLocaleTimeString();
+        const failedCommand = {
+          id: `${commandId}-fail`,
+          timestamp: failTimestamp,
+          command: `Game creation failed: ${error}`,
+          status: 'failed' as const
+        };
+        
+        setMessageLog(prev => [failedCommand, ...prev].slice(0, 20));
+        console.error('Failed to create game:', error);
+      } finally {
+        // Re-enable controls after a short delay
+        setTimeout(() => setIsControlEnabled(true), 500);
+      }
+      
+      return; // Exit early for game creation
+    }
+    
+    // Handle regular directional commands
+    // Add "sent" command to log immediately
+    const sentCommand = {
+      id: commandId,
+      timestamp: sendTimestamp,
+      command: `Sent command: ${direction}`,
+      status: 'sent' as const
+    };
+    
+    setMessageLog(prev => [sentCommand, ...prev].slice(0, 20));
+    
+    // Disable controls temporarily to prevent spam
+    setIsControlEnabled(false);
+    
+    try {
+      // Send movement using real blockchain service
+      const result = await suiCrossyRobotService.sendMovement(direction.toUpperCase() as 'UP' | 'DOWN' | 'LEFT' | 'RIGHT');
+      
+      if (result.success) {
+        // Add "acknowledged" command to log with new timestamp
+        const ackTimestamp = new Date().toLocaleTimeString();
+        const acknowledgedCommand = {
+          id: `${commandId}-ack`,
+          timestamp: ackTimestamp,
+          command: `Movement ${direction} confirmed! TX: ${suiCrossyRobotService.getShortTransactionId(result.transactionId!)}`,
+          status: 'acknowledged' as const
+        };
+        
+        setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
+        
+        // Update robot position (simulate movement)
+        setRobots(prev => prev.map(robot => {
+          if (robot.id === selectedRobot) {
+            let newPosition = { ...robot.position };
+            const moveAmount = 5;
+            
+            switch (direction) {
+              case 'up':
+                newPosition.y = Math.max(0, newPosition.y - moveAmount);
+                break;
+              case 'down':
+                newPosition.y = Math.min(100, newPosition.y + moveAmount);
+                break;
+              case 'left':
+                newPosition.x = Math.max(0, newPosition.x - moveAmount);
+                break;
+              case 'right':
+                newPosition.x = Math.min(100, newPosition.x + moveAmount);
+                break;
+            }
+            
+            return {
+              ...robot,
+              position: newPosition,
+              status: 'moving'
+            };
+          }
+          return robot;
+        }));
+        
+        console.log(`Crossy Robo Viewer: Sent ${direction} command with transaction ${result.transactionId}`);
+        
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+      
+    } catch (error) {
+      // Add "failed" command to log with new timestamp
+      const failTimestamp = new Date().toLocaleTimeString();
+      const failedCommand = {
+        id: `${commandId}-fail`,
+        timestamp: failTimestamp,
+        command: `Movement failed: ${error}`,
+        status: 'failed' as const
+      };
+      
+      setMessageLog(prev => [failedCommand, ...prev].slice(0, 20));
+      console.error('Failed to send command:', error);
+    } finally {
+      // Re-enable controls after a short delay
+      setTimeout(() => setIsControlEnabled(true), 500);
+    }
   };
 
   return (
@@ -811,7 +951,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       <div className="absolute inset-0 bg-gradient-radial from-transparent via-[#0B0B1A]/80 to-[#0B0B1A]"/>
       
       {/* Header */}
-      <div className="relative z-30 bg-gradient-to-r from-game-900/50 via-game-800/50 to-game-900/50 backdrop-blur-sm border-b border-white/5 p-4">
+      <div className="relative z-50 bg-gradient-to-r from-game-900/50 via-game-800/50 to-game-900/50 backdrop-blur-sm border-b border-white/5 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -1006,7 +1146,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                   ref={canvasRef}
                   className="absolute inset-0 w-full h-full pointer-events-none"
                   style={{
-                    zIndex: 2,
+                    zIndex: 10,
                     background: 'transparent',
                     display: arInitialized ? 'block' : 'none',
                     top: 0,
@@ -1021,7 +1161,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
 
               {/* Stream Info Overlay */}
               {isConnected && (
-                <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
+                <div className="absolute top-4 left-4 z-50 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                     <span className="text-sm font-medium">Watching Crossy Robo Stream</span>
@@ -1038,27 +1178,26 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
             </div>
 
             {/* Right Side: Navigation Control Panel (Read-only for viewers) */}
-            <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden">
+            <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden relative z-20">
               {/* Control Panel Header - Fixed */}
-              <div className="flex-shrink-0 p-4 border-b border-white/10">
-                <h2 className="text-lg font-bold text-white mb-1">Crossy Control</h2>
-                <p className="text-sm text-white/70">Watching host's navigation control</p>
+              <div className="flex-shrink-0 p-4 border-b border-white/10 relative z-10">
+                <h2 className="text-lg font-bold text-white mb-1 relative z-10">Crossy Control</h2>
+                <p className="text-sm text-white/70 relative z-10">Navigate robots across the grid safely</p>
               </div>
               
               {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto relative z-10">
                 {/* Directional Control Pad (View Only) */}
-                <div className="p-4 border-b border-white/10">
-                  <h3 className="text-sm font-medium text-white mb-3">Robot Control</h3>
+                <div className="p-4 border-b border-white/10 relative z-10">
+                  <h3 className="text-sm font-medium text-white mb-3 relative z-10">Robot Control</h3>
                   
-                  {/* Robot Selection (View Only) */}
-                  <div className="mb-4">
-                    <label className="text-xs text-white/70 mb-2 block">Selected Robot</label>
+                  {/* Robot Selection (now enabled) */}
+                  <div className="mb-4 relative z-10">
+                    <label className="text-xs text-white/70 mb-2 block relative z-10">Selected Robot</label>
                     <select 
                       value={selectedRobot}
                       onChange={(e) => setSelectedRobot(e.target.value)}
-                      className="w-full bg-gray-800 border border-white/20 rounded px-3 py-2 text-white text-sm"
-                      disabled
+                      className="w-full bg-gray-800 border border-white/20 rounded px-3 py-2 text-white text-sm relative z-20 pointer-events-auto"
                     >
                       {robots.map(robot => (
                         <option key={robot.id} value={robot.id}>
@@ -1068,44 +1207,67 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                     </select>
                   </div>
 
-                  {/* Control Pad (View Only) */}
-                  <div className="bg-gray-800 rounded-lg p-6 flex flex-col items-center relative">
-                    {/* View Only Overlay */}
-                    <div className="absolute top-2 right-2 text-xs text-white/50 bg-black/30 px-2 py-1 rounded">
-                      View Only
-                    </div>
-                    
+                  {/* Control Pad (now functional) */}
+                  <div className="bg-gray-800 rounded-lg p-6 flex flex-col items-center relative z-10">
                     {/* Up Button */}
                     <button
                       onClick={() => sendCommand('up')}
-                      className="w-16 h-16 rounded-lg mb-2 flex items-center justify-center text-white font-bold text-xl
-                                 bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                      disabled={!isControlEnabled}
+                      className={`
+                        w-16 h-16 rounded-lg mb-2 flex items-center justify-center text-white font-bold text-xl
+                        transition-all duration-150 relative z-20 pointer-events-auto
+                        ${isControlEnabled 
+                          ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-lg hover:shadow-xl' 
+                          : 'bg-gray-600 cursor-not-allowed opacity-50'
+                        }
+                      `}
                     >
                       ↑
                     </button>
                     
-                    {/* Middle Row: Left, Stop, Right */}
-                    <div className="flex items-center gap-2 mb-2">
+                    {/* Middle Row: Left, Create Game, Right */}
+                    <div className="flex items-center gap-2 mb-2 relative z-10">
                       <button
                         onClick={() => sendCommand('left')}
-                        className="w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl
-                                   bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                        disabled={!isControlEnabled}
+                        className={`
+                          w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl
+                          transition-all duration-150 relative z-20 pointer-events-auto
+                          ${isControlEnabled 
+                            ? 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800 shadow-lg hover:shadow-xl' 
+                            : 'bg-gray-600 cursor-not-allowed opacity-50'
+                          }
+                        `}
                       >
                         ←
                       </button>
                       
                       <button
                         onClick={() => sendCommand('stop')}
-                        className="w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-sm
-                                   bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                        disabled={!isControlEnabled}
+                        className={`
+                          w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xs
+                          transition-all duration-150 relative z-20 pointer-events-auto
+                          ${isControlEnabled 
+                            ? 'bg-green-600 hover:bg-green-700 active:bg-green-800 shadow-lg hover:shadow-xl' 
+                            : 'bg-gray-600 cursor-not-allowed opacity-50'
+                          }
+                        `}
                       >
-                        ■
+                        Create<br/>Game
                       </button>
                       
                       <button
                         onClick={() => sendCommand('right')}
-                        className="w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl
-                                   bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                        disabled={!isControlEnabled}
+                        className={`
+                          w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl
+                          transition-all duration-150 relative z-20 pointer-events-auto
+                          ${isControlEnabled 
+                            ? 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800 shadow-lg hover:shadow-xl' 
+                            : 'bg-gray-600 cursor-not-allowed opacity-50'
+                          }
+                        `}
                       >
                         →
                       </button>
@@ -1114,28 +1276,39 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                     {/* Down Button */}
                     <button
                       onClick={() => sendCommand('down')}
-                      className="w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl
-                                 bg-gray-600 cursor-pointer hover:bg-gray-500 transition-colors"
+                      disabled={!isControlEnabled}
+                      className={`
+                        w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl
+                        transition-all duration-150 relative z-20 pointer-events-auto
+                        ${isControlEnabled 
+                          ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-lg hover:shadow-xl' 
+                          : 'bg-gray-600 cursor-not-allowed opacity-50'
+                        }
+                      `}
                     >
                       ↓
                     </button>
                   </div>
                   
                   {/* Control Status */}
-                  <div className="mt-3 text-center">
-                    <span className="text-xs px-2 py-1 rounded bg-gray-600/20 text-gray-400">
-                      Watching Host Control
+                  <div className="mt-3 text-center relative z-10">
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      isControlEnabled 
+                        ? 'bg-green-600/20 text-green-400' 
+                        : 'bg-yellow-600/20 text-yellow-400'
+                    }`}>
+                      {isControlEnabled ? 'Ready' : 'Processing...'}
                     </span>
                   </div>
                 </div>
 
                 {/* Message Log */}
-                <div className="p-4 border-b border-white/10">
-                  <h3 className="text-sm font-medium text-white mb-3">Message Log</h3>
-                  <div className="bg-gray-800 rounded-lg p-3 h-48 overflow-y-auto">
+                <div className="p-4 border-b border-white/10 relative z-10">
+                  <h3 className="text-sm font-medium text-white mb-3 relative z-10">Message Log</h3>
+                  <div className="bg-gray-800 rounded-lg p-3 h-48 overflow-y-auto relative z-10">
                     {messageLog.length === 0 ? (
                       <div className="text-center text-white/50 text-sm py-8">
-                        Waiting for host commands...
+                        No commands sent yet
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -1171,29 +1344,29 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                 </div>
 
                 {/* Robot Status */}
-                <div className="p-4">
-                  <h3 className="text-sm font-medium text-white mb-3">Robot Status</h3>
-                  <div className="space-y-2">
+                <div className="p-4 relative z-10">
+                  <h3 className="text-sm font-medium text-white mb-3 relative z-10">Robot Status</h3>
+                  <div className="space-y-2 relative z-10">
                     {robots.map((robot) => (
                       <div key={robot.id} className={`
-                        flex items-center justify-between bg-gray-800 rounded p-2 border-l-4
+                        flex items-center justify-between bg-gray-800 rounded p-2 border-l-4 relative z-10
                         ${robot.id === selectedRobot ? 'border-blue-400' : 'border-transparent'}
                       `}>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 relative z-10">
                           <div className={`
-                            w-2 h-2 rounded-full
+                            w-2 h-2 rounded-full relative z-10
                             ${robot.status === 'idle' ? 'bg-blue-400' : 
                               robot.status === 'moving' ? 'bg-yellow-400 animate-pulse' : 
                               'bg-green-400'}
                           `} />
-                          <span className="text-sm text-white">{robot.name}</span>
+                          <span className="text-sm text-white relative z-10">{robot.name}</span>
                           {robot.id === selectedRobot && (
-                            <span className="text-xs bg-blue-600 text-white px-1 py-0.5 rounded">
-                              WATCHING
+                            <span className="text-xs bg-blue-600 text-white px-1 py-0.5 rounded relative z-10">
+                              ACTIVE
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-white/70">
+                        <div className="text-xs text-white/70 relative z-10">
                           {robot.battery}% • {robot.status}
                         </div>
                       </div>
@@ -1201,10 +1374,10 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                   </div>
                   
                   {/* Position Display */}
-                  <div className="mt-4 bg-gray-800 rounded-lg p-3">
-                    <div className="text-xs text-white/70 mb-2">Current Position</div>
+                  <div className="mt-4 bg-gray-800 rounded-lg p-3 relative z-10">
+                    <div className="text-xs text-white/70 mb-2 relative z-10">Current Position</div>
                     {robots.filter(robot => robot.id === selectedRobot).map(robot => (
-                      <div key={robot.id} className="text-sm text-white">
+                      <div key={robot.id} className="text-sm text-white relative z-10">
                         X: {Math.round(robot.position.x)}, Y: {Math.round(robot.position.y)}
                       </div>
                     ))}

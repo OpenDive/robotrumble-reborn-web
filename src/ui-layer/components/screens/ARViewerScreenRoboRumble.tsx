@@ -283,16 +283,13 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       
       const viewerMessages = [
         "This is so exciting! 🔥",
-        "Go Robot A!",
-        "Robot B for the win!",
         "Amazing AR effects!",
         "When does it start?",
         "Best stream ever! 💯",
         "The arena looks incredible",
-        "Can't wait to see the battle!"
       ];
       
-      const viewerNames = ["BattleFan", "RoboWatcher", "TechLover", "GameMaster", "ArenaKing"];
+      const viewerNames = ["RoboWatcher"];
       
       // 60% chance for host message, 40% for viewer message
       const isHostMessage = Math.random() > 0.4;
@@ -513,56 +510,84 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
               existingUser.isHost = true;
               setHostUser(existingUser);
               
+              // Start playing RoboRumble video immediately when connected
               setTimeout(() => {
-                // Create main host video view
+                console.log(`🎬 Starting local RoboRumble video for synchronized viewing`);
+                
+                // Create main video view
                 const mainContainer = document.createElement('div');
-                mainContainer.id = `main-host-${user.uid}`;
+                mainContainer.id = `main-roborumble-video`;
                 mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
                 
-                const hostVideo = document.createElement('video');
-                hostVideo.className = 'w-full h-full object-cover';
-                hostVideo.autoplay = true;
-                hostVideo.playsInline = true;
-                hostVideo.muted = true;
-                hostVideo.style.transform = 'scaleX(-1)'; // Mirror the video
-                hostVideo.id = `host-video-${user.uid}`;
-                mainContainer.appendChild(hostVideo);
+                const roboRumbleVideo = document.createElement('video');
+                roboRumbleVideo.className = 'w-full h-full object-cover';
+                roboRumbleVideo.autoplay = true;
+                roboRumbleVideo.playsInline = true;
+                roboRumbleVideo.muted = true;
+                roboRumbleVideo.loop = true;
+                roboRumbleVideo.style.transform = 'scaleX(-1)'; // Mirror the video
+                roboRumbleVideo.id = `roborumble-video`;
+                roboRumbleVideo.src = '/assets/videos/roborumble.mp4'; // Play the RoboRumble video locally
+                
+                console.log(`🎥 Loading RoboRumble video locally for synchronized viewing`);
+                
+                // Add event listeners for debugging
+                roboRumbleVideo.addEventListener('loadeddata', () => {
+                  console.log(`📹 Local RoboRumble video loaded: ${roboRumbleVideo.videoWidth}x${roboRumbleVideo.videoHeight}`);
+                });
+                
+                roboRumbleVideo.addEventListener('playing', () => {
+                  console.log(`📹 Local RoboRumble video is playing`);
+                });
+                
+                roboRumbleVideo.addEventListener('error', (e) => {
+                  console.error(`❌ Local RoboRumble video error:`, e);
+                });
+                
+                mainContainer.appendChild(roboRumbleVideo);
                 
                 // Store reference for AR detection
-                hostVideoRef.current = hostVideo;
+                hostVideoRef.current = roboRumbleVideo;
                 
                 // Add to main view container
                 if (mainViewRef.current) {
+                  console.log(`📺 Adding local RoboRumble video to main view`);
                   mainViewRef.current.appendChild(mainContainer);
                   
-                  // Play video in main view
-                  user.videoTrack!.play(hostVideo);
-                  
-                  console.log(`🎮 Robo Rumble host video displayed in main view for user ${user.uid}`);
-                  
-                  // Initialize AR overlay for host stream
-                  setTimeout(() => {
-                    const initializeARWhenReady = () => {
-                      if (hostVideo.videoWidth > 0 && hostVideo.videoHeight > 0) {
-                        console.log(`📐 Host video dimensions ready: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
+                  // Start playing the video
+                  roboRumbleVideo.play().then(() => {
+                    console.log(`✅ Local RoboRumble video started playing successfully`);
+                    
+                    // Initialize AR overlay once video is playing
+                    setTimeout(() => {
+                      if (roboRumbleVideo.videoWidth > 0 && roboRumbleVideo.videoHeight > 0) {
+                        console.log(`📐 Video dimensions ready: ${roboRumbleVideo.videoWidth}x${roboRumbleVideo.videoHeight}`);
                         initializeAROverlay();
-                      } else {
-                        setTimeout(initializeARWhenReady, 500);
+                        
+                        // Add backup initialization attempts
+                        setTimeout(() => {
+                          console.log('Backup AR initialization attempt 1...');
+                          if (!arInitialized) {
+                            initializeAROverlay();
+                          }
+                        }, 1000);
+                        
+                        setTimeout(() => {
+                          console.log('Backup AR initialization attempt 2...');
+                          if (!arInitialized) {
+                            initializeAROverlay();
+                          }
+                        }, 3000);
                       }
-                    };
+                    }, 500);
                     
-                    hostVideo.addEventListener('loadeddata', () => {
-                      setTimeout(initializeARWhenReady, 200);
-                    });
-                    
-                    hostVideo.addEventListener('playing', () => {
-                      setTimeout(initializeARWhenReady, 200);
-                    });
-                    
-                    setTimeout(initializeARWhenReady, 2000);
-                  }, 100);
+                  }).catch((playError) => {
+                    console.error(`❌ Failed to play local RoboRumble video:`, playError);
+                  });
+                } else {
+                  console.error(`❌ mainViewRef.current is null`);
                 }
-              }, 100);
+              }, 500);
             } else {
               console.log(`👥 User ${user.uid} is a VIEWER with video`);
               // This is a viewer - display in participant tile
@@ -590,13 +615,13 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
           const remoteUser = remoteUsers.get(user.uid as number);
           if (remoteUser?.isHost) {
             // Host stopped streaming - clean up main view and AR
-            const mainContainer = document.getElementById(`main-host-${user.uid}`);
+            const mainContainer = document.getElementById(`main-roborumble-video`);
             if (mainContainer) {
               mainContainer.remove();
             }
             cleanupAROverlay();
             setHostUser(null);
-            console.log(`👑❌ Robo Rumble host ${user.uid} stopped streaming`);
+            console.log(`👑❌ Robo Rumble host stopped streaming`);
           }
         }
         
@@ -626,13 +651,13 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
         // If host left, clean up main view
         const remoteUser = remoteUsers.get(user.uid as number);
         if (remoteUser?.isHost) {
-          const mainContainer = document.getElementById(`main-host-${user.uid}`);
+          const mainContainer = document.getElementById(`main-roborumble-video`);
           if (mainContainer) {
             mainContainer.remove();
           }
           cleanupAROverlay();
           setHostUser(null);
-          console.log(`👑🚪 Robo Rumble host ${user.uid} left`);
+          console.log(`👑🚪 Robo Rumble host left`);
         }
         
         setRemoteUsers(prev => {
@@ -718,6 +743,17 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       if (mainViewRef.current) {
         mainViewRef.current.innerHTML = '';
       }
+      const participantGrid = document.getElementById('participant-grid');
+      if (participantGrid) {
+        participantGrid.innerHTML = '';
+      }
+      
+      // Clean up RoboRumble video container
+      const roboRumbleContainer = document.getElementById('main-roborumble-video');
+      if (roboRumbleContainer) {
+        roboRumbleContainer.remove();
+        console.log('🗑️ Cleaned up RoboRumble video container');
+      }
       
       setIsConnected(false);
       setLocalUid(null);
@@ -792,7 +828,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
             </Button>
             <div>
               <h1 className="text-xl font-bold text-white">{session.trackName}</h1>
-              <p className="text-sm text-white/70">Robo Rumble Viewer {arInitialized && '(AR Active)'}</p>
+              <p className="text-sm text-white/70">RoboRumble AR Stream {arInitialized && '(AR Active)'}</p>
             </div>
           </div>
           
@@ -911,8 +947,8 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">Ready to Watch Robo Rumble</h3>
-              <p className="text-sm mb-4">Join to watch the host's battle experience with other viewers</p>
+              <h3 className="text-lg font-medium text-white mb-2">Ready to Join RoboRumble Session</h3>
+              <p className="text-sm mb-4">Connect to watch the synchronized RoboRumble demo with AR overlay</p>
               <p className="text-xs text-white/50">Channel: {session.id}</p>
             </div>
           </div>
@@ -929,8 +965,8 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-medium text-white mb-2">Waiting for Robo Rumble Host</h3>
-                    <p className="text-sm mb-4">Host will appear here with AR overlay</p>
+                    <h3 className="text-lg font-medium text-white mb-2">Waiting for Battle Session</h3>
+                    <p className="text-sm mb-4">RoboRumble demo will start when host begins session</p>
                     <p className="text-xs text-white/50">Participants: {remoteUsers.size}</p>
                   </div>
                 </div>
@@ -967,7 +1003,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                 <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-sm font-medium">Watching Robo Rumble Stream</span>
+                    <span className="text-sm font-medium">Watching RoboRumble AR Stream</span>
                   </div>
                   <div className="text-xs text-white/70">
                     Channel: {session.id}<br />
@@ -981,13 +1017,13 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
             </div>
 
             {/* Right Side: Battle Control Panel (Read-only for viewers) */}
-            <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden">
+            <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden relative z-20">
               {/* Chat Header - Fixed */}
-              <div className="flex-shrink-0 p-4 border-b border-white/10">
-                <h2 className="text-lg font-bold text-white mb-1">Battle Chat</h2>
-                <p className="text-sm text-white/70">Chat with host and other viewers</p>
+              <div className="flex-shrink-0 p-4 border-b border-white/10 relative z-10">
+                <h2 className="text-lg font-bold text-white mb-1 relative z-10">Rumble Chat</h2>
+                <p className="text-sm text-white/70 relative z-10">Chat with host and other viewers</p>
                 {isConnected && (
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex items-center gap-2 relative z-10">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                     <span className="text-xs text-green-400">
                       {hostUser ? 'Host online' : 'Waiting for host'} • {Math.max(0, remoteUsers.size - (hostUser ? 1 : 0))} viewers
@@ -997,16 +1033,16 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
               </div>
               
               {/* Chat Messages - Scrollable */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="space-y-3">
+              <div className="flex-1 overflow-y-auto p-4 relative z-10">
+                <div className="space-y-3 relative z-10">
                   {chatMessages.length === 0 ? (
-                    <div className="text-center text-white/50 text-sm py-8">
+                    <div className="text-center text-white/50 text-sm py-8 relative z-10">
                       {isConnected ? 'Chat is ready! Say hello...' : 'Connect to join the chat'}
                     </div>
                   ) : (
                     chatMessages.map((msg) => (
                       <div key={msg.id} className={`
-                        flex flex-col gap-1 p-3 rounded-lg
+                        flex flex-col gap-1 p-3 rounded-lg relative z-10
                         ${msg.isHost 
                           ? 'bg-blue-600/20 border-l-4 border-blue-400 mr-4' 
                           : msg.senderUid === localUid
@@ -1014,28 +1050,28 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                             : 'bg-gray-800/50 border-l-4 border-purple-400 mr-4'
                         }
                       `}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-medium ${
+                        <div className="flex items-center justify-between relative z-10">
+                          <div className="flex items-center gap-2 relative z-10">
+                            <span className={`text-xs font-medium relative z-10 ${
                               msg.isHost ? 'text-blue-400' : 
                               msg.senderUid === localUid ? 'text-green-400' : 'text-purple-400'
                             }`}>
                               {msg.senderUid === localUid ? 'You' : msg.sender}
                             </span>
                             {msg.isHost && (
-                              <span className="text-xs bg-blue-600 text-white px-1 py-0.5 rounded">
+                              <span className="text-xs bg-blue-600 text-white px-1 py-0.5 rounded relative z-10">
                                 HOST
                               </span>
                             )}
                             {msg.senderUid === localUid && (
-                              <span className="text-xs bg-green-600 text-white px-1 py-0.5 rounded">
+                              <span className="text-xs bg-green-600 text-white px-1 py-0.5 rounded relative z-10">
                                 YOU
                               </span>
                             )}
                           </div>
-                          <span className="text-xs text-white/50">{msg.timestamp}</span>
+                          <span className="text-xs text-white/50 relative z-10">{msg.timestamp}</span>
                         </div>
-                        <div className="text-sm text-white break-words">
+                        <div className="text-sm text-white break-words relative z-10">
                           {msg.message}
                         </div>
                       </div>
@@ -1045,8 +1081,8 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
               </div>
               
               {/* Chat Input - Fixed at bottom */}
-              <div className="flex-shrink-0 p-4 border-t border-white/10">
-                <div className="flex gap-2">
+              <div className="flex-shrink-0 p-4 border-t border-white/10 relative z-10">
+                <div className="flex gap-2 relative z-10">
                   <input
                     type="text"
                     value={currentMessage}
@@ -1056,14 +1092,14 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                     disabled={!isConnected || isSendingMessage}
                     className="flex-1 bg-gray-800 border border-white/20 rounded px-3 py-2 text-white text-sm
                               placeholder-white/50 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400
-                              disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled:opacity-50 disabled:cursor-not-allowed relative z-10"
                     maxLength={200}
                   />
                   <button
                     onClick={sendChatMessage}
                     disabled={!isConnected || !currentMessage.trim() || isSendingMessage}
                     className={`
-                      px-4 py-2 rounded text-sm font-medium transition-all duration-150
+                      px-4 py-2 rounded text-sm font-medium transition-all duration-150 relative z-20 pointer-events-auto
                       ${(!isConnected || !currentMessage.trim() || isSendingMessage)
                         ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
                         : 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg hover:shadow-xl'
@@ -1081,7 +1117,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                 </div>
                 
                 {/* Chat Status */}
-                <div className="mt-2 text-xs text-white/50">
+                <div className="mt-2 text-xs text-white/50 relative z-10">
                   {isConnected ? (
                     <>
                       Press Enter to send • {currentMessage.length}/200 characters

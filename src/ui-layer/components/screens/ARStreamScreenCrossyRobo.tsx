@@ -10,7 +10,9 @@ import { GamePhysicsSystem } from '../../../engine-layer/core/physics/GamePhysic
 import { InputController } from '../../../engine-layer/core/input/InputController';
 import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
+import { suiCrossyRobotService, GameState as SuiGameState } from '../../../shared/services/suiCrossyRobotService';
 import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
 
 interface ARStreamScreenCrossyRoboProps {
   session: RaceSession;
@@ -45,6 +47,7 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const uiVideoRef = useRef<HTMLVideoElement>(null);
   
   // AR System refs - for camera + overlay (like viewer experience)
   const arDetectorRef = useRef<EnhancedARDetector | null>(null);
@@ -89,6 +92,9 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
   const [streamingError, setStreamingError] = useState<string | null>(null);
   const [localUid, setLocalUid] = useState<number | null>(null);
   const [remoteUsers, setRemoteUsers] = useState<Map<number, RemoteUser>>(new Map());
+  const [crossyDemoVideoRef, setCrossyDemoVideoRef] = useState<HTMLVideoElement | null>(null);
+  const [crossyDemoPlaying, setCrossyDemoPlaying] = useState(false);
+  const [crossyDemoInitialized, setCrossyDemoInitialized] = useState(false);
   
   // Robotics control state
   const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
@@ -110,6 +116,16 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
   }>>([]);
   const [isControlEnabled, setIsControlEnabled] = useState(true);
   const [selectedRobot, setSelectedRobot] = useState<string>('robot-a');
+  
+  // Blockchain integration state
+  const [suiGameState, setSuiGameState] = useState<SuiGameState | null>(null);
+  const [blockchainInitialized, setBlockchainInitialized] = useState(false);
+  const [blockchainError, setBlockchainError] = useState<string | null>(null);
+  
+  // Wallet connection hooks
+  const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const suiClient = useSuiClient();
   
   // AR effects toggle handler
   const toggleAREffects = () => {
@@ -195,16 +211,16 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
           videoRef.current.addEventListener('loadeddata', onVideoLoaded);
           videoRef.current.addEventListener('error', onVideoError);
           
-          // Also listen for when video starts playing
           const onVideoPlay = () => {
             console.log('Video started playing');
+            videoRef.current?.removeEventListener('play', onVideoPlay);
           };
+          
           videoRef.current.addEventListener('play', onVideoPlay);
         }
       } catch (error) {
         console.error('Failed to access webcam:', error);
-        setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
-        setArMode(false);
+        setWebcamError(`Webcam access failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else {
       // Switching TO 3D mode - cleanup AR first
@@ -291,10 +307,10 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
     const renderLoop = () => {
       frameCount++;
       
-      // Run AR detection on webcam video
-      if (videoRef.current && arDetectorRef.current) {
+      // Run AR detection on UI video element
+      if (uiVideoRef.current && arDetectorRef.current) {
         // Check video readiness - only detect if video is properly loaded
-        const video = videoRef.current;
+        const video = uiVideoRef.current;
         
         // Check video readiness every 60 frames (roughly once per second at 60fps)
         if (frameCount % 60 === 0) {
@@ -303,7 +319,7 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
         
         // Only attempt detection if video has valid dimensions and is playing
         if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
-          const markers = arDetectorRef.current.detectMarkers(videoRef.current);
+          const markers = arDetectorRef.current.detectMarkers(uiVideoRef.current);
           
           if (markers.length > 0 && frameCount % 60 === 0) {
             console.log(`[AR Crossy Robo Host] Detected ${markers.length} markers`);
@@ -388,75 +404,93 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
     }
   };
 
+  // Initialize crossy demo video
+  const initializeCrossyDemoVideo = async () => {
+    // Prevent duplicate initialization
+    if (crossyDemoInitialized || crossyDemoPlaying) {
+      console.log('Crossy demo video already initialized, skipping...');
+      return;
+    }
+    
+    try {
+      console.log('Initializing crossy demo video...');
+      
+      // Create a video element to load the crossy video
+      const crossyVideo = document.createElement('video');
+      crossyVideo.src = '/assets/videos/crossy_robo.mp4';
+      crossyVideo.loop = true;
+      crossyVideo.muted = true;
+      crossyVideo.playsInline = true;
+      crossyVideo.id = 'crossy-demo-video';
+      
+      // Set flags immediately to prevent re-initialization
+      setCrossyDemoInitialized(true);
+      
+      // Simple approach - just start playing and set state
+      crossyVideo.onloadeddata = () => {
+        console.log('Crossy demo video loaded successfully');
+        crossyVideo.play().then(() => {
+          console.log('Crossy demo video is now playing');
+          setCrossyDemoPlaying(true);
+          setCrossyDemoVideoRef(crossyVideo);
+        }).catch((playError) => {
+          console.error('Failed to play crossy demo video:', playError);
+          // Still set as playing to prevent re-initialization
+          setCrossyDemoPlaying(true);
+        });
+      };
+      
+      crossyVideo.onerror = (error) => {
+        console.error('Crossy demo video loading error:', error);
+        // Still set as initialized to prevent re-initialization
+        setCrossyDemoPlaying(true);
+      };
+      
+      // Force load the video
+      crossyVideo.load();
+      
+      console.log('Crossy demo video initialization started');
+    } catch (error) {
+      console.error('Failed to initialize crossy demo video:', error);
+      // Set as initialized to prevent re-initialization
+      setCrossyDemoInitialized(true);
+      setCrossyDemoPlaying(true);
+    }
+  };
+
   // Initialize webcam and AR on component mount
   useEffect(() => {
-    const initializeWebcamAndAR = async () => {
-      try {
-        console.log('Requesting webcam access...');
-        // Start webcam by default
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          } 
-        });
-        
-        console.log('Webcam access granted');
-        setWebcamStream(stream);
-        setWebcamError(null);
-        
-        // Set up video element
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          
-          const onVideoLoaded = async () => {
-            console.log('Webcam video loaded, video dimensions:', 
-              videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
-            
-            // Ensure video is playing before starting AR
-            if (videoRef.current) {
-              try {
-                await videoRef.current.play();
-                console.log('Video is now playing, starting AR initialization...');
-              } catch (error) {
-                console.log('Video play() returned promise, likely already playing');
-              }
-              
-              // Set AR mode to true now that video is ready
-              setArMode(true);
-              
-              // Wait a bit more to ensure video is fully ready
-              setTimeout(() => {
-                initializeARSystem();
-              }, 500);
-            }
-            
-            videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
-          };
-          
-          const onVideoError = (error: any) => {
-            console.error('Video element error:', error);
-            setWebcamError('Failed to load video stream');
-          };
-          
-          videoRef.current.addEventListener('loadeddata', onVideoLoaded);
-          videoRef.current.addEventListener('error', onVideoError);
-          
-          // Also listen for when video starts playing
-          const onVideoPlay = () => {
-            console.log('Video started playing');
-          };
-          videoRef.current.addEventListener('play', onVideoPlay);
-        }
-      } catch (error) {
-        console.error('Failed to access webcam:', error);
-        setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
-        setArMode(false);
+    const initializeCrossyVideoAndAR = async () => {
+      // Initialize Crossy demo video first - only if not already initialized
+      if (!crossyDemoInitialized && !crossyDemoPlaying) {
+        await initializeCrossyDemoVideo();
       }
+      
+      // For demo: just set AR mode to true since we have crossy_robo.mp4
+      console.log('Demo mode: Using crossy_robo.mp4 instead of webcam');
+      setArMode(true);
+      
+      // Initialize AR system immediately and also with delays to ensure it starts
+      console.log('Starting AR system initialization...');
+      initializeARSystem();
+      
+      // Also try with delays to ensure it works even if timing is off
+      setTimeout(() => {
+        console.log('Backup AR initialization attempt 1...');
+        if (!renderSystemRef.current) {
+          initializeARSystem();
+        }
+      }, 1000);
+      
+      setTimeout(() => {
+        console.log('Backup AR initialization attempt 2...');
+        if (!renderSystemRef.current) {
+          initializeARSystem();
+        }
+      }, 3000);
     };
 
-    initializeWebcamAndAR();
+    initializeCrossyVideoAndAR();
 
     // Set up resize observer for canvas sizing
     let resizeObserver: ResizeObserver | null = null;
@@ -512,15 +546,171 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
         webcamStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [crossyDemoInitialized, crossyDemoPlaying]);
 
-  // Send directional command
+  // Initialize blockchain service
+  useEffect(() => {
+    const initializeBlockchain = async () => {
+      try {
+        setBlockchainError(null);
+        console.log('🔗 Initializing blockchain integration...');
+        
+        // Connect wallet if available
+        if (currentAccount && signAndExecuteTransaction) {
+          // Wrap the mutate function to return a Promise
+          const wrappedSignAndExecute = (transaction: any): Promise<any> => {
+            return new Promise((resolve, reject) => {
+              signAndExecuteTransaction(
+                { transaction },
+                {
+                  onSuccess: (result) => resolve(result),
+                  onError: (error) => reject(error)
+                }
+              );
+            });
+          };
+          
+          suiCrossyRobotService.setWalletConnection(
+            currentAccount.address,
+            wrappedSignAndExecute
+          );
+          console.log('✅ Wallet connected to blockchain service');
+        }
+        
+        const success = await suiCrossyRobotService.initialize();
+        if (success) {
+          setBlockchainInitialized(true);
+          setSuiGameState(suiCrossyRobotService.getGameState());
+          console.log('✅ Blockchain integration ready');
+        } else {
+          throw new Error('Failed to initialize blockchain service');
+        }
+      } catch (error) {
+        console.error('❌ Blockchain initialization failed:', error);
+        setBlockchainError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    
+    initializeBlockchain();
+  }, [currentAccount, signAndExecuteTransaction]);
+
+  // Send directional command or create game
   const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
-    if (!isControlEnabled) return;
+    if (!isControlEnabled || !blockchainInitialized) return;
+    
+    // Check wallet connection
+    if (!currentAccount) {
+      const errorMsg = 'Please connect your wallet first';
+      setMessageLog(prev => [{
+        id: `error-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        command: `Error: ${errorMsg}`,
+        status: 'failed' as const
+      }, ...prev].slice(0, 20));
+      return;
+    }
     
     const sendTimestamp = new Date().toLocaleTimeString();
     const commandId = `cmd-${Date.now()}`;
     
+    // Handle game creation when stop button is pressed
+    if (direction === 'stop') {
+      // Add "sent" command to log immediately
+      const sentCommand = {
+        id: commandId,
+        timestamp: sendTimestamp,
+        command: `Sent command: Create game`,
+        status: 'sent' as const
+      };
+      
+      setMessageLog(prev => [sentCommand, ...prev].slice(0, 20));
+      
+      // Disable controls temporarily to prevent spam
+      setIsControlEnabled(false);
+      
+      try {
+        // Create game using real blockchain service
+        const result = await suiCrossyRobotService.createGame();
+        
+        if (result.success) {
+          // Add "acknowledged" command to log with new timestamp
+          const ackTimestamp = new Date().toLocaleTimeString();
+          const acknowledgedCommand = {
+            id: `${commandId}-ack`,
+            timestamp: ackTimestamp,
+            command: `Game created! TX: ${suiCrossyRobotService.getShortTransactionId(result.transactionId!)}`,
+            status: 'acknowledged' as const
+          };
+          
+          setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
+          
+          // Update game state
+          setSuiGameState(suiCrossyRobotService.getGameState());
+          
+          // Auto-connect robot after game creation (this would normally be done by robot)
+          setTimeout(async () => {
+            try {
+              // Check if we have a valid game object ID for robot connection
+              const currentGameState = suiCrossyRobotService.getGameState();
+              if (!currentGameState.gameObjectId) {
+                throw new Error('No valid game object ID available for robot connection');
+              }
+              
+              console.log('🤖 Attempting robot connection with game object ID:', currentGameState.gameObjectId);
+              
+              const connectResult = await suiCrossyRobotService.connectRobot();
+              if (connectResult.success) {
+                const connectTimestamp = new Date().toLocaleTimeString();
+                const connectCommand = {
+                  id: `${commandId}-connect`,
+                  timestamp: connectTimestamp,
+                  command: `Robot connected! TX: ${suiCrossyRobotService.getShortTransactionId(connectResult.transactionId!)}`,
+                  status: 'acknowledged' as const
+                };
+                
+                setMessageLog(prev => [connectCommand, ...prev].slice(0, 20));
+                setSuiGameState(suiCrossyRobotService.getGameState());
+              } else {
+                throw new Error(connectResult.error || 'Robot connection failed');
+              }
+            } catch (connectError) {
+              console.error('Failed to connect robot:', connectError);
+              const failTimestamp = new Date().toLocaleTimeString();
+              const failCommand = {
+                id: `${commandId}-connect-fail`,
+                timestamp: failTimestamp,
+                command: `Robot connection failed: ${connectError}`,
+                status: 'failed' as const
+              };
+              setMessageLog(prev => [failCommand, ...prev].slice(0, 20));
+            }
+          }, 1000);
+          
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+        
+      } catch (error) {
+        // Add "failed" command to log with new timestamp
+        const failTimestamp = new Date().toLocaleTimeString();
+        const failedCommand = {
+          id: `${commandId}-fail`,
+          timestamp: failTimestamp,
+          command: `Game creation failed: ${error}`,
+          status: 'failed' as const
+        };
+        
+        setMessageLog(prev => [failedCommand, ...prev].slice(0, 20));
+        console.error('Failed to create game:', error);
+      } finally {
+        // Re-enable controls after a short delay
+        setTimeout(() => setIsControlEnabled(true), 500);
+      }
+      
+      return; // Exit early for game creation
+    }
+    
+    // Handle regular directional commands
     // Add "sent" command to log immediately
     const sentCommand = {
       id: commandId,
@@ -529,61 +719,60 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
       status: 'sent' as const
     };
     
-    setMessageLog(prev => [sentCommand, ...prev].slice(0, 20)); // Keep last 20 commands
+    setMessageLog(prev => [sentCommand, ...prev].slice(0, 20));
     
     // Disable controls temporarily to prevent spam
     setIsControlEnabled(false);
     
     try {
-      // Simulate realistic transaction processing time (2-3 seconds)
-      const processingTime = 2000 + Math.random() * 1000; // 2-3 seconds
-      await new Promise(resolve => setTimeout(resolve, processingTime));
+      // Send movement using real blockchain service
+      const result = await suiCrossyRobotService.sendMovement(direction.toUpperCase() as 'UP' | 'DOWN' | 'LEFT' | 'RIGHT');
       
-      // Add "acknowledged" command to log with new timestamp
-      const ackTimestamp = new Date().toLocaleTimeString();
-      const acknowledgedCommand = {
-        id: `${commandId}-ack`,
-        timestamp: ackTimestamp,
-        command: `Command acknowledged: received`,
-        status: 'acknowledged' as const
-      };
-      
-      setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
-      
-      // Update robot position (simulate movement)
-      setRobots(prev => prev.map(robot => {
-        if (robot.id === selectedRobot) {
-          let newPosition = { ...robot.position };
-          const moveAmount = 5;
-          
-          switch (direction) {
-            case 'up':
-              newPosition.y = Math.max(0, newPosition.y - moveAmount);
-              break;
-            case 'down':
-              newPosition.y = Math.min(100, newPosition.y + moveAmount);
-              break;
-            case 'left':
-              newPosition.x = Math.max(0, newPosition.x - moveAmount);
-              break;
-            case 'right':
-              newPosition.x = Math.min(100, newPosition.x + moveAmount);
-              break;
-            case 'stop':
-              // No position change for stop
-              break;
+      if (result.success) {
+        // Add "acknowledged" command to log with new timestamp
+        const ackTimestamp = new Date().toLocaleTimeString();
+        const acknowledgedCommand = {
+          id: `${commandId}-ack`,
+          timestamp: ackTimestamp,
+          command: `Movement ${direction} confirmed! TX: ${suiCrossyRobotService.getShortTransactionId(result.transactionId!)}`,
+          status: 'acknowledged' as const
+        };
+        
+        setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
+        
+        // Update robot position (simulate movement)
+        setRobots(prev => prev.map(robot => {
+          if (robot.id === selectedRobot) {
+            let newPosition = { ...robot.position };
+            const moveAmount = 5;
+            
+            switch (direction) {
+              case 'up':
+                newPosition.y = Math.max(0, newPosition.y - moveAmount);
+                break;
+              case 'down':
+                newPosition.y = Math.min(100, newPosition.y + moveAmount);
+                break;
+              case 'left':
+                newPosition.x = Math.max(0, newPosition.x - moveAmount);
+                break;
+              case 'right':
+                newPosition.x = Math.min(100, newPosition.x + moveAmount);
+                break;
+            }
+            
+            return {
+              ...robot,
+              position: newPosition,
+              status: 'moving'
+            };
           }
-          
-          return {
-            ...robot,
-            position: newPosition,
-            status: direction === 'stop' ? 'idle' : 'moving'
-          };
-        }
-        return robot;
-      }));
-      
-      console.log(`Crossy Robo: Sent ${direction} command for ${selectedRobot}`);
+          return robot;
+        }));
+        
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
       
     } catch (error) {
       // Add "failed" command to log with new timestamp
@@ -591,7 +780,7 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
       const failedCommand = {
         id: `${commandId}-fail`,
         timestamp: failTimestamp,
-        command: `Command failed: ${error}`,
+        command: `Movement failed: ${error}`,
         status: 'failed' as const
       };
       
@@ -783,23 +972,121 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
       await client.join(APP_ID, session.id, token, uid);
       console.log(`Joined channel ${session.id} with UID ${uid} as Crossy Robo host`);
       
-      // Create and publish tracks from webcam stream
-      if (webcamStream) {
-        const [videoTrack, audioTrack] = await Promise.all([
-          AgoraRTC.createCustomVideoTrack({
-            mediaStreamTrack: webcamStream.getVideoTracks()[0],
-          }),
-          AgoraRTC.createMicrophoneAudioTrack()
-        ]);
+      // Create video track from crossy demo video instead of webcam
+      try {
+        console.log('🎬 Creating video track from UI crossy video...');
+        
+        // Use the UI video element
+        const demoVideo = uiVideoRef.current;
+        if (!demoVideo) {
+          throw new Error('UI video element not available');
+        }
+        
+        console.log('📹 UI video element found, checking readiness...');
+        
+        // Wait for video to be ready if needed
+        if (demoVideo.videoWidth === 0 || demoVideo.videoHeight === 0) {
+          console.log('📹 Waiting for UI video to load...');
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error('UI video loading timeout'));
+            }, 10000);
+            
+            const checkReady = () => {
+              if (demoVideo.videoWidth > 0 && demoVideo.videoHeight > 0) {
+                clearTimeout(timeout);
+                console.log(`✅ UI video ready: ${demoVideo.videoWidth}x${demoVideo.videoHeight}`);
+                resolve(undefined);
+              } else {
+                setTimeout(checkReady, 100);
+              }
+            };
+            
+            checkReady();
+          });
+        }
+        
+        console.log('🎥 UI video ready, creating Agora video track...');
+        
+        // Check if captureStream is available
+        if (typeof (demoVideo as any).captureStream !== 'function') {
+          throw new Error('captureStream not supported in this browser');
+        }
+        
+        // Create video track from the UI video with higher frame rate
+        const videoStream = (demoVideo as any).captureStream(30);
+        const videoTracks = videoStream.getVideoTracks();
+        
+        if (videoTracks.length === 0) {
+          throw new Error('No video tracks available from UI video stream');
+        }
+        
+        console.log(`📊 Video stream captured with ${videoTracks.length} tracks`);
+        console.log(`🎯 Video track settings:`, videoTracks[0].getSettings());
+        
+        const videoTrack = await AgoraRTC.createCustomVideoTrack({
+          mediaStreamTrack: videoTracks[0],
+        });
+        
+        console.log('✅ Agora video track created successfully');
+        console.log('🎯 Video track info:', {
+          trackId: videoTrack.getTrackId(),
+          enabled: videoTrack.enabled,
+          muted: videoTrack.muted
+        });
+        
+        // Create audio track from microphone for host commentary
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        console.log('🎤 Audio track created successfully');
         
         localVideoTrackRef.current = videoTrack;
         localAudioTrackRef.current = audioTrack;
         
         // Publish tracks
+        console.log('📤 Publishing video and audio tracks...');
         await client.publish([videoTrack, audioTrack]);
-        console.log('Published Crossy Robo stream');
+        console.log('✅ Published Crossy Robo stream with crossy video');
         
         setIsStreaming(true);
+        
+        // Add periodic logging to monitor stream health
+        const streamMonitor = setInterval(() => {
+          console.log('📊 Stream health check:', {
+            videoTrackEnabled: videoTrack.enabled,
+            videoTrackMuted: videoTrack.muted,
+            audioTrackEnabled: audioTrack.enabled,
+            audioTrackMuted: audioTrack.muted,
+            clientConnectionState: client.connectionState,
+            publishedTracks: client.localTracks.length
+          });
+        }, 10000);
+        
+        // Store monitor for cleanup
+        (client as any)._streamMonitor = streamMonitor;
+        
+      } catch (videoError) {
+        console.error('❌ Failed to create video track from crossy video, falling back to webcam:', videoError);
+        
+        // Fallback to webcam if crossy video fails
+        if (webcamStream) {
+          const [videoTrack, audioTrack] = await Promise.all([
+            AgoraRTC.createCustomVideoTrack({
+              mediaStreamTrack: webcamStream.getVideoTracks()[0],
+            }),
+            AgoraRTC.createMicrophoneAudioTrack()
+          ]);
+          
+          localVideoTrackRef.current = videoTrack;
+          localAudioTrackRef.current = audioTrack;
+          
+          // Publish tracks
+          await client.publish([videoTrack, audioTrack]);
+          console.log('✅ Published Crossy Robo stream with webcam fallback');
+          
+          setIsStreaming(true);
+        } else {
+          throw new Error('No video source available (crossy video failed and no webcam)');
+        }
       }
     } catch (error) {
       console.error('Error starting stream:', error);
@@ -811,14 +1098,23 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
   const stopStreaming = async () => {
     try {
       if (rtcClientRef.current) {
+        // Clean up stream monitor
+        if ((rtcClientRef.current as any)._streamMonitor) {
+          clearInterval((rtcClientRef.current as any)._streamMonitor);
+          console.log('🧹 Cleaned up stream monitor');
+        }
+        
         if (localVideoTrackRef.current && localAudioTrackRef.current) {
           await rtcClientRef.current.unpublish([localVideoTrackRef.current, localAudioTrackRef.current]);
+          console.log('📤❌ Unpublished video and audio tracks');
         }
         
         localVideoTrackRef.current?.close();
         localAudioTrackRef.current?.close();
+        console.log('🔒 Closed local tracks');
         
         await rtcClientRef.current.leave();
+        console.log('🚪 Left Agora channel');
         
         rtcClientRef.current = null;
         localVideoTrackRef.current = null;
@@ -828,9 +1124,9 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
       setIsStreaming(false);
       setLocalUid(null);
       setRemoteUsers(new Map());
-      console.log('Stopped Crossy Robo streaming');
+      console.log('✅ Stopped Crossy Robo streaming successfully');
     } catch (error) {
-      console.error('Error stopping stream:', error);
+      console.error('❌ Error stopping stream:', error);
     }
   };
   
@@ -886,7 +1182,7 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                     variant="primary"
                     size="small"
                     onClick={startStreaming}
-                    disabled={!!streamingError || !webcamStream}
+                    disabled={!!streamingError}
                   >
                     Start Stream
                   </Button>
@@ -918,35 +1214,34 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
 
           {/* Main Camera + AR View - Takes remaining space */}
           <div className="flex-1 relative min-h-0 overflow-hidden">
-            {/* Webcam Video Background - only show in AR mode */}
+            {/* Crossy Demo Video - show by default and continue during streaming */}
             <video 
-              ref={videoRef}
+              ref={uiVideoRef}
               className="w-full h-full object-cover"
               style={{ 
-                transform: 'scaleX(-1)', // Mirror the video
                 zIndex: 1,
-                display: arMode ? 'block' : 'none' // Only show in AR mode
+                display: crossyDemoPlaying ? 'block' : 'none'
               }}
+              src="/assets/videos/crossy_robo.mp4"
               autoPlay
+              loop
               playsInline
               muted
+              onLoadedData={() => {
+                console.log('UI video loaded and ready');
+                setCrossyDemoPlaying(true);
+              }}
+              onError={(e) => {
+                console.error('UI video error:', e);
+              }}
             />
             
-            {/* Debug overlay to show webcam status - only in AR mode */}
-            {arMode && !webcamStream && !webcamError && (
+            {/* Debug overlay to show loading status */}
+            {!crossyDemoPlaying && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-800 z-10">
                 <div className="text-white text-center">
                   <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                  <p>Loading camera...</p>
-                </div>
-              </div>
-            )}
-            
-            {arMode && webcamError && (
-              <div className="absolute inset-0 flex items-center justify-center bg-red-900/20 z-10">
-                <div className="text-red-400 text-center p-4">
-                  <p className="font-semibold mb-2">Camera Error</p>
-                  <p className="text-sm">{webcamError}</p>
+                  <p>Loading crossy demo video...</p>
                 </div>
               </div>
             )}
@@ -979,8 +1274,8 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                   UID: {localUid}<br />
                   Viewers: {remoteUsers.size}<br />
                   AR Markers: {detectedMarkers.length}<br />
-                  Webcam: {webcamStream ? 'Active' : 'Inactive'}<br />
-                  Video Size: {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}
+                  Crossy Demo: {crossyDemoPlaying ? 'Playing' : 'Stopped'}<br />
+                  Video Size: {uiVideoRef.current?.videoWidth}x{uiVideoRef.current?.videoHeight}
                 </div>
               </div>
             )}
@@ -991,10 +1286,10 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                 <div className="text-sm font-medium mb-1">Crossy Robo Debug Info</div>
                 <div className="text-xs text-white/70">
                   Mode: {arMode ? 'AR (Camera + Overlay)' : '3D (Full Game)'}<br />
-                  Webcam: {webcamStream ? 'Active' : 'Inactive'}<br />
+                  Crossy Demo: {crossyDemoPlaying ? 'Playing' : 'Loading/Stopped'}<br />
                   AR System: {arMode && renderSystemRef.current ? 'Initialized' : 'Not Active'}<br />
                   3D Game: {!arMode && gameLoopRef.current ? 'Running' : 'Not Active'}<br />
-                  Video Size: {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}<br />
+                  Video Size: {uiVideoRef.current?.videoWidth}x{uiVideoRef.current?.videoHeight}<br />
                   AR Markers: {detectedMarkers.length}
                 </div>
               </div>
@@ -1071,15 +1366,15 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                     onClick={() => sendCommand('stop')}
                     disabled={!isControlEnabled}
                     className={`
-                      w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-sm
+                      w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xs
                       transition-all duration-150
                       ${isControlEnabled 
-                        ? 'bg-red-600 hover:bg-red-700 active:bg-red-800 shadow-lg hover:shadow-xl' 
+                        ? 'bg-green-600 hover:bg-green-700 active:bg-green-800 shadow-lg hover:shadow-xl' 
                         : 'bg-gray-600 cursor-not-allowed opacity-50'
                       }
                     `}
                   >
-                    ■
+                    Create<br/>Game
                   </button>
                   
                   <button
@@ -1206,6 +1501,81 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                     X: {Math.round(robot.position.x)}, Y: {Math.round(robot.position.y)}
                   </div>
                 ))}
+              </div>
+            </div>
+            
+            {/* Blockchain Status */}
+            <div className="p-4 border-t border-white/10">
+              <h3 className="text-sm font-medium text-white mb-3">Blockchain Status</h3>
+              
+              {/* Connection Status */}
+              <div className="bg-gray-800 rounded-lg p-3 mb-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-white/70">Connection</span>
+                  <div className="flex items-center gap-1">
+                    <div className={`w-2 h-2 rounded-full ${
+                      blockchainInitialized ? 'bg-green-400' : 'bg-red-400'
+                    }`} />
+                    <span className={`text-xs ${
+                      blockchainInitialized ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {blockchainInitialized ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </div>
+                </div>
+                
+                {blockchainError && (
+                  <div className="text-xs text-red-400 mt-1">
+                    {blockchainError}
+                  </div>
+                )}
+              </div>
+              
+              {/* Game State */}
+              {suiGameState && (
+                <div className="bg-gray-800 rounded-lg p-3 mb-3">
+                  <div className="text-xs text-white/70 mb-2">Game State</div>
+                  
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-white/70">Game ID:</span>
+                      <span className="text-white font-mono">
+                        {suiGameState.gameId ? `${suiGameState.gameId.substring(0, 8)}...` : 'None'}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between text-xs">
+                      <span className="text-white/70">Robot:</span>
+                      <span className={`${suiGameState.isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
+                        {suiGameState.isConnected ? 'Connected' : 'Pending'}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between text-xs">
+                      <span className="text-white/70">User Balance:</span>
+                      <span className="text-white">{suiGameState.balance.user.toFixed(3)} SUI</span>
+                    </div>
+                    
+                    <div className="flex justify-between text-xs">
+                      <span className="text-white/70">Robot Balance:</span>
+                      <span className="text-white">{suiGameState.balance.robot.toFixed(3)} SUI</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Instructions */}
+              <div className="bg-blue-600/20 border border-blue-400/30 rounded-lg p-3">
+                <div className="text-xs text-blue-400 font-medium mb-1">Instructions</div>
+                <div className="text-xs text-blue-300">
+                  {!suiGameState?.gameId ? (
+                    'Press "Create Game" to start a new blockchain game session'
+                  ) : !suiGameState?.isConnected ? (
+                    'Waiting for robot to connect...'
+                  ) : (
+                    'Use directional buttons to send movement commands to the blockchain'
+                  )}
+                </div>
               </div>
             </div>
           </div>

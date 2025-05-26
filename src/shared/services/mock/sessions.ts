@@ -5,17 +5,17 @@ const MOCK_TRACKS = [
   {
     id: 'circuit-alpha',
     name: 'Robo Delivery',
-    thumbnail: '/tracks/circuit-alpha.jpg'
+    thumbnail: '/assets/suibotics1.png'
   },
   {
     id: 'desert-sprint',
     name: 'Crossy Robo',
-    thumbnail: '/tracks/desert-sprint.jpg'
+    thumbnail: '/assets/suibotics2.png'
   },
   {
     id: 'city-rush',
     name: 'Robo Rumble',
-    thumbnail: '/tracks/city-rush.jpg'
+    thumbnail: '/assets/suibotics3.png'
   }
 ];
 
@@ -34,9 +34,9 @@ const createMockSession = (trackIndex: number): RaceSession => {
     lapCount: Math.floor(Math.random() * 4) + 3, // 3-6 laps
     status: 'waiting' as RaceSessionStatus,
     robotStatus: {
-      connected: Math.random() > 0.2, // 80% chance of being connected
+      connected: true, // Always online for demo
       batteryLevel: Math.floor(Math.random() * 30) + 70, // 70-100%
-      lastHeartbeat: Date.now(),
+      lastHeartbeat: Date.now(), // Always start with current timestamp
       latency: Math.floor(Math.random() * 20) + 30 // 30-50ms
     },
     players: {
@@ -57,6 +57,15 @@ export const MockSessionService = {
   // Get all active sessions
   getSessions: async (): Promise<RaceSession[]> => {
     await delay(300); // Simulate network delay
+    // Always refresh heartbeats when getting sessions to ensure they appear online
+    mockSessions = mockSessions.map(session => ({
+      ...session,
+      robotStatus: {
+        ...session.robotStatus,
+        connected: true,
+        lastHeartbeat: Date.now() // Always fresh heartbeat
+      }
+    }));
     return mockSessions;
   },
 
@@ -65,7 +74,16 @@ export const MockSessionService = {
     await delay(200);
     mockSessions = mockSessions.map(session => 
       session.id === sessionId 
-        ? { ...session, ...updates }
+        ? { 
+            ...session, 
+            ...updates,
+            robotStatus: {
+              ...session.robotStatus,
+              ...updates.robotStatus,
+              connected: true, // Always keep connected
+              lastHeartbeat: Date.now() // Always fresh heartbeat
+            }
+          }
         : session
     );
     return mockSessions.find(s => s.id === sessionId)!;
@@ -74,23 +92,16 @@ export const MockSessionService = {
   // Simulate real-time updates (called by polling)
   simulateUpdates: () => {
     mockSessions = mockSessions.map(session => {
-      // Simulate random disconnections (5% chance if connected, 10% chance to reconnect if disconnected)
-      const shouldChangeConnection = Math.random() < (session.robotStatus.connected ? 0.05 : 0.10);
-      const nextConnectionState = shouldChangeConnection ? !session.robotStatus.connected : session.robotStatus.connected;
-
+      // Keep all robots always online for demo
       return {
         ...session,
         robotStatus: {
           ...session.robotStatus,
-          connected: nextConnectionState,
-          // Only update heartbeat if connected
-          lastHeartbeat: nextConnectionState ? Date.now() : session.robotStatus.lastHeartbeat,
-          // Latency varies more when connection is unstable
-          latency: nextConnectionState 
-            ? Math.floor(Math.random() * 20) + 30 // 30-50ms when connected
-            : Math.floor(Math.random() * 100) + 100, // 100-200ms when having issues
-          // Battery drains faster when connected
-          batteryLevel: Math.max(0, session.robotStatus.batteryLevel - (nextConnectionState ? 0.1 : 0.02))
+          connected: true, // Always keep online
+          lastHeartbeat: Date.now(), // Always fresh heartbeat - this is key!
+          latency: Math.floor(Math.random() * 20) + 30, // 30-50ms stable connection
+          // Battery drains very slowly
+          batteryLevel: Math.max(70, session.robotStatus.batteryLevel - 0.05)
         }
       };
     });

@@ -10,7 +10,9 @@ import { GamePhysicsSystem } from '../../../engine-layer/core/physics/GamePhysic
 import { InputController } from '../../../engine-layer/core/input/InputController';
 import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
+import { suiDeliveryService, DeliveryState } from '../../../shared/services/suiDeliveryService';
 import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
 
 interface ARStreamScreenProps {
   session: RaceSession;
@@ -45,6 +47,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const droneDemoVideoRef = useRef<HTMLVideoElement>(null);
   
   // AR System refs - for camera + overlay (like viewer experience)
   const arDetectorRef = useRef<EnhancedARDetector | null>(null);
@@ -89,17 +92,34 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   const [streamingError, setStreamingError] = useState<string | null>(null);
   const [localUid, setLocalUid] = useState<number | null>(null);
   const [remoteUsers, setRemoteUsers] = useState<Map<number, RemoteUser>>(new Map());
+  const [droneVideoElement, setDroneVideoElement] = useState<HTMLVideoElement | null>(null);
+  const [droneDemoPlaying, setDroneDemoPlaying] = useState(false);
+  const [droneDemoInitialized, setDroneDemoInitialized] = useState(false);
   
   // Robotics control state
   const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
   const [endPoint, setEndPoint] = useState<DeliveryPoint | null>(null);
   const [robots, setRobots] = useState<Robot[]>([
-    { id: 'robot-a', name: 'Robot A', position: { x: 10, y: 10 }, status: 'idle', battery: 85 },
-    { id: 'robot-b', name: 'Robot B', position: { x: 80, y: 60 }, status: 'idle', battery: 92 }
+    { id: 'robot-a', name: 'Robot A', position: { x: 80, y: 20 }, status: 'idle', battery: 85 },
+    { id: 'robot-b', name: 'Robot B', position: { x: 20, y: 70 }, status: 'idle', battery: 92 }
   ]);
   const [deliveryStatus, setDeliveryStatus] = useState<string>('waiting');
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'confirmed' | 'failed'>('pending');
   const [deliveryCost] = useState(0.5);
+  
+  // Robot animation state
+  const [originalRobotAPosition] = useState({ x: 80, y: 20 });
+  const [isRobotMoving, setIsRobotMoving] = useState(false);
+  
+  // Blockchain integration state
+  const [suiDeliveryState, setSuiDeliveryState] = useState<DeliveryState | null>(null);
+  const [blockchainInitialized, setBlockchainInitialized] = useState(false);
+  const [blockchainError, setBlockchainError] = useState<string | null>(null);
+  
+  // Wallet connection hooks
+  const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const suiClient = useSuiClient();
   
   // AR effects toggle handler
   const toggleAREffects = () => {
@@ -378,9 +398,72 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
     }
   };
 
+  // Initialize drone demo video
+  const initializeDroneDemoVideo = async () => {
+    // Prevent duplicate initialization
+    if (droneDemoInitialized || droneDemoPlaying) {
+      console.log('Drone demo video already initialized, skipping...');
+      return;
+    }
+    
+    try {
+      console.log('Initializing drone demo video...');
+      
+      if (droneDemoVideoRef.current) {
+        const video = droneDemoVideoRef.current;
+        video.src = '/assets/videos/drone1.mov';
+        video.loop = true;
+        video.muted = true;
+        video.playsInline = true;
+        
+        // Set flags immediately to prevent re-initialization
+        setDroneDemoInitialized(true);
+        
+        // Simple approach - just start playing and set state
+        video.onloadeddata = () => {
+          console.log('Drone demo video loaded successfully');
+          video.play().then(() => {
+            console.log('Drone demo video is now playing');
+            setDroneDemoPlaying(true);
+          }).catch((playError) => {
+            console.error('Failed to play drone demo video:', playError);
+            // Still set as playing to prevent re-initialization
+            setDroneDemoPlaying(true);
+          });
+        };
+        
+        video.onerror = (error) => {
+          console.error('Drone demo video loading error:', error);
+          // Still set as initialized to prevent re-initialization
+          setDroneDemoPlaying(true);
+        };
+        
+        // Force load the video
+        video.load();
+        
+        console.log('Drone demo video initialization started');
+      }
+    } catch (error) {
+      console.error('Failed to initialize drone demo video:', error);
+      // Set as initialized to prevent re-initialization
+      setDroneDemoInitialized(true);
+      setDroneDemoPlaying(true);
+    }
+  };
+
   // Initialize webcam and AR on component mount
   useEffect(() => {
     const initializeWebcamAndAR = async () => {
+      // Initialize drone demo video first - only if not already initialized
+      if (!droneDemoInitialized && !droneDemoPlaying) {
+        await initializeDroneDemoVideo();
+      }
+      
+      // Comment out drone.mp4 testing - we only want drone_demo.mp4
+      // await testDroneVideo();
+      
+      // DISABLE WEBCAM FOR DEMO - we're using drone1.mov instead
+      /*
       try {
         console.log('Requesting webcam access...');
         // Start webcam by default
@@ -444,6 +527,18 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
         setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
         setArMode(false);
       }
+      */
+      
+      // For demo: just set AR mode to true since we have drone1.mov
+      console.log('Demo mode: Using drone1.mov instead of webcam');
+      setArMode(true);
+      
+      // Initialize AR system after a short delay to ensure drone video is ready
+      setTimeout(() => {
+        if (droneDemoPlaying) {
+          initializeARSystem();
+        }
+      }, 1000);
     };
 
     initializeWebcamAndAR();
@@ -496,19 +591,132 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
         physicsSystemRef.current = null;
       }
       
+      // DON'T reset drone demo state on cleanup to prevent re-initialization
+      // setDroneDemoPlaying(false);
+      // setDroneDemoInitialized(false);
+      
       // Stop webcam
       if (webcamStream) {
         console.log('Stopping webcam tracks');
         webcamStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, []); // Empty dependency array to run only once
+
+  // Initialize blockchain service
+  useEffect(() => {
+    const initializeBlockchain = async () => {
+      try {
+        setBlockchainError(null);
+        console.log('🔗 Initializing delivery blockchain integration...');
+        
+        // Connect wallet if available
+        if (currentAccount && signAndExecuteTransaction) {
+          // Wrap the mutate function to return a Promise
+          const wrappedSignAndExecute = (transaction: any): Promise<any> => {
+            return new Promise((resolve, reject) => {
+              signAndExecuteTransaction(
+                { transaction },
+                {
+                  onSuccess: (result) => resolve(result),
+                  onError: (error) => reject(error)
+                }
+              );
+            });
+          };
+          
+          suiDeliveryService.setWalletConnection(
+            currentAccount.address,
+            wrappedSignAndExecute
+          );
+          console.log('✅ Wallet connected to delivery blockchain service');
+        }
+        
+        const success = await suiDeliveryService.initialize();
+        if (success) {
+          setBlockchainInitialized(true);
+          setSuiDeliveryState(suiDeliveryService.getDeliveryState());
+          console.log('✅ Delivery blockchain integration ready');
+        } else {
+          throw new Error('Failed to initialize delivery blockchain service');
+        }
+      } catch (error) {
+        console.error('❌ Delivery blockchain initialization failed:', error);
+        setBlockchainError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    
+    initializeBlockchain();
+  }, [currentAccount, signAndExecuteTransaction]);
 
   // Robotics control functions
   const handleGridClick = (row: number, col: number) => {
     // Only set start point, no end point needed
     setStartPoint({ row, col, id: 'start' });
     setDeliveryStatus('Ready to execute delivery');
+  };
+
+  // Robot movement animation function
+  const animateRobotMovement = () => {
+    if (!startPoint || isRobotMoving) return;
+    
+    setIsRobotMoving(true);
+    
+    // Calculate target position based on grid coordinates
+    // Grid is 8x8, so each cell is 12.5% of the total area
+    const targetX = (startPoint.col * 12.5) + 6.25; // Center of the grid cell
+    const targetY = (startPoint.row * 12.5) + 6.25; // Center of the grid cell
+    
+    console.log(`Robot A moving to grid position (${startPoint.row}, ${startPoint.col}) = (${targetX}%, ${targetY}%)`);
+    
+    // Wait 5 seconds after "Delivery in progress..." status
+    setTimeout(() => {
+      console.log('Starting robot movement to delivery point...');
+      
+      // Animate movement to start point over 12 seconds
+      const startTime = Date.now();
+      const duration = 12000; // 12 seconds
+      const startPos = { ...originalRobotAPosition };
+      
+      const animateToTarget = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Smooth easing function
+        const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        const easedProgress = easeInOut(progress);
+        
+        // Calculate current position
+        const currentX = startPos.x + (targetX - startPos.x) * easedProgress;
+        const currentY = startPos.y + (targetY - startPos.y) * easedProgress;
+        
+        // Update robot position
+        setRobots(prev => prev.map(robot => 
+          robot.id === 'robot-a' 
+            ? { ...robot, position: { x: currentX, y: currentY } }
+            : robot
+        ));
+        
+        if (progress < 1) {
+          requestAnimationFrame(animateToTarget);
+        } else {
+          console.log('Robot A reached delivery point, waiting for completion...');
+          setIsRobotMoving(false);
+          
+          // Set robot to 'delivering' status - now waiting for manual completion
+          setRobots(prev => prev.map(robot => 
+            robot.id === 'robot-a' 
+              ? { ...robot, status: 'delivering' }
+              : robot
+          ));
+          
+          // Update status to show delivery is ready for completion
+          setDeliveryStatus('Robot at delivery point - click "Delivery completed" when ready');
+        }
+      };
+      
+      animateToTarget();
+    }, 5000); // 5 seconds delay after "Delivery in progress..."
   };
 
   // Add periodic debug logging for streaming state
@@ -529,51 +737,161 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   const executeDelivery = async () => {
     if (!startPoint) return;
     
-    setPaymentStatus('processing');
-    setDeliveryStatus('Processing payment...');
+    // Check wallet connection first
+    if (!currentAccount || !blockchainInitialized) {
+      setDeliveryStatus('Please connect your wallet first');
+      return;
+    }
     
-    // Simulate payment processing
-    setTimeout(() => {
-      setPaymentStatus('confirmed');
-      setDeliveryStatus('Payment confirmed! Robots negotiating...');
+    setPaymentStatus('processing');
+    setDeliveryStatus('Sending out delivery details for 0.05 SUI');
+    
+    try {
+      // Step 1: Create delivery order on blockchain
+      console.log('📦 Creating delivery order on blockchain...');
+      const orderResult = await suiDeliveryService.createDeliveryOrder(deliveryCost);
       
-      // Simulate robot negotiation
-      setTimeout(() => {
-        setDeliveryStatus('Robot A selected for delivery');
-        setRobots(prev => prev.map(robot => 
-          robot.id === 'robot-a' 
-            ? { ...robot, status: 'moving' }
-            : robot
-        ));
+      if (orderResult.success) {
+        console.log('✅ Delivery order created:', orderResult.transactionId);
+        setDeliveryStatus('Sending out job to robots nearby');
         
-        // Simulate delivery progress
-        setTimeout(() => {
-          setDeliveryStatus('Delivery in progress...');
-        }, 2000);
-      }, 3000);
-    }, 2000);
+        // Update delivery state
+        setSuiDeliveryState(suiDeliveryService.getDeliveryState());
+        
+        // Step 2: Auto-connect robot after order creation (simulating robot responding)
+        setTimeout(async () => {
+          try {
+            console.log('🤖 Robot responding to delivery order...');
+            const connectResult = await suiDeliveryService.connectRobotToDelivery();
+            
+            if (connectResult.success) {
+              console.log('✅ Robot connected to delivery:', connectResult.transactionId);
+              setSuiDeliveryState(suiDeliveryService.getDeliveryState());
+              
+              // Continue with existing delivery flow
+              setPaymentStatus('confirmed');
+              setDeliveryStatus('Payment confirmed! Robots negotiating...');
+              
+              // Simulate robot negotiation
+              setTimeout(() => {
+                setDeliveryStatus('Robot A selected for delivery');
+                setRobots(prev => prev.map(robot => 
+                  robot.id === 'robot-a' 
+                    ? { ...robot, status: 'moving' }
+                    : robot
+                ));
+                
+                // Simulate delivery progress
+                setTimeout(() => {
+                  setDeliveryStatus('Delivery in progress...');
+                  // Trigger robot movement animation
+                  animateRobotMovement();
+                }, 2000);
+              }, 3000);
+              
+            } else {
+              throw new Error(connectResult.error || 'Robot connection failed');
+            }
+          } catch (connectError) {
+            console.error('❌ Robot connection failed:', connectError);
+            setPaymentStatus('failed');
+            setDeliveryStatus(`Robot connection failed: ${connectError}`);
+          }
+        }, 2000); // 2 second delay for robot to respond
+        
+      } else {
+        throw new Error(orderResult.error || 'Delivery order creation failed');
+      }
+      
+    } catch (error) {
+      console.error('❌ Delivery execution failed:', error);
+      setPaymentStatus('failed');
+      setDeliveryStatus(`Delivery failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const completeDelivery = () => {
-    setDeliveryStatus('Delivery completed! Payment released to robot.');
+    setDeliveryStatus('Delivery completed! Robot unloading...');
+    
+    // Set robot to 'delivering' status to show it's at the delivery point
     setRobots(prev => prev.map(robot => 
       robot.id === 'robot-a' 
-        ? { ...robot, status: 'idle' }
+        ? { ...robot, status: 'delivering' }
         : robot
     ));
     
-    // After a moment, reset everything for next delivery
+    // Wait 30 seconds at the delivery point (unloading time)
     setTimeout(() => {
-      resetDelivery();
-    }, 3000);
+      console.log('Starting robot return journey after delivery completion...');
+      setDeliveryStatus('Robot returning to base...');
+      
+      // Get current robot position (should be at delivery point)
+      const currentRobots = robots;
+      const currentRobot = currentRobots.find(r => r.id === 'robot-a');
+      if (!currentRobot) return;
+      
+      const currentPos = currentRobot.position;
+      
+      // Animate movement back to original position over 15 seconds
+      const returnStartTime = Date.now();
+      const returnDuration = 15000; // 15 seconds
+      
+      const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      
+      const animateToOriginal = () => {
+        const returnElapsed = Date.now() - returnStartTime;
+        const returnProgress = Math.min(returnElapsed / returnDuration, 1);
+        const returnEasedProgress = easeInOut(returnProgress);
+        
+        // Calculate current position (from current back to original)
+        const currentX = currentPos.x + (originalRobotAPosition.x - currentPos.x) * returnEasedProgress;
+        const currentY = currentPos.y + (originalRobotAPosition.y - currentPos.y) * returnEasedProgress;
+        
+        // Update robot position
+        setRobots(prev => prev.map(robot => 
+          robot.id === 'robot-a' 
+            ? { ...robot, position: { x: currentX, y: currentY }, status: 'moving' }
+            : robot
+        ));
+        
+        if (returnProgress < 1) {
+          requestAnimationFrame(animateToOriginal);
+        } else {
+          console.log('Robot A returned to original position after delivery');
+          setIsRobotMoving(false);
+          
+          // Set robot back to idle status and reset for next delivery
+          setRobots(prev => prev.map(robot => 
+            robot.id === 'robot-a' 
+              ? { ...robot, status: 'idle' }
+              : robot
+          ));
+          
+          // Reset everything for next delivery
+          setTimeout(() => {
+            resetDelivery();
+          }, 2000);
+        }
+      };
+      
+      animateToOriginal();
+    }, 30000); // 30 seconds wait at delivery point
   };
 
   const resetDelivery = () => {
     setStartPoint(null);
     setEndPoint(null);
-    setPaymentStatus('pending');
+    // Don't reset payment status if it's confirmed
+    if (paymentStatus !== 'confirmed') {
+      setPaymentStatus('pending');
+    }
     setDeliveryStatus('waiting');
-    setRobots(prev => prev.map(robot => ({ ...robot, status: 'idle' })));
+    setIsRobotMoving(false);
+    setRobots(prev => prev.map(robot => 
+      robot.id === 'robot-a' 
+        ? { ...robot, status: 'idle', position: originalRobotAPosition }
+        : { ...robot, status: 'idle' }
+    ));
   };
 
   // Start streaming
@@ -689,31 +1007,147 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
       await client.join(APP_ID, session.id, token, uid);
       console.log(`Joined channel ${session.id} with UID ${uid} as host`);
       
-      // Create and publish tracks from webcam stream
-      if (webcamStream) {
-        const [videoTrack, audioTrack] = await Promise.all([
-          AgoraRTC.createCustomVideoTrack({
-            mediaStreamTrack: webcamStream.getVideoTracks()[0],
-          }),
-          AgoraRTC.createMicrophoneAudioTrack()
-        ]);
+      // Create video track from drone demo video instead of webcam
+      try {
+        console.log('🎬 Creating video track from drone demo video...');
+        
+        // Create a video element to load the drone video
+        const demoVideo = document.createElement('video');
+        demoVideo.src = '/assets/videos/drone1.mov';
+        demoVideo.loop = true;
+        demoVideo.muted = true;
+        demoVideo.playsInline = true;
+        demoVideo.crossOrigin = 'anonymous'; // Add CORS support
+        
+        console.log('📹 Drone video element created, attempting to load...');
+        
+        // Wait for video to load and start playing
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Drone video loading timeout after 15 seconds'));
+          }, 15000);
+          
+          demoVideo.onloadeddata = () => {
+            console.log('✅ Drone demo video loaded successfully');
+            console.log(`📐 Video dimensions: ${demoVideo.videoWidth}x${demoVideo.videoHeight}`);
+            console.log(`⏱️ Video duration: ${demoVideo.duration}s`);
+            clearTimeout(timeout);
+            
+            demoVideo.play().then(() => {
+              console.log('▶️ Drone video is now playing');
+              setDroneDemoPlaying(true);
+              setDroneDemoInitialized(true);
+              resolve(undefined);
+            }).catch((playError) => {
+              console.error('❌ Failed to play drone video:', playError);
+              reject(playError);
+            });
+          };
+          
+          demoVideo.onerror = (error) => {
+            console.error('❌ Drone video loading error:', error);
+            clearTimeout(timeout);
+            reject(new Error('Failed to load drone demo video'));
+          };
+          
+          demoVideo.onloadstart = () => {
+            console.log('🔄 Drone video loading started...');
+          };
+          
+          demoVideo.oncanplay = () => {
+            console.log('✅ Drone video can start playing');
+          };
+          
+          demoVideo.onplaying = () => {
+            console.log('🎬 Drone video is playing');
+          };
+        });
+        
+        console.log('🎥 Drone video ready, creating Agora video track...');
+        
+        // Check if captureStream is available
+        if (typeof (demoVideo as any).captureStream !== 'function') {
+          throw new Error('captureStream not supported in this browser');
+        }
+        
+        // Create video track from the demo video with higher frame rate
+        const videoStream = (demoVideo as any).captureStream(30);
+        const videoTracks = videoStream.getVideoTracks();
+        
+        if (videoTracks.length === 0) {
+          throw new Error('No video tracks available from drone video stream');
+        }
+        
+        console.log(`📊 Video stream captured with ${videoTracks.length} tracks`);
+        console.log(`🎯 Video track settings:`, videoTracks[0].getSettings());
+        
+        const videoTrack = await AgoraRTC.createCustomVideoTrack({
+          mediaStreamTrack: videoTracks[0],
+        });
+        
+        console.log('✅ Agora video track created successfully');
+        console.log('🎯 Video track info:', {
+          trackId: videoTrack.getTrackId(),
+          enabled: videoTrack.enabled,
+          muted: videoTrack.muted
+        });
+        
+        // Create audio track from microphone for host commentary
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        console.log('🎤 Audio track created successfully');
         
         localVideoTrackRef.current = videoTrack;
         localAudioTrackRef.current = audioTrack;
         
-        // Play local video preview
-        if (localVideoRef.current) {
-          videoTrack.play(localVideoRef.current);
-        }
-        
         // Publish tracks
+        console.log('📤 Publishing video and audio tracks...');
         await client.publish([videoTrack, audioTrack]);
-        console.log('Published robotics demo stream');
+        console.log('✅ Published robotics demo stream with drone video');
         
         setIsStreaming(true);
+        setDroneVideoElement(demoVideo);
+        
+        // Add periodic logging to monitor stream health
+        const streamMonitor = setInterval(() => {
+          console.log('📊 Stream health check:', {
+            videoTrackEnabled: videoTrack.enabled,
+            videoTrackMuted: videoTrack.muted,
+            audioTrackEnabled: audioTrack.enabled,
+            audioTrackMuted: audioTrack.muted,
+            clientConnectionState: client.connectionState,
+            publishedTracks: client.localTracks.length
+          });
+        }, 10000);
+        
+        // Store monitor for cleanup
+        (client as any)._streamMonitor = streamMonitor;
+        
+      } catch (videoError) {
+        console.error('❌ Failed to create video track from drone video, falling back to webcam:', videoError);
+        
+        // Fallback to webcam if drone video fails
+        if (webcamStream) {
+          const [videoTrack, audioTrack] = await Promise.all([
+            AgoraRTC.createCustomVideoTrack({
+              mediaStreamTrack: webcamStream.getVideoTracks()[0],
+            }),
+            AgoraRTC.createMicrophoneAudioTrack()
+          ]);
+          
+          localVideoTrackRef.current = videoTrack;
+          localAudioTrackRef.current = audioTrack;
+          
+          // Publish tracks
+          await client.publish([videoTrack, audioTrack]);
+          console.log('✅ Published robotics demo stream with webcam fallback');
+          
+          setIsStreaming(true);
+        } else {
+          throw new Error('No video source available (drone video failed and no webcam)');
+        }
       }
     } catch (error) {
-      console.error('Error starting stream:', error);
+      console.error('❌ Error starting stream:', error);
       setStreamingError(`Failed to start stream: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
@@ -722,14 +1156,23 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   const stopStreaming = async () => {
     try {
       if (rtcClientRef.current) {
+        // Clean up stream monitor
+        if ((rtcClientRef.current as any)._streamMonitor) {
+          clearInterval((rtcClientRef.current as any)._streamMonitor);
+          console.log('🧹 Cleaned up stream monitor');
+        }
+        
         if (localVideoTrackRef.current && localAudioTrackRef.current) {
           await rtcClientRef.current.unpublish([localVideoTrackRef.current, localAudioTrackRef.current]);
+          console.log('📤❌ Unpublished video and audio tracks');
         }
         
         localVideoTrackRef.current?.close();
         localAudioTrackRef.current?.close();
+        console.log('🔒 Closed local tracks');
         
         await rtcClientRef.current.leave();
+        console.log('🚪 Left Agora channel');
         
         rtcClientRef.current = null;
         localVideoTrackRef.current = null;
@@ -739,9 +1182,10 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
       setIsStreaming(false);
       setLocalUid(null);
       setRemoteUsers(new Map());
-      console.log('Stopped streaming');
+      setDroneVideoElement(null);
+      console.log('✅ Stopped streaming successfully');
     } catch (error) {
-      console.error('Error stopping stream:', error);
+      console.error('❌ Error stopping stream:', error);
     }
   };
   
@@ -768,7 +1212,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                 </Button>
                 <div>
                   <h1 className="text-xl font-bold text-white">{session.trackName}</h1>
-                  <p className="text-sm text-white/70">Robotics Demo Stream</p>
+                  <p className="text-sm text-white/70">Robo Delivery Stream</p>
                 </div>
               </div>
               
@@ -797,7 +1241,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                     variant="primary"
                     size="small"
                     onClick={startStreaming}
-                    disabled={!!streamingError || !webcamStream}
+                    disabled={!!streamingError}
                   >
                     Start Stream
                   </Button>
@@ -829,38 +1273,56 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
 
           {/* Main Camera + AR View - Takes remaining space */}
           <div className="flex-1 relative min-h-0 overflow-hidden">
-            {/* Webcam Video Background - only show in AR mode */}
+            {/* Drone Demo Video - show by default and continue during streaming */}
+            <video 
+              ref={droneDemoVideoRef}
+              className="w-full h-full object-cover"
+              style={{ 
+                zIndex: 1,
+                display: droneDemoPlaying ? 'block' : 'none',
+                filter: 'brightness(0.7)'
+              }}
+              autoPlay
+              loop
+              playsInline
+              muted
+            />
+            
+            {/* Webcam Video Background - DISABLED FOR DEMO 
             <video 
               ref={videoRef}
               className="w-full h-full object-cover"
               style={{ 
                 transform: 'scaleX(-1)', // Mirror the video
                 zIndex: 1,
-                display: arMode ? 'block' : 'none' // Only show in AR mode
+                display: (arMode && !droneDemoPlaying && !isStreaming) ? 'block' : 'none'
               }}
               autoPlay
               playsInline
               muted
             />
+            */}
             
-            {/* Debug overlay to show webcam status - only in AR mode */}
-            {arMode && !webcamStream && !webcamError && (
+            {/* Debug overlay to show loading status */}
+            {!droneDemoPlaying && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-800 z-10">
                 <div className="text-white text-center">
                   <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                  <p>Loading camera...</p>
+                  <p>Loading drone demo video...</p>
                 </div>
               </div>
             )}
             
-            {arMode && webcamError && (
+            {/* Remove webcam error display since we're not using webcam
+            {!droneDemoPlaying && webcamError && (
               <div className="absolute inset-0 flex items-center justify-center bg-red-900/20 z-10">
                 <div className="text-red-400 text-center p-4">
-                  <p className="font-semibold mb-2">Camera Error</p>
-                  <p className="text-sm">{webcamError}</p>
+                  <p className="font-semibold mb-2">Video Error</p>
+                  <p className="text-sm">Failed to load drone demo video and camera</p>
                 </div>
               </div>
             )}
+            */}
             
             {/* Canvas for both AR overlay and 3D rendering - Constrained to video area */}
             <canvas 
@@ -890,8 +1352,8 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                   UID: {localUid}<br />
                   Viewers: {remoteUsers.size}<br />
                   AR Markers: {detectedMarkers.length}<br />
-                  Webcam: {webcamStream ? 'Active' : 'Inactive'}<br />
-                  Video Size: {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}
+                  Drone Demo: {droneDemoPlaying ? 'Playing' : 'Stopped'}<br />
+                  Video Size: {droneDemoVideoRef.current?.videoWidth}x{droneDemoVideoRef.current?.videoHeight}
                 </div>
               </div>
             )}
@@ -902,10 +1364,10 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                 <div className="text-sm font-medium mb-1">Debug Info</div>
                 <div className="text-xs text-white/70">
                   Mode: {arMode ? 'AR (Camera + Overlay)' : '3D (Full Game)'}<br />
-                  Webcam: {webcamStream ? 'Active' : 'Inactive'}<br />
+                  Drone Demo: {droneDemoPlaying ? 'Playing' : 'Loading/Stopped'}<br />
                   AR System: {arMode && renderSystemRef.current ? 'Initialized' : 'Not Active'}<br />
                   3D Game: {!arMode && gameLoopRef.current ? 'Running' : 'Not Active'}<br />
-                  Video Size: {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}<br />
+                  Video Size: {droneDemoVideoRef.current?.videoWidth}x{droneDemoVideoRef.current?.videoHeight}<br />
                   AR Markers: {detectedMarkers.length}
                 </div>
               </div>
@@ -1019,7 +1481,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                     variant="primary"
                     size="small"
                     onClick={executeDelivery}
-                    disabled={!startPoint || paymentStatus === 'processing'}
+                    disabled={!startPoint || paymentStatus === 'processing' || paymentStatus === 'confirmed'}
                     className="w-full"
                   >
                     {paymentStatus === 'processing' ? 'Processing...' : 
@@ -1030,14 +1492,15 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                   <Button
                     variant="secondary"
                     size="small"
-                    onClick={deliveryStatus === 'Delivery in progress...' ? completeDelivery : resetDelivery}
+                    onClick={deliveryStatus === 'Robot at delivery point - click "Delivery completed" when ready' ? completeDelivery : resetDelivery}
                     className={`w-full ${
-                      deliveryStatus === 'Delivery in progress...' 
+                      deliveryStatus === 'Robot at delivery point - click "Delivery completed" when ready'
                         ? '!bg-yellow-600 hover:!bg-yellow-700 !text-black font-semibold' 
                         : '!bg-gray-700 hover:!bg-gray-600'
                     }`}
                   >
-                    {deliveryStatus === 'Delivery in progress...' ? 'Delivery completed' : 'Reset'}
+                    {deliveryStatus === 'Robot at delivery point - click "Delivery completed" when ready' ? 'Delivery completed' : 
+                     'Delivery completed'}
                   </Button>
                 </div>
               </div>
@@ -1129,4 +1592,4 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
       </div>
     </div>
   );
-}; 
+};

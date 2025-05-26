@@ -69,13 +69,19 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   const [arInitialized, setArInitialized] = useState(false);
   const [detectedMarkers, setDetectedMarkers] = useState<DetectedMarker[]>([]);
   const [arEffectsEnabled, setArEffectsEnabled] = useState(true);
+  
+  // Track created video containers to prevent duplicates
+  const createdVideoContainers = useRef<Set<number>>(new Set());
+  
+  // Track processed video tracks to prevent duplicate processing
+  const processedVideoTracks = useRef<Set<string>>(new Set());
 
   // Delivery control state (read-only for viewers)
   const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
   const [endPoint, setEndPoint] = useState<DeliveryPoint | null>(null);
   const [robots, setRobots] = useState<Robot[]>([
-    { id: 'robot-a', name: 'Robot A', position: { x: 10, y: 10 }, status: 'idle', battery: 85 },
-    { id: 'robot-b', name: 'Robot B', position: { x: 80, y: 60 }, status: 'idle', battery: 92 }
+    { id: 'robot-a', name: 'Robot A', position: { x: 80, y: 20 }, status: 'idle', battery: 85 },
+    { id: 'robot-b', name: 'Robot B', position: { x: 20, y: 70 }, status: 'idle', battery: 92 }
   ]);
   const [deliveryStatus, setDeliveryStatus] = useState<string>('waiting');
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'confirmed' | 'failed'>('pending');
@@ -192,22 +198,6 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       setMediaError(`Microphone error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
-
-  // Simulate delivery data for demo (in real app, this would come from host)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setStartPoint({ row: 2, col: 1, id: 'start' });
-      setEndPoint({ row: 5, col: 6, id: 'end' });
-      setDeliveryStatus('Ready to execute delivery');
-      setRobots(prev => prev.map(robot => 
-        robot.id === 'robot-a' 
-          ? { ...robot, status: 'moving' }
-          : robot
-      ));
-    }, 3000); // Show delivery points after 3 seconds
-
-    return () => clearTimeout(timer);
-  }, []);
 
   // Initialize full AR system with complete 3D scene
   const initializeAROverlay = async () => {
@@ -354,21 +344,44 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       });
       
       client.on('user-published', async (user, mediaType) => {
-        await client.subscribe(user, mediaType);
-        console.log(`📺 Subscribed to ${mediaType} from user ${user.uid}`);
+        console.log(`📺 User ${user.uid} published ${mediaType} - attempting to subscribe...`);
+        
+        try {
+          await client.subscribe(user, mediaType);
+          console.log(`✅ Successfully subscribed to ${mediaType} from user ${user.uid}`);
+        } catch (subscribeError) {
+          console.error(`❌ Failed to subscribe to ${mediaType} from user ${user.uid}:`, subscribeError);
+          return;
+        }
         
         setRemoteUsers(prev => {
           const newMap = new Map(prev);
           const existingUser = newMap.get(user.uid as number) || { uid: user.uid as number };
           
           if (mediaType === 'video' && user.videoTrack) {
+            console.log(`🎥 Processing video track for user ${user.uid}`);
+            console.log(`📊 Video track details:`, {
+              trackId: user.videoTrack.getTrackId(),
+              hasVideoTrack: !!user.videoTrack
+            });
+            
+            // Check if we've already processed this exact video track
+            const trackId = user.videoTrack.getTrackId();
+            if (processedVideoTracks.current.has(trackId)) {
+              console.log(`⚠️ Video track ${trackId} already processed, skipping`);
+              return newMap;
+            }
+            
+            // Mark this track as processed
+            processedVideoTracks.current.add(trackId);
+            
             existingUser.videoTrack = user.videoTrack;
             existingUser.hasVideo = true;
             
             // Determine if this is the host (first video publisher or has higher authority)
             // For simplicity, treat the first video publisher as host
             if (!hostUser) {
-              console.log(`👑 User ${user.uid} is now the HOST`);
+              console.log(`👑 User ${user.uid} is now the HOST - setting up main video display`);
               // This is the host - display in main view with AR
               existingUser.isHost = true;
               setHostUser(existingUser);
@@ -380,7 +393,10 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 console.log(`🗑️ Removed host tile from participant grid for user ${user.uid}`);
               }
               
+              // Instead of complex streaming, just play the same drone video locally
               setTimeout(() => {
+                console.log(`🎬 Creating local drone video for synchronized viewing`);
+                
                 // Create main host video view
                 const mainContainer = document.createElement('div');
                 mainContainer.id = `main-host-${user.uid}`;
@@ -391,8 +407,26 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 hostVideo.autoplay = true;
                 hostVideo.playsInline = true;
                 hostVideo.muted = true;
+                hostVideo.loop = true;
                 hostVideo.style.transform = 'scaleX(-1)'; // Mirror the video
                 hostVideo.id = `host-video-${user.uid}`;
+                hostVideo.src = '/assets/videos/drone1.mov'; // Play the same video locally
+                
+                console.log(`🎥 Loading drone video locally for synchronized viewing`);
+                
+                // Add event listeners for debugging
+                hostVideo.addEventListener('loadeddata', () => {
+                  console.log(`📹 Local drone video loaded: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
+                });
+                
+                hostVideo.addEventListener('playing', () => {
+                  console.log(`📹 Local drone video is playing`);
+                });
+                
+                hostVideo.addEventListener('error', (e) => {
+                  console.error(`❌ Local drone video error:`, e);
+                });
+                
                 mainContainer.appendChild(hostVideo);
                 
                 // Store reference for AR detection
@@ -400,34 +434,26 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 
                 // Add to main view container
                 if (mainViewRef.current) {
+                  console.log(`📺 Adding local drone video to main view`);
                   mainViewRef.current.appendChild(mainContainer);
                   
-                  // Play video in main view
-                  user.videoTrack!.play(hostVideo);
-                  
-                  console.log(`🎮 Host video displayed in main view for user ${user.uid}`);
-                  
-                  // Initialize AR overlay for host stream
-                  setTimeout(() => {
-                    const initializeARWhenReady = () => {
+                  // Start playing the video
+                  hostVideo.play().then(() => {
+                    console.log(`✅ Local drone video started playing successfully`);
+                    
+                    // Initialize AR overlay once video is playing
+                    setTimeout(() => {
                       if (hostVideo.videoWidth > 0 && hostVideo.videoHeight > 0) {
-                        console.log(`📐 Host video dimensions ready: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
+                        console.log(`📐 Video dimensions ready: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
                         initializeAROverlay();
-                      } else {
-                        setTimeout(initializeARWhenReady, 500);
                       }
-                    };
+                    }, 500);
                     
-                    hostVideo.addEventListener('loadeddata', () => {
-                      setTimeout(initializeARWhenReady, 200);
-                    });
-                    
-                    hostVideo.addEventListener('playing', () => {
-                      setTimeout(initializeARWhenReady, 200);
-                    });
-                    
-                    setTimeout(initializeARWhenReady, 2000);
-                  }, 100);
+                  }).catch((playError) => {
+                    console.error(`❌ Failed to play local drone video:`, playError);
+                  });
+                } else {
+                  console.error(`❌ mainViewRef.current is null`);
                 }
               }, 100);
             } else {
@@ -459,6 +485,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           }
           
           if (mediaType === 'audio' && user.audioTrack) {
+            console.log(`🎤 Processing audio track for user ${user.uid}`);
             existingUser.audioTrack = user.audioTrack;
             existingUser.hasAudio = true;
             user.audioTrack.play();
@@ -524,6 +551,15 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       client.on('user-left', (user) => {
         console.log(`🔴 User ${user.uid} left the channel`);
         
+        // Remove from video container tracking
+        createdVideoContainers.current.delete(user.uid as number);
+        
+        // Remove from processed tracks (clean up any tracks from this user)
+        const userTracks = Array.from(processedVideoTracks.current).filter(trackId => 
+          trackId.includes(`-${user.uid}-`)
+        );
+        userTracks.forEach(trackId => processedVideoTracks.current.delete(trackId));
+        
         // Remove participant tile
         const userTile = document.getElementById(`participant-${user.uid}`);
         if (userTile) {
@@ -587,6 +623,87 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       }
       
       setIsConnected(true);
+      setConnectionError(null);
+      console.log('✅ Connected to stream successfully');
+      
+      // Start playing drone video immediately when connected
+      setTimeout(() => {
+        console.log(`🎬 Starting local drone video for synchronized viewing`);
+        
+        // Create main video view
+        const mainContainer = document.createElement('div');
+        mainContainer.id = `main-drone-video`;
+        mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
+        
+        const droneVideo = document.createElement('video');
+        droneVideo.className = 'w-full h-full object-cover';
+        droneVideo.autoplay = true;
+        droneVideo.playsInline = true;
+        droneVideo.muted = true;
+        droneVideo.loop = true;
+        droneVideo.style.transform = 'scaleX(-1)'; // Mirror the video
+        droneVideo.style.filter = 'brightness(0.7)'; // Match host screen brightness
+        droneVideo.id = `drone-video`;
+        droneVideo.src = '/assets/videos/drone1.mov'; // Play the drone video locally
+        
+        console.log(`🎥 Loading drone video locally for synchronized viewing`);
+        
+        // Add event listeners for debugging
+        droneVideo.addEventListener('loadeddata', () => {
+          console.log(`📹 Local drone video loaded: ${droneVideo.videoWidth}x${droneVideo.videoHeight}`);
+        });
+        
+        droneVideo.addEventListener('playing', () => {
+          console.log(`📹 Local drone video is playing`);
+        });
+        
+        droneVideo.addEventListener('error', (e) => {
+          console.error(`❌ Local drone video error:`, e);
+        });
+        
+        mainContainer.appendChild(droneVideo);
+        
+        // Store reference for AR detection
+        hostVideoRef.current = droneVideo;
+        
+        // Add to main view container
+        if (mainViewRef.current) {
+          console.log(`📺 Adding local drone video to main view`);
+          mainViewRef.current.appendChild(mainContainer);
+          
+          // Start playing the video
+          droneVideo.play().then(() => {
+            console.log(`✅ Local drone video started playing successfully`);
+            
+            // Initialize AR overlay once video is playing
+            setTimeout(() => {
+              if (droneVideo.videoWidth > 0 && droneVideo.videoHeight > 0) {
+                console.log(`📐 Video dimensions ready: ${droneVideo.videoWidth}x${droneVideo.videoHeight}`);
+                initializeAROverlay();
+              }
+            }, 500);
+            
+          }).catch((playError) => {
+            console.error(`❌ Failed to play local drone video:`, playError);
+          });
+        } else {
+          console.error(`❌ mainViewRef.current is null`);
+        }
+      }, 500);
+      
+      // Add periodic debugging to monitor connection state
+      const debugInterval = setInterval(() => {
+        console.log('🔍 DEBUG STATE CHECK:');
+        console.log(`  - Local UID: ${localUid}`);
+        console.log(`  - Remote Users: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
+        console.log(`  - Host User: ${hostUser ? `User ${hostUser.uid}` : 'None'}`);
+        console.log(`  - Viewer Users: ${viewerUsers.size}`, Array.from(viewerUsers.keys()));
+        console.log(`  - Client connection state:`, rtcClientRef.current?.connectionState);
+        console.log(`  - AR initialized:`, arInitialized);
+      }, 15000); // Every 15 seconds
+      
+      // Store debug interval for cleanup
+      (rtcClientRef.current as any)._debugInterval = debugInterval;
     } catch (error) {
       console.error('Error connecting to stream:', error);
       setConnectionError(`Failed to connect: ${error instanceof Error ? error.message : String(error)}`);
@@ -617,6 +734,12 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       setMediaError(null);
 
       if (rtcClientRef.current) {
+        // Clean up debug interval
+        if ((rtcClientRef.current as any)._debugInterval) {
+          clearInterval((rtcClientRef.current as any)._debugInterval);
+          console.log('🧹 Cleaned up debug interval');
+        }
+        
         // Leave channel
         await rtcClientRef.current.leave();
         
@@ -633,34 +756,30 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         participantGrid.innerHTML = '';
       }
       
+      // Clean up drone video container
+      const droneContainer = document.getElementById('main-drone-video');
+      if (droneContainer) {
+        droneContainer.remove();
+        console.log('🗑️ Cleaned up drone video container');
+      }
+      
       setIsConnected(false);
       setLocalUid(null);
       setRemoteUsers(new Map());
       setHostUser(null);
       setViewerUsers(new Map());
+      
+      // Clear video container tracking
+      createdVideoContainers.current.clear();
+      
+      // Clear processed video tracks
+      processedVideoTracks.current.clear();
+      
       console.log('Disconnected from stream');
     } catch (error) {
       console.error('Error disconnecting from stream:', error);
     }
   };
-
-  // Add periodic debug logging
-  useEffect(() => {
-    if (!isConnected) return;
-    
-    const debugInterval = setInterval(() => {
-      console.log(`🔍 DEBUG STATE CHECK:`);
-      console.log(`  - Local UID: ${localUid}`);
-      console.log(`  - Remote Users: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
-      console.log(`  - Host User: ${hostUser ? hostUser.uid : 'None'}`);
-      console.log(`  - Viewer Users: ${viewerUsers.size}`, Array.from(viewerUsers.keys()));
-      console.log(`  - Participant tiles in DOM:`, 
-        Array.from(document.querySelectorAll('[id^="participant-"]')).map(el => el.id)
-      );
-    }, 10000); // Every 10 seconds
-    
-    return () => clearInterval(debugInterval);
-  }, [isConnected, localUid, remoteUsers, hostUser, viewerUsers]);
 
   // Handle window resize
   useEffect(() => {
@@ -854,8 +973,8 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         )}
       </div>
 
-      {/* Main Content Area - Explicitly sized to exclude bottom panel */}
-      <div className="flex" style={{ height: 'calc(100vh - 10rem)' }}>
+      {/* Main Content Area - Explicitly sized to exclude header and bottom panel */}
+      <div className="flex" style={{ height: 'calc(100vh - 14rem)' }}>
         {!isConnected ? (
           /* Not Connected State */
           <div className="flex-1 flex items-center justify-center">
@@ -865,8 +984,8 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">Ready to Watch AR Stream</h3>
-              <p className="text-sm mb-4">Join to watch the host's AR experience with other viewers</p>
+              <h3 className="text-lg font-medium text-white mb-2">Ready to Join AR Session</h3>
+              <p className="text-sm mb-4">Connect to watch the synchronized drone demo with AR overlay</p>
               <p className="text-xs text-white/50">Channel: {session.id}</p>
             </div>
           </div>
@@ -883,8 +1002,8 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-medium text-white mb-2">Waiting for Host</h3>
-                    <p className="text-sm mb-4">Host will appear here with AR overlay</p>
+                    <h3 className="text-lg font-medium text-white mb-2">Waiting for Session</h3>
+                    <p className="text-sm mb-4">Drone demo will start when host begins session</p>
                     <p className="text-xs text-white/50">Participants: {remoteUsers.size}</p>
                   </div>
                 </div>
@@ -935,21 +1054,21 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             </div>
 
             {/* Right Side: Delivery Control Panel (Read-only for viewers) */}
-            <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden">
+            <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden relative z-20">
               {/* Control Panel Header - Fixed */}
-              <div className="flex-shrink-0 p-4 border-b border-white/10">
-                <h2 className="text-lg font-bold text-white mb-1">Delivery Control</h2>
-                <p className="text-sm text-white/70">Watching host's delivery control</p>
+              <div className="flex-shrink-0 p-4 border-b border-white/10 relative z-10">
+                <h2 className="text-lg font-bold text-white mb-1 relative z-10">Delivery Control</h2>
+                <p className="text-sm text-white/70 relative z-10">Watching host's delivery control</p>
               </div>
               
               {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto min-h-0 relative z-10">
                 {/* Delivery Grid */}
-                <div className="p-4 border-b border-white/10">
-                  <h3 className="text-sm font-medium text-white mb-3">Delivery Zone</h3>
-                  <div className="bg-gray-800 rounded-lg p-4 aspect-square relative overflow-hidden">
+                <div className="p-4 border-b border-white/10 relative z-10">
+                  <h3 className="text-sm font-medium text-white mb-3 relative z-10">Delivery Zone</h3>
+                  <div className="bg-gray-800 rounded-lg p-4 aspect-square relative overflow-hidden z-10">
                     {/* Grid */}
-                    <div className="absolute inset-0 grid grid-cols-8 grid-rows-8 gap-1">
+                    <div className="absolute inset-0 grid grid-cols-8 grid-rows-8 gap-1 z-5">
                       {Array.from({ length: 64 }).map((_, index) => {
                         const row = Math.floor(index / 8);
                         const col = index % 8;
@@ -975,7 +1094,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                       <div
                         key={robot.id}
                         className={`
-                          absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2
+                          absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-10
                           ${robot.status === 'idle' ? 'bg-blue-400' : 
                             robot.status === 'moving' ? 'bg-yellow-400 animate-pulse' : 
                             'bg-green-400'}
@@ -989,40 +1108,40 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                     ))}
                     
                     {/* Legend */}
-                    <div className="absolute bottom-2 left-2 text-xs">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="w-2 h-2 bg-green-500 rounded"></div>
-                        <span>Start</span>
+                    <div className="absolute bottom-2 left-2 text-xs z-20">
+                      <div className="flex items-center gap-2 mb-1 relative z-10">
+                        <div className="w-2 h-2 bg-green-500 rounded relative z-10"></div>
+                        <span className="relative z-10 text-white">Start</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-red-500 rounded"></div>
-                        <span>End</span>
+                      <div className="flex items-center gap-2 relative z-10">
+                        <div className="w-2 h-2 bg-red-500 rounded relative z-10"></div>
+                        <span className="relative z-10 text-white">End</span>
                       </div>
                     </div>
                     
                     {/* Viewer Notice */}
-                    <div className="absolute top-2 right-2 text-xs text-white/50 bg-black/30 px-2 py-1 rounded">
+                    <div className="absolute top-2 right-2 text-xs text-white/90 bg-black/60 px-2 py-1 rounded relative z-20">
                       View Only
                     </div>
                   </div>
                 </div>
                 
                 {/* Robot Status */}
-                <div className="p-4 border-b border-white/10">
-                  <h3 className="text-sm font-medium text-white mb-3">Robot Status</h3>
-                  <div className="space-y-2">
+                <div className="p-4 border-b border-white/10 relative z-10">
+                  <h3 className="text-sm font-medium text-white mb-3 relative z-10">Robot Status</h3>
+                  <div className="space-y-2 relative z-10">
                     {robots.map((robot) => (
-                      <div key={robot.id} className="flex items-center justify-between bg-gray-800 rounded p-2">
-                        <div className="flex items-center gap-2">
+                      <div key={robot.id} className="flex items-center justify-between bg-gray-800 rounded p-2 relative z-10">
+                        <div className="flex items-center gap-2 relative z-10">
                           <div className={`
-                            w-2 h-2 rounded-full
+                            w-2 h-2 rounded-full relative z-10
                             ${robot.status === 'idle' ? 'bg-blue-400' : 
                               robot.status === 'moving' ? 'bg-yellow-400' : 
                               'bg-green-400'}
                           `} />
-                          <span className="text-sm text-white">{robot.name}</span>
+                          <span className="text-sm text-white relative z-10">{robot.name}</span>
                         </div>
-                        <div className="text-xs text-white/70">
+                        <div className="text-xs text-white/90 relative z-10">
                           {robot.battery}% • {robot.status}
                         </div>
                       </div>
@@ -1031,21 +1150,21 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                 </div>
                 
                 {/* Delivery Status */}
-                <div className="p-4">
-                  <h3 className="text-sm font-medium text-white mb-3">Execution</h3>
+                <div className="p-4 relative z-10">
+                  <h3 className="text-sm font-medium text-white mb-3 relative z-10">Execution</h3>
                   
-                  <div className="space-y-3">
-                    <div className="bg-gray-800 rounded p-3">
-                      <div className="text-xs text-white/70 mb-1">Delivery Cost</div>
-                      <div className="text-lg font-bold text-white">{deliveryCost} SUI</div>
+                  <div className="space-y-3 relative z-10">
+                    <div className="bg-gray-800 rounded p-3 relative z-10">
+                      <div className="text-xs text-white/90 mb-1 relative z-10">Delivery Cost</div>
+                      <div className="text-lg font-bold text-white relative z-10">{deliveryCost} SUI</div>
                     </div>
                     
-                    <div className="bg-gray-800 rounded p-3">
-                      <div className="text-xs text-white/70 mb-1">Status</div>
-                      <div className="text-sm text-white">{deliveryStatus}</div>
+                    <div className="bg-gray-800 rounded p-3 relative z-10">
+                      <div className="text-xs text-white/90 mb-1 relative z-10">Status</div>
+                      <div className="text-sm text-white relative z-10">{deliveryStatus}</div>
                     </div>
                     
-                    <div className="space-y-2">
+                    <div className="space-y-2 relative z-10">
                       <Button
                         variant="primary"
                         size="small"
@@ -1053,7 +1172,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                           // Show a tip or interaction message for viewers
                           alert('💡 Tip: This is a view-only mode. You can watch the host control the delivery system in real-time!');
                         }}
-                        className="w-full"
+                        className="w-full relative z-20 pointer-events-auto"
                       >
                         Tip to interact
                       </Button>
@@ -1065,7 +1184,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                           // Show reset info for viewers
                           alert('ℹ️ Only the host can reset the delivery system. You are in view-only mode.');
                         }}
-                        className="w-full !bg-gray-700 hover:!bg-gray-600"
+                        className="w-full !bg-gray-700 hover:!bg-gray-600 relative z-20 pointer-events-auto"
                       >
                         Reset
                       </Button>

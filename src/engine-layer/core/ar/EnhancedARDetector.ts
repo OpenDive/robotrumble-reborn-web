@@ -281,8 +281,8 @@ export class EnhancedARDetector {
     markers.forEach(marker => {
       currentMarkerIds.add(marker.id);
       
-      // Only show key for marker ID 0
-      if (marker.id === 0) {
+      // Only show key for marker ID 1 (changed from ID 0)
+      if (marker.id === 1) {
         let keyObject = this.activeKeys.get(marker.id);
         
         // Create key object if it doesn't exist
@@ -310,16 +310,16 @@ export class EnhancedARDetector {
             const position = new THREE.Vector3();
             position.setFromMatrixPosition(marker.poseMatrix);
             
-            // Calculate scale based on distance (closer = bigger, farther = smaller)
+            // Calculate scale based on distance - MUCH LARGER SCALE
             const distance = Math.abs(position.z);
-            const baseScale = 2.0; // Base scale factor
+            const baseScale = 5.6; // Reduced by another 20% from 7.0 to 5.6
             const minDistance = 0.5; // Minimum distance for scaling calculation
-            const maxDistance = 5.0; // Maximum distance for scaling calculation
+            const maxDistance = 10.0; // Maximum distance for scaling calculation
             
-            // Inverse relationship: closer distance = larger scale
+            // Simpler scaling: just use base scale with slight distance adjustment
             const normalizedDistance = Math.max(minDistance, Math.min(maxDistance, distance));
-            const distanceScale = (maxDistance - normalizedDistance + minDistance) / maxDistance;
-            const finalScale = baseScale * distanceScale * (2.0 / normalizedDistance); // Additional inverse scaling
+            const distanceScale = Math.max(0.5, Math.min(2.0, 5.0 / normalizedDistance)); // Keep scale between 0.5x and 2x
+            const finalScale = baseScale * distanceScale;
             
             // Create scale matrix
             const scaleMatrix = new THREE.Matrix4().makeScale(finalScale, finalScale, finalScale);
@@ -337,9 +337,9 @@ export class EnhancedARDetector {
             const centerX = (marker.center.x - 320) / 320; // Normalize to [-1, 1]
             const centerY = -(marker.center.y - 240) / 240; // Normalize and flip Y
             keyObject.position.set(centerX * 2, centerY * 2, -2.0);
-            keyObject.scale.set(2.0, 2.0, 2.0);
+            keyObject.scale.set(5.6, 5.6, 5.6); // Reduced by another 20% from 7.0 to 5.6
             keyObject.matrixAutoUpdate = true;
-            this.logMessage(`Key positioned at fallback location: ${centerX * 2}, ${centerY * 2}, -2.0`);
+            this.logMessage(`Key positioned at fallback location: ${centerX * 2}, ${centerY * 2}, -2.0 with large scale`);
           }
           
           this.logMessage(`Key is visible and positioned for marker ${marker.id}`);
