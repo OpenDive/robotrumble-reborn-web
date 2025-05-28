@@ -105,7 +105,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   ]);
   const [deliveryStatus, setDeliveryStatus] = useState<string>('waiting');
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'confirmed' | 'failed'>('pending');
-  const [deliveryCost] = useState(0.5);
+  const [deliveryCost] = useState(0.05);
   
   // Robot animation state
   const [originalRobotAPosition] = useState({ x: 80, y: 20 });
