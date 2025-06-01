@@ -9,7 +9,8 @@
     "api-server": "node server/dev-server.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "vite preview"
   },
   "dependencies": {
     "@babylonjs/core": "^8.8.5",
