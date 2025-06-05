@@ -47,8 +47,8 @@ VITE_AGORA_APP_ID=your_agora_app_id
 AGORA_APP_CERTIFICATE=your_agora_app_certificate
 
 # Google OAuth Configuration
-VITE_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
-VITE_GOOGLE_CLIENT_SECRET=your_google_client_secret
+VITE_GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 # Development URLs
 VITE_API_URL=http://localhost:3001

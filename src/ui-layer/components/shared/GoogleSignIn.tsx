@@ -43,33 +43,30 @@ const REDIRECT_URI = window.location.origin + '/auth/callback';
 async function exchangeCodeForTokens(code: string) {
   console.log('Starting token exchange...');
   
-  const tokenEndpoint = 'https://oauth2.googleapis.com/token';
-  const params = new URLSearchParams({
-    code,
-    client_id: GOOGLE_CLIENT_ID,
-    client_secret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '',
-    redirect_uri: REDIRECT_URI,
-    grant_type: 'authorization_code',
-  });
+  // Use our secure API endpoint instead of calling Google directly
+  const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
   
   try {
-    const response = await fetch(tokenEndpoint, {
+    const response = await fetch(`${apiUrl}/api/google-oauth`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: params,
+      body: JSON.stringify({
+        code,
+        redirect_uri: REDIRECT_URI,
+      }),
     });
 
-    const responseText = await response.text();
-    console.log('Token exchange response:', responseText);
+    const responseData = await response.text();
+    console.log('Token exchange response:', responseData);
 
     if (!response.ok) {
-      console.error('Token exchange error:', responseText);
+      console.error('Token exchange error:', responseData);
       throw new Error('Failed to exchange code for tokens');
     }
 
-    return JSON.parse(responseText);
+    return JSON.parse(responseData);
   } catch (error) {
     console.error('Fetch error:', error);
     throw error;
