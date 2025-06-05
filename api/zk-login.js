@@ -1,9 +1,8 @@
-import { generateNonce, generateRandomness } from '@mysten/zklogin';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
-import { jwtToAddress } from '@mysten/zklogin';
+const { generateNonce, generateRandomness, jwtToAddress } = require('@mysten/zklogin');
+const { Ed25519Keypair } = require('@mysten/sui/keypairs/ed25519');
+const { SuiClient, getFullnodeUrl } = require('@mysten/sui/client');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -105,4 +104,4 @@ export default async function handler(req, res) {
       error: 'Internal server error: ' + error.message 
     });
   }
-} 
+}; 
