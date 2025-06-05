@@ -43,11 +43,9 @@ const REDIRECT_URI = window.location.origin + '/auth/callback';
 async function exchangeCodeForTokens(code: string) {
   console.log('Starting token exchange...');
   
-  // Use our secure API endpoint instead of calling Google directly
-  const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
-  
+  // Use the correct Vercel serverless function path
   try {
-    const response = await fetch(`${apiUrl}/api/google-oauth`, {
+    const response = await fetch('/api/google-oauth', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

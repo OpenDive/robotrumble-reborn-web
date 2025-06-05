@@ -22,11 +22,15 @@ export default async function handler(req, res) {
     }
 
     // Get Google OAuth credentials from environment variables (server-side only)
-    const GOOGLE_CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID;
+    const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
     const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-      console.error('Google OAuth credentials missing');
+      console.error('Google OAuth credentials missing', {
+        hasClientId: !!GOOGLE_CLIENT_ID,
+        hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+        envKeys: Object.keys(process.env).filter(k => k.includes('GOOGLE'))
+      });
       return res.status(500).json({ error: 'Google OAuth credentials not configured' });
     }
 
