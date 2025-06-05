@@ -510,9 +510,9 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
               existingUser.isHost = true;
               setHostUser(existingUser);
               
-              // Start playing RoboRumble video immediately when connected
+              // If no host yet, create a fallback video for synchronized viewing
               setTimeout(() => {
-                console.log(`🎬 Starting local RoboRumble video for synchronized viewing`);
+                console.log(`🎬 No host detected, starting local robo rumble video for synchronized viewing`);
                 
                 // Create main video view
                 const mainContainer = document.createElement('div');
@@ -526,22 +526,56 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                 roboRumbleVideo.muted = true;
                 roboRumbleVideo.loop = true;
                 roboRumbleVideo.style.transform = 'scaleX(-1)'; // Mirror the video
+                roboRumbleVideo.style.filter = 'brightness(0.8)'; // Match host screen brightness
                 roboRumbleVideo.id = `roborumble-video`;
-                roboRumbleVideo.src = '/assets/videos/roborumble.mp4'; // Play the RoboRumble video locally
+                roboRumbleVideo.src = '/assets/videos/robot_rumble.mp4'; // Play the robo rumble video locally
                 
-                console.log(`🎥 Loading RoboRumble video locally for synchronized viewing`);
+                console.log(`🎥 Loading robo rumble video locally for synchronized viewing`);
                 
                 // Add event listeners for debugging
                 roboRumbleVideo.addEventListener('loadeddata', () => {
-                  console.log(`📹 Local RoboRumble video loaded: ${roboRumbleVideo.videoWidth}x${roboRumbleVideo.videoHeight}`);
+                  console.log(`📹 Local robo rumble video loaded: ${roboRumbleVideo.videoWidth}x${roboRumbleVideo.videoHeight}`);
                 });
                 
                 roboRumbleVideo.addEventListener('playing', () => {
-                  console.log(`📹 Local RoboRumble video is playing`);
+                  console.log(`📹 Local robo rumble video is playing`);
                 });
                 
-                roboRumbleVideo.addEventListener('error', (e) => {
-                  console.error(`❌ Local RoboRumble video error:`, e);
+                roboRumbleVideo.addEventListener('error', async (e) => {
+                  console.error(`❌ Local robo rumble video error:`, e);
+                  console.log('🔄 Fallback to webcam for synchronized viewing...');
+                  
+                  try {
+                    // Fallback to webcam
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                      video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                      } 
+                    });
+                    
+                    console.log('📹 Webcam access granted for viewer');
+                    
+                    // Replace robo rumble video with webcam video
+                    roboRumbleVideo.srcObject = stream;
+                    roboRumbleVideo.src = ''; // Clear the src
+                    roboRumbleVideo.style.transform = 'scaleX(-1)'; // Mirror webcam
+                    
+                    console.log('✅ Using webcam as fallback for synchronized viewing');
+                  } catch (webcamError) {
+                    console.error('❌ Failed to access webcam as fallback:', webcamError);
+                    
+                    // Show error message in video container
+                    mainContainer.innerHTML = `
+                      <div class="w-full h-full flex items-center justify-center bg-gray-800 text-white">
+                        <div class="text-center">
+                          <p class="text-lg font-semibold mb-2">Video Source Error</p>
+                          <p class="text-sm">Failed to load demo video and camera</p>
+                        </div>
+                      </div>
+                    `;
+                  }
                 });
                 
                 mainContainer.appendChild(roboRumbleVideo);
@@ -551,43 +585,29 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                 
                 // Add to main view container
                 if (mainViewRef.current) {
-                  console.log(`📺 Adding local RoboRumble video to main view`);
+                  console.log(`📺 Adding local robo rumble video to main view`);
                   mainViewRef.current.appendChild(mainContainer);
                   
                   // Start playing the video
                   roboRumbleVideo.play().then(() => {
-                    console.log(`✅ Local RoboRumble video started playing successfully`);
+                    console.log(`✅ Local robo rumble video started playing successfully`);
                     
                     // Initialize AR overlay once video is playing
                     setTimeout(() => {
                       if (roboRumbleVideo.videoWidth > 0 && roboRumbleVideo.videoHeight > 0) {
                         console.log(`📐 Video dimensions ready: ${roboRumbleVideo.videoWidth}x${roboRumbleVideo.videoHeight}`);
                         initializeAROverlay();
-                        
-                        // Add backup initialization attempts
-                        setTimeout(() => {
-                          console.log('Backup AR initialization attempt 1...');
-                          if (!arInitialized) {
-                            initializeAROverlay();
-                          }
-                        }, 1000);
-                        
-                        setTimeout(() => {
-                          console.log('Backup AR initialization attempt 2...');
-                          if (!arInitialized) {
-                            initializeAROverlay();
-                          }
-                        }, 3000);
                       }
                     }, 500);
                     
                   }).catch((playError) => {
-                    console.error(`❌ Failed to play local RoboRumble video:`, playError);
+                    console.error(`❌ Failed to play local robo rumble video:`, playError);
+                    // Error handler above will handle fallback to webcam
                   });
                 } else {
                   console.error(`❌ mainViewRef.current is null`);
                 }
-              }, 500);
+              }, 1000);
             } else {
               console.log(`👥 User ${user.uid} is a VIEWER with video`);
               // This is a viewer - display in participant tile

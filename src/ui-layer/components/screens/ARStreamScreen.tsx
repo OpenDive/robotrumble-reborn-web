@@ -456,89 +456,93 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
     const initializeWebcamAndAR = async () => {
       // Initialize drone demo video first - only if not already initialized
       if (!droneDemoInitialized && !droneDemoPlaying) {
-        await initializeDroneDemoVideo();
+        try {
+          await initializeDroneDemoVideo();
+        } catch (error) {
+          console.error('Failed to initialize drone demo video:', error);
+          setDroneDemoInitialized(true);
+          setDroneDemoPlaying(false);
+        }
       }
       
-      // Comment out drone.mp4 testing - we only want drone_demo.mp4
-      // await testDroneVideo();
-      
-      // DISABLE WEBCAM FOR DEMO - we're using drone1.mov instead
-      /*
-      try {
-        console.log('Requesting webcam access...');
-        // Start webcam by default
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          } 
-        });
-        
-        console.log('Webcam access granted');
-        setWebcamStream(stream);
-        setWebcamError(null);
-        
-        // Set up video element
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+      // Wait a bit to see if drone video loads successfully
+      setTimeout(async () => {
+        if (!droneDemoPlaying) {
+          console.log('Drone demo video failed to load, falling back to webcam...');
           
-          const onVideoLoaded = async () => {
-            console.log('Webcam video loaded, video dimensions:', 
-              videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+          try {
+            console.log('Requesting webcam access...');
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+              video: { 
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              } 
+            });
             
-            // Ensure video is playing before starting AR
+            console.log('Webcam access granted');
+            setWebcamStream(stream);
+            setWebcamError(null);
+            
+            // Set up video element
             if (videoRef.current) {
-              try {
-                await videoRef.current.play();
-                console.log('Video is now playing, starting AR initialization...');
-              } catch (error) {
-                console.log('Video play() returned promise, likely already playing');
-              }
+              videoRef.current.srcObject = stream;
               
-              // Set AR mode to true now that video is ready
-              setArMode(true);
+              const onVideoLoaded = async () => {
+                console.log('Webcam video loaded, video dimensions:', 
+                  videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+                
+                // Ensure video is playing before starting AR
+                if (videoRef.current) {
+                  try {
+                    await videoRef.current.play();
+                    console.log('Webcam video is now playing, starting AR initialization...');
+                  } catch (error) {
+                    console.log('Video play() returned promise, likely already playing');
+                  }
+                  
+                  // Set AR mode to true now that video is ready
+                  setArMode(true);
+                  
+                  // Wait a bit more to ensure video is fully ready
+                  setTimeout(() => {
+                    initializeARSystem();
+                  }, 500);
+                }
+                
+                videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
+              };
               
-              // Wait a bit more to ensure video is fully ready
-              setTimeout(() => {
-                initializeARSystem();
-              }, 500);
+              const onVideoError = (error: any) => {
+                console.error('Video element error:', error);
+                setWebcamError('Failed to load video stream');
+              };
+              
+              videoRef.current.addEventListener('loadeddata', onVideoLoaded);
+              videoRef.current.addEventListener('error', onVideoError);
+              
+              // Also listen for when video starts playing
+              const onVideoPlay = () => {
+                console.log('Webcam video started playing');
+              };
+              videoRef.current.addEventListener('play', onVideoPlay);
             }
-            
-            videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
-          };
+          } catch (error) {
+            console.error('Failed to access webcam:', error);
+            setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
+            setArMode(false);
+          }
+        } else {
+          // Drone video is playing, set AR mode to true
+          console.log('Using drone demo video for AR');
+          setArMode(true);
           
-          const onVideoError = (error: any) => {
-            console.error('Video element error:', error);
-            setWebcamError('Failed to load video stream');
-          };
-          
-          videoRef.current.addEventListener('loadeddata', onVideoLoaded);
-          videoRef.current.addEventListener('error', onVideoError);
-          
-          // Also listen for when video starts playing
-          const onVideoPlay = () => {
-            console.log('Video started playing');
-          };
-          videoRef.current.addEventListener('play', onVideoPlay);
+          // Initialize AR system after a short delay to ensure drone video is ready
+          setTimeout(() => {
+            initializeARSystem();
+          }, 1000);
         }
-      } catch (error) {
-        console.error('Failed to access webcam:', error);
-        setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
-        setArMode(false);
-      }
-      */
-      
-      // For demo: just set AR mode to true since we have drone1.mov
-      console.log('Demo mode: Using drone1.mov instead of webcam');
-      setArMode(true);
-      
-      // Initialize AR system after a short delay to ensure drone video is ready
-      setTimeout(() => {
-        if (droneDemoPlaying) {
-          initializeARSystem();
-        }
-      }, 1000);
+      }, 2000); // Wait 2 seconds for drone video to initialize
     };
 
     initializeWebcamAndAR();
@@ -1009,142 +1013,83 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
       
       // Create video track from drone demo video instead of webcam
       try {
-        console.log('🎬 Creating video track from drone demo video...');
+        console.log('🎬 Creating video track for streaming...');
         
-        // Create a video element to load the drone video
-        const demoVideo = document.createElement('video');
-        demoVideo.src = '/assets/videos/drone1.mov';
-        demoVideo.loop = true;
-        demoVideo.muted = true;
-        demoVideo.playsInline = true;
-        demoVideo.crossOrigin = 'anonymous'; // Add CORS support
-        
-        console.log('📹 Drone video element created, attempting to load...');
-        
-        // Wait for video to load and start playing
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Drone video loading timeout after 15 seconds'));
-          }, 15000);
+        // Prioritize webcam for streaming if available
+        if (webcamStream && webcamStream.getVideoTracks().length > 0) {
+          console.log('📹 Using webcam for streaming');
           
-          demoVideo.onloadeddata = () => {
-            console.log('✅ Drone demo video loaded successfully');
-            console.log(`📐 Video dimensions: ${demoVideo.videoWidth}x${demoVideo.videoHeight}`);
-            console.log(`⏱️ Video duration: ${demoVideo.duration}s`);
-            clearTimeout(timeout);
-            
-            demoVideo.play().then(() => {
-              console.log('▶️ Drone video is now playing');
-              setDroneDemoPlaying(true);
-              setDroneDemoInitialized(true);
-              resolve(undefined);
-            }).catch((playError) => {
-              console.error('❌ Failed to play drone video:', playError);
-              reject(playError);
-            });
-          };
-          
-          demoVideo.onerror = (error) => {
-            console.error('❌ Drone video loading error:', error);
-            clearTimeout(timeout);
-            reject(new Error('Failed to load drone demo video'));
-          };
-          
-          demoVideo.onloadstart = () => {
-            console.log('🔄 Drone video loading started...');
-          };
-          
-          demoVideo.oncanplay = () => {
-            console.log('✅ Drone video can start playing');
-          };
-          
-          demoVideo.onplaying = () => {
-            console.log('🎬 Drone video is playing');
-          };
-        });
-        
-        console.log('🎥 Drone video ready, creating Agora video track...');
-        
-        // Check if captureStream is available
-        if (typeof (demoVideo as any).captureStream !== 'function') {
-          throw new Error('captureStream not supported in this browser');
-        }
-        
-        // Create video track from the demo video with higher frame rate
-        const videoStream = (demoVideo as any).captureStream(30);
-        const videoTracks = videoStream.getVideoTracks();
-        
-        if (videoTracks.length === 0) {
-          throw new Error('No video tracks available from drone video stream');
-        }
-        
-        console.log(`📊 Video stream captured with ${videoTracks.length} tracks`);
-        console.log(`🎯 Video track settings:`, videoTracks[0].getSettings());
-        
-        const videoTrack = await AgoraRTC.createCustomVideoTrack({
-          mediaStreamTrack: videoTracks[0],
-        });
-        
-        console.log('✅ Agora video track created successfully');
-        console.log('🎯 Video track info:', {
-          trackId: videoTrack.getTrackId(),
-          enabled: videoTrack.enabled,
-          muted: videoTrack.muted
-        });
-        
-        // Create audio track from microphone for host commentary
-        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-        console.log('🎤 Audio track created successfully');
-        
-        localVideoTrackRef.current = videoTrack;
-        localAudioTrackRef.current = audioTrack;
-        
-        // Publish tracks
-        console.log('📤 Publishing video and audio tracks...');
-        await client.publish([videoTrack, audioTrack]);
-        console.log('✅ Published robotics demo stream with drone video');
-        
-        setIsStreaming(true);
-        setDroneVideoElement(demoVideo);
-        
-        // Add periodic logging to monitor stream health
-        const streamMonitor = setInterval(() => {
-          console.log('📊 Stream health check:', {
-            videoTrackEnabled: videoTrack.enabled,
-            videoTrackMuted: videoTrack.muted,
-            audioTrackEnabled: audioTrack.enabled,
-            audioTrackMuted: audioTrack.muted,
-            clientConnectionState: client.connectionState,
-            publishedTracks: client.localTracks.length
+          const videoTrack = await AgoraRTC.createCustomVideoTrack({
+            mediaStreamTrack: webcamStream.getVideoTracks()[0],
           });
-        }, 10000);
-        
-        // Store monitor for cleanup
-        (client as any)._streamMonitor = streamMonitor;
-        
-      } catch (videoError) {
-        console.error('❌ Failed to create video track from drone video, falling back to webcam:', videoError);
-        
-        // Fallback to webcam if drone video fails
-        if (webcamStream) {
-          const [videoTrack, audioTrack] = await Promise.all([
-            AgoraRTC.createCustomVideoTrack({
-              mediaStreamTrack: webcamStream.getVideoTracks()[0],
-            }),
-            AgoraRTC.createMicrophoneAudioTrack()
-          ]);
+          
+          console.log('✅ Agora video track created from webcam successfully');
+          
+          // Create audio track from microphone for host commentary
+          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+          console.log('🎤 Audio track created successfully');
           
           localVideoTrackRef.current = videoTrack;
           localAudioTrackRef.current = audioTrack;
           
           // Publish tracks
+          console.log('📤 Publishing webcam video and audio tracks...');
           await client.publish([videoTrack, audioTrack]);
-          console.log('✅ Published robotics demo stream with webcam fallback');
+          console.log('✅ Published webcam stream successfully');
           
           setIsStreaming(true);
+          
+        } else if (droneDemoPlaying && droneDemoVideoRef.current) {
+          console.log('📹 Using drone demo video for streaming');
+          
+          // Create a video element to load the drone video
+          const demoVideo = droneDemoVideoRef.current;
+          
+          console.log('📹 Using existing drone video element for streaming');
+          console.log(`📐 Video dimensions: ${demoVideo.videoWidth}x${demoVideo.videoHeight}`);
+          
+          // Check if captureStream is available
+          if (typeof (demoVideo as any).captureStream !== 'function') {
+            throw new Error('captureStream not supported in this browser');
+          }
+          
+          // Create video track from the demo video with higher frame rate
+          const videoStream = (demoVideo as any).captureStream(30);
+          const videoTracks = videoStream.getVideoTracks();
+          
+          if (videoTracks.length === 0) {
+            throw new Error('No video tracks available from drone video stream');
+          }
+          
+          console.log(`📊 Video stream captured with ${videoTracks.length} tracks`);
+          console.log(`🎯 Video track settings:`, videoTracks[0].getSettings());
+          
+          const videoTrack = await AgoraRTC.createCustomVideoTrack({
+            mediaStreamTrack: videoTracks[0],
+          });
+          
+          console.log('✅ Agora video track created from drone video successfully');
+          
+          // Create audio track from microphone for host commentary
+          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+          console.log('🎤 Audio track created successfully');
+          
+          localVideoTrackRef.current = videoTrack;
+          localAudioTrackRef.current = audioTrack;
+          
+          // Publish tracks
+          console.log('📤 Publishing drone video and audio tracks...');
+          await client.publish([videoTrack, audioTrack]);
+          console.log('✅ Published drone demo stream successfully');
+          
+          setIsStreaming(true);
+          setDroneVideoElement(demoVideo);
         } else {
-          throw new Error('No video source available (drone video failed and no webcam)');
+          throw new Error('No video source available (neither webcam nor drone video)');
         }
+      } catch (videoError) {
+        console.error('❌ Failed to create video track for streaming:', videoError);
+        setStreamingError(`Failed to start stream: ${videoError instanceof Error ? videoError.message : String(videoError)}`);
       }
     } catch (error) {
       console.error('❌ Error starting stream:', error);
@@ -1288,41 +1233,39 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
               muted
             />
             
-            {/* Webcam Video Background - DISABLED FOR DEMO 
+            {/* Webcam Video Background - show when drone video is not available */}
             <video 
               ref={videoRef}
               className="w-full h-full object-cover"
               style={{ 
                 transform: 'scaleX(-1)', // Mirror the video
                 zIndex: 1,
-                display: (arMode && !droneDemoPlaying && !isStreaming) ? 'block' : 'none'
+                display: (!droneDemoPlaying && webcamStream) ? 'block' : 'none'
               }}
               autoPlay
               playsInline
               muted
             />
-            */}
             
             {/* Debug overlay to show loading status */}
-            {!droneDemoPlaying && (
+            {!droneDemoPlaying && !webcamStream && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-800 z-10">
                 <div className="text-white text-center">
                   <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                  <p>Loading drone demo video...</p>
+                  <p>Loading video source...</p>
                 </div>
               </div>
             )}
             
-            {/* Remove webcam error display since we're not using webcam
+            {/* Show error if both video sources fail */}
             {!droneDemoPlaying && webcamError && (
               <div className="absolute inset-0 flex items-center justify-center bg-red-900/20 z-10">
                 <div className="text-red-400 text-center p-4">
-                  <p className="font-semibold mb-2">Video Error</p>
-                  <p className="text-sm">Failed to load drone demo video and camera</p>
+                  <p className="font-semibold mb-2">Video Source Error</p>
+                  <p className="text-sm">Failed to load demo video and camera</p>
                 </div>
               </div>
             )}
-            */}
             
             {/* Canvas for both AR overlay and 3D rendering - Constrained to video area */}
             <canvas 
@@ -1351,9 +1294,12 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                   Channel: {session.id}<br />
                   UID: {localUid}<br />
                   Viewers: {remoteUsers.size}<br />
+                  Video Source: {webcamStream ? 'Webcam' : 'Demo Video'}<br />
                   AR Markers: {detectedMarkers.length}<br />
-                  Drone Demo: {droneDemoPlaying ? 'Playing' : 'Stopped'}<br />
-                  Video Size: {droneDemoVideoRef.current?.videoWidth}x{droneDemoVideoRef.current?.videoHeight}
+                  Video Size: {webcamStream ? 
+                    `${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}` :
+                    `${droneDemoVideoRef.current?.videoWidth}x${droneDemoVideoRef.current?.videoHeight}`
+                  }
                 </div>
               </div>
             )}
@@ -1364,10 +1310,13 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
                 <div className="text-sm font-medium mb-1">Debug Info</div>
                 <div className="text-xs text-white/70">
                   Mode: {arMode ? 'AR (Camera + Overlay)' : '3D (Full Game)'}<br />
-                  Drone Demo: {droneDemoPlaying ? 'Playing' : 'Loading/Stopped'}<br />
+                  Video Source: {webcamStream ? 'Webcam' : (droneDemoPlaying ? 'Demo Video' : 'Loading...')}<br />
                   AR System: {arMode && renderSystemRef.current ? 'Initialized' : 'Not Active'}<br />
                   3D Game: {!arMode && gameLoopRef.current ? 'Running' : 'Not Active'}<br />
-                  Video Size: {droneDemoVideoRef.current?.videoWidth}x{droneDemoVideoRef.current?.videoHeight}<br />
+                  Video Size: {webcamStream ? 
+                    `${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}` :
+                    `${droneDemoVideoRef.current?.videoWidth}x${droneDemoVideoRef.current?.videoHeight}`
+                  }<br />
                   AR Markers: {detectedMarkers.length}
                 </div>
               </div>

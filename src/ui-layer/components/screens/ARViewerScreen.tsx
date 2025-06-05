@@ -395,42 +395,76 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
               
               // Instead of complex streaming, just play the same drone video locally
               setTimeout(() => {
-                console.log(`🎬 Creating local drone video for synchronized viewing`);
+                console.log(`🎬 Starting local drone video for synchronized viewing`);
                 
-                // Create main host video view
+                // Create main video view
                 const mainContainer = document.createElement('div');
-                mainContainer.id = `main-host-${user.uid}`;
+                mainContainer.id = `main-drone-video`;
                 mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
                 
-                const hostVideo = document.createElement('video');
-                hostVideo.className = 'w-full h-full object-cover';
-                hostVideo.autoplay = true;
-                hostVideo.playsInline = true;
-                hostVideo.muted = true;
-                hostVideo.loop = true;
-                hostVideo.style.transform = 'scaleX(-1)'; // Mirror the video
-                hostVideo.id = `host-video-${user.uid}`;
-                hostVideo.src = '/assets/videos/drone1.mov'; // Play the same video locally
+                const droneVideo = document.createElement('video');
+                droneVideo.className = 'w-full h-full object-cover';
+                droneVideo.autoplay = true;
+                droneVideo.playsInline = true;
+                droneVideo.muted = true;
+                droneVideo.loop = true;
+                droneVideo.style.transform = 'scaleX(-1)'; // Mirror the video
+                droneVideo.style.filter = 'brightness(0.7)'; // Match host screen brightness
+                droneVideo.id = `drone-video`;
+                droneVideo.src = '/assets/videos/drone1.mov'; // Play the drone video locally
                 
                 console.log(`🎥 Loading drone video locally for synchronized viewing`);
                 
                 // Add event listeners for debugging
-                hostVideo.addEventListener('loadeddata', () => {
-                  console.log(`📹 Local drone video loaded: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
+                droneVideo.addEventListener('loadeddata', () => {
+                  console.log(`📹 Local drone video loaded: ${droneVideo.videoWidth}x${droneVideo.videoHeight}`);
                 });
                 
-                hostVideo.addEventListener('playing', () => {
+                droneVideo.addEventListener('playing', () => {
                   console.log(`📹 Local drone video is playing`);
                 });
                 
-                hostVideo.addEventListener('error', (e) => {
+                droneVideo.addEventListener('error', async (e) => {
                   console.error(`❌ Local drone video error:`, e);
+                  console.log('🔄 Fallback to webcam for synchronized viewing...');
+                  
+                  try {
+                    // Fallback to webcam
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                      video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                      } 
+                    });
+                    
+                    console.log('📹 Webcam access granted for viewer');
+                    
+                    // Replace drone video with webcam video
+                    droneVideo.srcObject = stream;
+                    droneVideo.src = ''; // Clear the src
+                    droneVideo.style.transform = 'scaleX(-1)'; // Mirror webcam
+                    
+                    console.log('✅ Using webcam as fallback for synchronized viewing');
+                  } catch (webcamError) {
+                    console.error('❌ Failed to access webcam as fallback:', webcamError);
+                    
+                    // Show error message in video container
+                    mainContainer.innerHTML = `
+                      <div class="w-full h-full flex items-center justify-center bg-gray-800 text-white">
+                        <div class="text-center">
+                          <p class="text-lg font-semibold mb-2">Video Source Error</p>
+                          <p class="text-sm">Failed to load demo video and camera</p>
+                        </div>
+                      </div>
+                    `;
+                  }
                 });
                 
-                mainContainer.appendChild(hostVideo);
+                mainContainer.appendChild(droneVideo);
                 
                 // Store reference for AR detection
-                hostVideoRef.current = hostVideo;
+                hostVideoRef.current = droneVideo;
                 
                 // Add to main view container
                 if (mainViewRef.current) {
@@ -438,24 +472,25 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                   mainViewRef.current.appendChild(mainContainer);
                   
                   // Start playing the video
-                  hostVideo.play().then(() => {
+                  droneVideo.play().then(() => {
                     console.log(`✅ Local drone video started playing successfully`);
                     
                     // Initialize AR overlay once video is playing
                     setTimeout(() => {
-                      if (hostVideo.videoWidth > 0 && hostVideo.videoHeight > 0) {
-                        console.log(`📐 Video dimensions ready: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
+                      if (droneVideo.videoWidth > 0 && droneVideo.videoHeight > 0) {
+                        console.log(`📐 Video dimensions ready: ${droneVideo.videoWidth}x${droneVideo.videoHeight}`);
                         initializeAROverlay();
                       }
                     }, 500);
                     
                   }).catch((playError) => {
                     console.error(`❌ Failed to play local drone video:`, playError);
+                    // Error handler above will handle fallback to webcam
                   });
                 } else {
                   console.error(`❌ mainViewRef.current is null`);
                 }
-              }, 100);
+              }, 500);
             } else {
               console.log(`👥 User ${user.uid} is a VIEWER with video`);
               // This is a viewer - display in participant tile (tile already exists from user-joined)
@@ -625,71 +660,6 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
       setIsConnected(true);
       setConnectionError(null);
       console.log('✅ Connected to stream successfully');
-      
-      // Start playing drone video immediately when connected
-      setTimeout(() => {
-        console.log(`🎬 Starting local drone video for synchronized viewing`);
-        
-        // Create main video view
-        const mainContainer = document.createElement('div');
-        mainContainer.id = `main-drone-video`;
-        mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
-        
-        const droneVideo = document.createElement('video');
-        droneVideo.className = 'w-full h-full object-cover';
-        droneVideo.autoplay = true;
-        droneVideo.playsInline = true;
-        droneVideo.muted = true;
-        droneVideo.loop = true;
-        droneVideo.style.transform = 'scaleX(-1)'; // Mirror the video
-        droneVideo.style.filter = 'brightness(0.7)'; // Match host screen brightness
-        droneVideo.id = `drone-video`;
-        droneVideo.src = '/assets/videos/drone1.mov'; // Play the drone video locally
-        
-        console.log(`🎥 Loading drone video locally for synchronized viewing`);
-        
-        // Add event listeners for debugging
-        droneVideo.addEventListener('loadeddata', () => {
-          console.log(`📹 Local drone video loaded: ${droneVideo.videoWidth}x${droneVideo.videoHeight}`);
-        });
-        
-        droneVideo.addEventListener('playing', () => {
-          console.log(`📹 Local drone video is playing`);
-        });
-        
-        droneVideo.addEventListener('error', (e) => {
-          console.error(`❌ Local drone video error:`, e);
-        });
-        
-        mainContainer.appendChild(droneVideo);
-        
-        // Store reference for AR detection
-        hostVideoRef.current = droneVideo;
-        
-        // Add to main view container
-        if (mainViewRef.current) {
-          console.log(`📺 Adding local drone video to main view`);
-          mainViewRef.current.appendChild(mainContainer);
-          
-          // Start playing the video
-          droneVideo.play().then(() => {
-            console.log(`✅ Local drone video started playing successfully`);
-            
-            // Initialize AR overlay once video is playing
-            setTimeout(() => {
-              if (droneVideo.videoWidth > 0 && droneVideo.videoHeight > 0) {
-                console.log(`📐 Video dimensions ready: ${droneVideo.videoWidth}x${droneVideo.videoHeight}`);
-                initializeAROverlay();
-              }
-            }, 500);
-            
-          }).catch((playError) => {
-            console.error(`❌ Failed to play local drone video:`, playError);
-          });
-        } else {
-          console.error(`❌ mainViewRef.current is null`);
-        }
-      }, 500);
       
       // Add periodic debugging to monitor connection state
       const debugInterval = setInterval(() => {

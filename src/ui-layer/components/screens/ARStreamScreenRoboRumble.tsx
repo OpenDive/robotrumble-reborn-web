@@ -458,33 +458,95 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
   // Initialize webcam and AR on component mount
   useEffect(() => {
     const initializeRoboRumbleVideoAndAR = async () => {
-      // Initialize RoboRumble demo video first - only if not already initialized
+      // Initialize robo rumble demo video first - only if not already initialized
       if (!roboRumbleDemoInitialized && !roboRumbleDemoPlaying) {
-        await initializeRoboRumbleDemoVideo();
+        try {
+          await initializeRoboRumbleDemoVideo();
+        } catch (error) {
+          console.error('Failed to initialize robo rumble demo video:', error);
+          setRoboRumbleDemoInitialized(true);
+          setRoboRumbleDemoPlaying(false);
+        }
       }
       
-      // For demo: just set AR mode to true since we have roborumble.mp4
-      console.log('Demo mode: Using roborumble.mp4 instead of webcam');
-      setArMode(true);
-      
-      // Initialize AR system immediately and also with delays to ensure it starts
-      console.log('Starting AR system initialization...');
-      initializeARSystem();
-      
-      // Also try with delays to ensure it works even if timing is off
-      setTimeout(() => {
-        console.log('Backup AR initialization attempt 1...');
-        if (!renderSystemRef.current) {
-          initializeARSystem();
+      // Wait a bit to see if robo rumble video loads successfully
+      setTimeout(async () => {
+        if (!roboRumbleDemoPlaying) {
+          console.log('Robo rumble demo video failed to load, falling back to webcam...');
+          
+          try {
+            console.log('Requesting webcam access...');
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+              video: { 
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              } 
+            });
+            
+            console.log('Webcam access granted');
+            setWebcamStream(stream);
+            setWebcamError(null);
+            
+            // Set up video element
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+              
+              const onVideoLoaded = async () => {
+                console.log('Webcam video loaded, video dimensions:', 
+                  videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+                
+                // Ensure video is playing before starting AR
+                if (videoRef.current) {
+                  try {
+                    await videoRef.current.play();
+                    console.log('Webcam video is now playing, starting AR initialization...');
+                  } catch (error) {
+                    console.log('Video play() returned promise, likely already playing');
+                  }
+                  
+                  // Set AR mode to true now that video is ready
+                  setArMode(true);
+                  
+                  // Wait a bit more to ensure video is fully ready
+                  setTimeout(() => {
+                    initializeARSystem();
+                  }, 500);
+                }
+                
+                videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
+              };
+              
+              const onVideoError = (error: any) => {
+                console.error('Video element error:', error);
+                setWebcamError('Failed to load video stream');
+              };
+              
+              videoRef.current.addEventListener('loadeddata', onVideoLoaded);
+              videoRef.current.addEventListener('error', onVideoError);
+              
+              // Also listen for when video starts playing
+              const onVideoPlay = () => {
+                console.log('Webcam video started playing');
+              };
+              videoRef.current.addEventListener('play', onVideoPlay);
+            }
+          } catch (error) {
+            console.error('Failed to access webcam:', error);
+            setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
+            setArMode(false);
+          }
+        } else {
+          // Robo rumble video is playing, set AR mode to true
+          console.log('Using robo rumble demo video for AR');
+          setArMode(true);
+          
+          // Initialize AR system after a short delay to ensure robo rumble video is ready
+          setTimeout(() => {
+            initializeARSystem();
+          }, 1000);
         }
-      }, 1000);
-      
-      setTimeout(() => {
-        console.log('Backup AR initialization attempt 2...');
-        if (!renderSystemRef.current) {
-          initializeARSystem();
-        }
-      }, 3000);
+      }, 2000); // Wait 2 seconds for robo rumble video to initialize
     };
 
     initializeRoboRumbleVideoAndAR();
@@ -1081,13 +1143,14 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
 
           {/* Main Camera + AR View - Takes remaining space */}
           <div className="flex-1 relative min-h-0 overflow-hidden">
-            {/* RoboRumble Demo Video - show by default and continue during streaming */}
+            {/* RoboRumble Demo Video - show when playing */}
             <video 
               ref={roboRumbleDemoVideoRef}
               className="w-full h-full object-cover"
               style={{ 
                 zIndex: 1,
-                display: roboRumbleDemoPlaying ? 'block' : 'none'
+                display: roboRumbleDemoPlaying ? 'block' : 'none',
+                filter: 'brightness(0.8)'
               }}
               autoPlay
               loop
@@ -1095,50 +1158,39 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
               muted
             />
             
-            {/* Webcam Video Background - DISABLED FOR DEMO 
+            {/* Webcam Video Background - show when robo rumble video is not available */}
             <video 
               ref={videoRef}
               className="w-full h-full object-cover"
               style={{ 
                 transform: 'scaleX(-1)', // Mirror the video
                 zIndex: 1,
-                display: (arMode && !roboRumbleDemoPlaying && !isStreaming) ? 'block' : 'none'
+                display: (!roboRumbleDemoPlaying && webcamStream) ? 'block' : 'none'
               }}
               autoPlay
               playsInline
               muted
             />
-            */}
             
             {/* Debug overlay to show loading status */}
-            {!roboRumbleDemoPlaying && (
+            {!roboRumbleDemoPlaying && !webcamStream && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-800 z-10">
                 <div className="text-white text-center">
                   <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                  <p>Loading RoboRumble demo video...</p>
+                  <p>Loading video source...</p>
                 </div>
               </div>
             )}
             
-            {/* Remove webcam error display since we're not using webcam
-            {arMode && !webcamStream && !webcamError && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-800 z-10">
-                <div className="text-white text-center">
-                  <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                  <p>Loading camera...</p>
-                </div>
-              </div>
-            )}
-            
-            {arMode && webcamError && (
+            {/* Show error if both video sources fail */}
+            {!roboRumbleDemoPlaying && webcamError && (
               <div className="absolute inset-0 flex items-center justify-center bg-red-900/20 z-10">
                 <div className="text-red-400 text-center p-4">
-                  <p className="font-semibold mb-2">Camera Error</p>
-                  <p className="text-sm">{webcamError}</p>
+                  <p className="font-semibold mb-2">Video Source Error</p>
+                  <p className="text-sm">Failed to load demo video and camera</p>
                 </div>
               </div>
             )}
-            */}
             
             {/* Canvas for both AR overlay and 3D rendering - Constrained to video area */}
             <canvas 
