@@ -12,6 +12,7 @@ import { ARStreamScreenCrossyRobo } from './components/screens/ARStreamScreenCro
 import { ARViewerScreenCrossyRobo } from './components/screens/ARViewerScreenCrossyRobo';
 import { ARStreamScreenRoboRumble } from './components/screens/ARStreamScreenRoboRumble';
 import { ARViewerScreenRoboRumble } from './components/screens/ARViewerScreenRoboRumble';
+import { TeamRegistrationScreen } from './components/screens/TeamRegistrationScreen';
 import { RouteTransition } from './components/transitions/RouteTransition';
 import { RaceScreen } from './components/screens/RaceScreen';
 import BabylonTestScreen from './components/screens/BabylonTestScreen';
@@ -99,6 +100,22 @@ function AppContent() {
     navigate('/lobby');
   };
 
+  const handleTeamRegistration = () => {
+    navigate('/team-registration');
+  };
+
+  const handleTeamRegistrationComplete = (teamId: string, memberData: any) => {
+    console.log('Team registration completed:', { teamId, memberData });
+    // Store team data in localStorage or context for now
+    localStorage.setItem('teamRegistration', JSON.stringify({ teamId, memberData }));
+    // Navigate to lobby to select streams
+    navigate('/lobby');
+  };
+
+  const handleBackToLogin = () => {
+    navigate('/');
+  };
+
   // Helper function to get the correct AR Stream component based on track name
   const getARStreamComponent = (session: RaceSession) => {
     switch (session.trackName) {
@@ -170,6 +187,14 @@ function AppContent() {
       <Route path="/drivers-license" element={
         <RouteTransition route="license">
           <DriversLicenseScreen onComplete={handleLicenseComplete} />
+        </RouteTransition>
+      } />
+      <Route path="/team-registration" element={
+        <RouteTransition route="team-registration">
+          <TeamRegistrationScreen 
+            onBack={handleBackToLogin} 
+            onRegistrationComplete={handleTeamRegistrationComplete}
+          />
         </RouteTransition>
       } />
       <Route path="/game-menu" element={

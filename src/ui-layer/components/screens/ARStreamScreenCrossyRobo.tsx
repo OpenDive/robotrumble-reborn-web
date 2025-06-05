@@ -186,7 +186,7 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
             if (videoRef.current) {
               try {
                 await videoRef.current.play();
-                console.log('Video is now playing, starting AR initialization...');
+                console.log('Webcam video is now playing, starting AR initialization...');
               } catch (error) {
                 console.log('Video play() returned promise, likely already playing');
               }
@@ -204,23 +204,31 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
           };
           
           const onVideoError = (error: any) => {
-            console.error('Video element error:', error);
-            setWebcamError('Failed to load video stream');
+            console.error('Webcam video element error:', error);
+            setWebcamError('Failed to load webcam video stream');
           };
           
           videoRef.current.addEventListener('loadeddata', onVideoLoaded);
           videoRef.current.addEventListener('error', onVideoError);
           
           const onVideoPlay = () => {
-            console.log('Video started playing');
+            console.log('Webcam video started playing');
             videoRef.current?.removeEventListener('play', onVideoPlay);
           };
           
           videoRef.current.addEventListener('play', onVideoPlay);
         }
-      } catch (error) {
-        console.error('Failed to access webcam:', error);
-        setWebcamError(`Webcam access failed: ${error instanceof Error ? error.message : String(error)}`);
+      } catch (webcamError) {
+        console.error('❌ Failed to access webcam, falling back to demo video:', webcamError);
+        setWebcamError(`Webcam access failed: ${webcamError instanceof Error ? webcamError.message : String(webcamError)}`);
+        
+        // Fallback to demo video
+        if (!crossyDemoInitialized && !crossyDemoPlaying) {
+          await initializeCrossyDemoVideo();
+        }
+        
+        console.log('Fallback mode: Using crossy_robo.mp4 instead of webcam');
+        setArMode(true);
       }
     } else {
       // Switching TO 3D mode - cleanup AR first
@@ -461,16 +469,80 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
   // Initialize webcam and AR on component mount
   useEffect(() => {
     const initializeCrossyVideoAndAR = async () => {
-      // Initialize Crossy demo video first - only if not already initialized
-      if (!crossyDemoInitialized && !crossyDemoPlaying) {
-        await initializeCrossyDemoVideo();
+      // Try to initialize webcam first
+      console.log('Attempting to start webcam for crossy robo...');
+      
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        });
+        setWebcamStream(stream);
+        setWebcamError(null);
+        console.log('✅ Webcam stream started successfully');
+        
+        // Set up video element
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          
+          const onVideoLoaded = async () => {
+            console.log('Webcam video loaded, video dimensions:', 
+              videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+            
+            // Ensure video is playing before starting AR
+            if (videoRef.current) {
+              try {
+                await videoRef.current.play();
+                console.log('Webcam video is now playing, starting AR initialization...');
+              } catch (error) {
+                console.log('Video play() returned promise, likely already playing');
+              }
+              
+              // Set AR mode to true now that video is ready
+              setArMode(true);
+              
+              // Wait a bit more to ensure video is fully ready
+              setTimeout(() => {
+                initializeARSystem();
+              }, 500);
+            }
+            
+            videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
+          };
+          
+          const onVideoError = (error: any) => {
+            console.error('Webcam video element error:', error);
+            setWebcamError('Failed to load webcam video stream');
+          };
+          
+          videoRef.current.addEventListener('loadeddata', onVideoLoaded);
+          videoRef.current.addEventListener('error', onVideoError);
+          
+          const onVideoPlay = () => {
+            console.log('Webcam video started playing');
+            videoRef.current?.removeEventListener('play', onVideoPlay);
+          };
+          
+          videoRef.current.addEventListener('play', onVideoPlay);
+        }
+        
+      } catch (webcamError) {
+        console.error('❌ Failed to access webcam, falling back to demo video:', webcamError);
+        setWebcamError(`Webcam access failed: ${webcamError instanceof Error ? webcamError.message : String(webcamError)}`);
+        
+        // Fallback to demo video
+        if (!crossyDemoInitialized && !crossyDemoPlaying) {
+          await initializeCrossyDemoVideo();
+        }
+        
+        console.log('Fallback mode: Using crossy_robo.mp4 instead of webcam');
+        setArMode(true);
       }
       
-      // For demo: just set AR mode to true since we have crossy_robo.mp4
-      console.log('Demo mode: Using crossy_robo.mp4 instead of webcam');
-      setArMode(true);
-      
-      // Initialize AR system immediately and also with delays to ensure it starts
+      // Initialize AR system with delays to ensure it starts
       console.log('Starting AR system initialization...');
       initializeARSystem();
       
@@ -972,121 +1044,155 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
       await client.join(APP_ID, session.id, token, uid);
       console.log(`Joined channel ${session.id} with UID ${uid} as Crossy Robo host`);
       
-      // Create video track from crossy demo video instead of webcam
+      // Create video track - prioritize webcam, fallback to demo video
       try {
-        console.log('🎬 Creating video track from UI crossy video...');
-        
-        // Use the UI video element
-        const demoVideo = uiVideoRef.current;
-        if (!demoVideo) {
-          throw new Error('UI video element not available');
-        }
-        
-        console.log('📹 UI video element found, checking readiness...');
-        
-        // Wait for video to be ready if needed
-        if (demoVideo.videoWidth === 0 || demoVideo.videoHeight === 0) {
-          console.log('📹 Waiting for UI video to load...');
-          await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              reject(new Error('UI video loading timeout'));
-            }, 10000);
-            
-            const checkReady = () => {
-              if (demoVideo.videoWidth > 0 && demoVideo.videoHeight > 0) {
-                clearTimeout(timeout);
-                console.log(`✅ UI video ready: ${demoVideo.videoWidth}x${demoVideo.videoHeight}`);
-                resolve(undefined);
-              } else {
-                setTimeout(checkReady, 100);
-              }
-            };
-            
-            checkReady();
-          });
-        }
-        
-        console.log('🎥 UI video ready, creating Agora video track...');
-        
-        // Check if captureStream is available
-        if (typeof (demoVideo as any).captureStream !== 'function') {
-          throw new Error('captureStream not supported in this browser');
-        }
-        
-        // Create video track from the UI video with higher frame rate
-        const videoStream = (demoVideo as any).captureStream(30);
-        const videoTracks = videoStream.getVideoTracks();
-        
-        if (videoTracks.length === 0) {
-          throw new Error('No video tracks available from UI video stream');
-        }
-        
-        console.log(`📊 Video stream captured with ${videoTracks.length} tracks`);
-        console.log(`🎯 Video track settings:`, videoTracks[0].getSettings());
-        
-        const videoTrack = await AgoraRTC.createCustomVideoTrack({
-          mediaStreamTrack: videoTracks[0],
-        });
-        
-        console.log('✅ Agora video track created successfully');
-        console.log('🎯 Video track info:', {
-          trackId: videoTrack.getTrackId(),
-          enabled: videoTrack.enabled,
-          muted: videoTrack.muted
-        });
-        
-        // Create audio track from microphone for host commentary
-        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-        console.log('🎤 Audio track created successfully');
-        
-        localVideoTrackRef.current = videoTrack;
-        localAudioTrackRef.current = audioTrack;
-        
-        // Publish tracks
-        console.log('📤 Publishing video and audio tracks...');
-        await client.publish([videoTrack, audioTrack]);
-        console.log('✅ Published Crossy Robo stream with crossy video');
-        
-        setIsStreaming(true);
-        
-        // Add periodic logging to monitor stream health
-        const streamMonitor = setInterval(() => {
-          console.log('📊 Stream health check:', {
-            videoTrackEnabled: videoTrack.enabled,
-            videoTrackMuted: videoTrack.muted,
-            audioTrackEnabled: audioTrack.enabled,
-            audioTrackMuted: audioTrack.muted,
-            clientConnectionState: client.connectionState,
-            publishedTracks: client.localTracks.length
-          });
-        }, 10000);
-        
-        // Store monitor for cleanup
-        (client as any)._streamMonitor = streamMonitor;
-        
-      } catch (videoError) {
-        console.error('❌ Failed to create video track from crossy video, falling back to webcam:', videoError);
-        
-        // Fallback to webcam if crossy video fails
         if (webcamStream) {
-          const [videoTrack, audioTrack] = await Promise.all([
-            AgoraRTC.createCustomVideoTrack({
-              mediaStreamTrack: webcamStream.getVideoTracks()[0],
-            }),
-            AgoraRTC.createMicrophoneAudioTrack()
-          ]);
+          console.log('🎥 Creating video track from webcam...');
+          
+          const videoTracks = webcamStream.getVideoTracks();
+          if (videoTracks.length === 0) {
+            throw new Error('No video tracks available from webcam stream');
+          }
+          
+          console.log(`📊 Webcam stream has ${videoTracks.length} tracks`);
+          console.log(`🎯 Webcam track settings:`, videoTracks[0].getSettings());
+          
+          const videoTrack = await AgoraRTC.createCustomVideoTrack({
+            mediaStreamTrack: videoTracks[0],
+          });
+          
+          console.log('✅ Agora video track created from webcam successfully');
+          console.log('🎯 Video track info:', {
+            trackId: videoTrack.getTrackId(),
+            enabled: videoTrack.enabled,
+            muted: videoTrack.muted
+          });
+          
+          // Create audio track from microphone for host commentary
+          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+          console.log('🎤 Audio track created successfully');
           
           localVideoTrackRef.current = videoTrack;
           localAudioTrackRef.current = audioTrack;
           
           // Publish tracks
+          console.log('📤 Publishing webcam video and audio tracks...');
           await client.publish([videoTrack, audioTrack]);
-          console.log('✅ Published Crossy Robo stream with webcam fallback');
+          console.log('✅ Published Crossy Robo stream with webcam');
           
           setIsStreaming(true);
+          
+          // Add periodic logging to monitor stream health
+          const streamMonitor = setInterval(() => {
+            console.log('📊 Stream health check:', {
+              videoSource: 'webcam',
+              videoTrackEnabled: videoTrack.enabled,
+              videoTrackMuted: videoTrack.muted,
+              audioTrackEnabled: audioTrack.enabled,
+              audioTrackMuted: audioTrack.muted,
+              clientConnectionState: client.connectionState,
+              publishedTracks: client.localTracks.length
+            });
+          }, 10000);
+          
+          // Store monitor for cleanup
+          (client as any)._streamMonitor = streamMonitor;
+          
         } else {
-          throw new Error('No video source available (crossy video failed and no webcam)');
+          console.log('🎬 No webcam available, creating video track from demo video...');
+          
+          // Use the UI video element
+          const demoVideo = uiVideoRef.current;
+          if (!demoVideo) {
+            throw new Error('Demo video element not available');
+          }
+          
+          console.log('📹 Demo video element found, checking readiness...');
+          
+          // Wait for video to be ready if needed
+          if (demoVideo.videoWidth === 0 || demoVideo.videoHeight === 0) {
+            console.log('📹 Waiting for demo video to load...');
+            await new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Demo video loading timeout'));
+              }, 10000);
+              
+              const checkReady = () => {
+                if (demoVideo.videoWidth > 0 && demoVideo.videoHeight > 0) {
+                  clearTimeout(timeout);
+                  console.log(`✅ Demo video ready: ${demoVideo.videoWidth}x${demoVideo.videoHeight}`);
+                  resolve(undefined);
+                } else {
+                  setTimeout(checkReady, 100);
+                }
+              };
+              
+              checkReady();
+            });
+          }
+          
+          console.log('🎥 Demo video ready, creating Agora video track...');
+          
+          // Check if captureStream is available
+          if (typeof (demoVideo as any).captureStream !== 'function') {
+            throw new Error('captureStream not supported in this browser');
+          }
+          
+          // Create video track from the demo video with higher frame rate
+          const videoStream = (demoVideo as any).captureStream(30);
+          const videoTracks = videoStream.getVideoTracks();
+          
+          if (videoTracks.length === 0) {
+            throw new Error('No video tracks available from demo video stream');
+          }
+          
+          console.log(`📊 Demo video stream captured with ${videoTracks.length} tracks`);
+          console.log(`🎯 Demo video track settings:`, videoTracks[0].getSettings());
+          
+          const videoTrack = await AgoraRTC.createCustomVideoTrack({
+            mediaStreamTrack: videoTracks[0],
+          });
+          
+          console.log('✅ Agora video track created from demo video successfully');
+          console.log('🎯 Video track info:', {
+            trackId: videoTrack.getTrackId(),
+            enabled: videoTrack.enabled,
+            muted: videoTrack.muted
+          });
+          
+          // Create audio track from microphone for host commentary
+          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+          console.log('🎤 Audio track created successfully');
+          
+          localVideoTrackRef.current = videoTrack;
+          localAudioTrackRef.current = audioTrack;
+          
+          // Publish tracks
+          console.log('📤 Publishing demo video and audio tracks...');
+          await client.publish([videoTrack, audioTrack]);
+          console.log('✅ Published Crossy Robo stream with demo video');
+          
+          setIsStreaming(true);
+          
+          // Add periodic logging to monitor stream health
+          const streamMonitor = setInterval(() => {
+            console.log('📊 Stream health check:', {
+              videoSource: 'demo',
+              videoTrackEnabled: videoTrack.enabled,
+              videoTrackMuted: videoTrack.muted,
+              audioTrackEnabled: audioTrack.enabled,
+              audioTrackMuted: audioTrack.muted,
+              clientConnectionState: client.connectionState,
+              publishedTracks: client.localTracks.length
+            });
+          }, 10000);
+          
+          // Store monitor for cleanup
+          (client as any)._streamMonitor = streamMonitor;
         }
+      } catch (videoError) {
+        console.error('❌ Failed to create video track:', videoError);
+        setStreamingError(`Failed to create video track: ${videoError instanceof Error ? videoError.message : String(videoError)}`);
       }
     } catch (error) {
       console.error('Error starting stream:', error);
@@ -1214,13 +1320,33 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
 
           {/* Main Camera + AR View - Takes remaining space */}
           <div className="flex-1 relative min-h-0 overflow-hidden">
-            {/* Crossy Demo Video - show by default and continue during streaming */}
+            {/* Webcam Video - prioritized when available */}
+            <video 
+              ref={videoRef}
+              className="w-full h-full object-cover"
+              style={{ 
+                zIndex: 1,
+                display: webcamStream ? 'block' : 'none'
+              }}
+              autoPlay
+              loop
+              playsInline
+              muted
+              onLoadedData={() => {
+                console.log('Webcam video loaded and ready');
+              }}
+              onError={(e) => {
+                console.error('Webcam video display error:', e);
+              }}
+            />
+            
+            {/* Crossy Demo Video - fallback when webcam not available */}
             <video 
               ref={uiVideoRef}
               className="w-full h-full object-cover"
               style={{ 
                 zIndex: 1,
-                display: crossyDemoPlaying ? 'block' : 'none'
+                display: (!webcamStream && crossyDemoPlaying) ? 'block' : 'none'
               }}
               src="/assets/videos/crossy_robo.mp4"
               autoPlay
@@ -1237,11 +1363,11 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
             />
             
             {/* Debug overlay to show loading status */}
-            {!crossyDemoPlaying && (
+            {!webcamStream && !crossyDemoPlaying && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-800 z-10">
                 <div className="text-white text-center">
                   <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                  <p>Loading crossy demo video...</p>
+                  <p>Loading video source...</p>
                 </div>
               </div>
             )}
@@ -1274,8 +1400,10 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                   UID: {localUid}<br />
                   Viewers: {remoteUsers.size}<br />
                   AR Markers: {detectedMarkers.length}<br />
-                  Crossy Demo: {crossyDemoPlaying ? 'Playing' : 'Stopped'}<br />
-                  Video Size: {uiVideoRef.current?.videoWidth}x{uiVideoRef.current?.videoHeight}
+                  Video Source: {webcamStream ? 'Webcam' : (crossyDemoPlaying ? 'Demo Video' : 'None')}<br />
+                  Video Size: {webcamStream ? 
+                    `${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}` : 
+                    `${uiVideoRef.current?.videoWidth}x${uiVideoRef.current?.videoHeight}`}
                 </div>
               </div>
             )}
@@ -1286,11 +1414,14 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                 <div className="text-sm font-medium mb-1">Crossy Robo Debug Info</div>
                 <div className="text-xs text-white/70">
                   Mode: {arMode ? 'AR (Camera + Overlay)' : '3D (Full Game)'}<br />
-                  Crossy Demo: {crossyDemoPlaying ? 'Playing' : 'Loading/Stopped'}<br />
+                  Video Source: {webcamStream ? 'Webcam Active' : (crossyDemoPlaying ? 'Demo Video' : 'Loading...')}<br />
                   AR System: {arMode && renderSystemRef.current ? 'Initialized' : 'Not Active'}<br />
                   3D Game: {!arMode && gameLoopRef.current ? 'Running' : 'Not Active'}<br />
-                  Video Size: {uiVideoRef.current?.videoWidth}x{uiVideoRef.current?.videoHeight}<br />
+                  Video Size: {webcamStream ? 
+                    `${videoRef.current?.videoWidth}x${videoRef.current?.videoHeight}` : 
+                    `${uiVideoRef.current?.videoWidth}x${uiVideoRef.current?.videoHeight}`}<br />
                   AR Markers: {detectedMarkers.length}
+                  {webcamError && <><br />Webcam Error: {webcamError}</>}
                 </div>
               </div>
             )}

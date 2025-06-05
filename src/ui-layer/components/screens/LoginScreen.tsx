@@ -72,6 +72,50 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
         </div>
         
         <div className="space-y-4">
+          {/* Game Pass - Featured prominently */}
+          <div className="mb-6">
+            <button 
+              onClick={() => navigate('/team-registration')}
+              className="relative w-full group flex items-center justify-center px-6 py-4 text-lg font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 hover:from-purple-500 hover:via-blue-500 hover:to-purple-500 transition-all duration-300 overflow-hidden border border-purple-400/50 shadow-[0_0_30px_rgba(147,51,234,0.4)]"
+            >
+              {/* Animated background */}
+              <div 
+                className="absolute inset-0 opacity-20 group-hover:opacity-30 transition-opacity duration-300"
+                style={{
+                  background: 'linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.3) 50%, transparent 70%)',
+                  backgroundSize: '200% 100%',
+                  animation: 'shimmer 3s linear infinite',
+                }}
+              />
+              
+              {/* Content */}
+              <div className="relative flex items-center justify-center gap-3">
+                <div className="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
+                  <span className="text-purple-900 font-bold text-sm">✨</span>
+                </div>
+                <span>Get Game Pass</span>
+                <div className="text-xs bg-yellow-400 text-purple-900 px-2 py-1 rounded-full font-black">
+                  PREMIUM
+                </div>
+              </div>
+            </button>
+            
+            {/* Description */}
+            <p className="text-center text-white/60 text-sm mt-2">
+              Stake 1 SUI • Join a team • Get camera & mic privileges
+            </p>
+          </div>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-white/10"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-black/40 text-white/60 rounded-full">or continue as guest</span>
+            </div>
+          </div>
+
           <GoogleSignIn />
           <SuiWalletConnect />
         </div>
