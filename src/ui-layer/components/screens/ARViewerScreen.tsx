@@ -360,10 +360,6 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
           
           if (mediaType === 'video' && user.videoTrack) {
             console.log(`🎥 Processing video track for user ${user.uid}`);
-            console.log(`📊 Video track details:`, {
-              trackId: user.videoTrack.getTrackId(),
-              hasVideoTrack: !!user.videoTrack
-            });
             
             // Check if we've already processed this exact video track
             const trackId = user.videoTrack.getTrackId();
@@ -378,144 +374,69 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             existingUser.videoTrack = user.videoTrack;
             existingUser.hasVideo = true;
             
-            // Determine if this is the host (first video publisher or has higher authority)
-            // For simplicity, treat the first video publisher as host
+            // Determine if this is the host (first video publisher)
             if (!hostUser) {
               console.log(`👑 User ${user.uid} is now the HOST - setting up main video display`);
-              // This is the host - display in main view with AR
               existingUser.isHost = true;
               setHostUser(existingUser);
               
-              // Remove this user's tile from participant grid since they're now the host
-              const existingTile = document.getElementById(`participant-${user.uid}`);
-              if (existingTile) {
-                existingTile.remove();
-                console.log(`🗑️ Removed host tile from participant grid for user ${user.uid}`);
-              }
-              
-              // Instead of complex streaming, just play the same drone video locally
+              // Create main video view for host stream
               setTimeout(() => {
-                console.log(`🎬 Starting local drone video for synchronized viewing`);
+                console.log(`🎬 Setting up host video display for user ${user.uid}`);
                 
-                // Create main video view
+                // Create main video container
                 const mainContainer = document.createElement('div');
-                mainContainer.id = `main-drone-video`;
+                mainContainer.id = `main-host-${user.uid}`;
                 mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
                 
-                const droneVideo = document.createElement('video');
-                droneVideo.className = 'w-full h-full object-cover';
-                droneVideo.autoplay = true;
-                droneVideo.playsInline = true;
-                droneVideo.muted = true;
-                droneVideo.loop = true;
-                droneVideo.style.transform = 'scaleX(-1)'; // Mirror the video
-                droneVideo.style.filter = 'brightness(0.7)'; // Match host screen brightness
-                droneVideo.id = `drone-video`;
-                droneVideo.src = '/assets/videos/drone1.mov'; // Play the drone video locally
+                const hostVideo = document.createElement('video');
+                hostVideo.className = 'w-full h-full object-cover';
+                hostVideo.autoplay = true;
+                hostVideo.playsInline = true;
+                hostVideo.muted = true;
+                hostVideo.id = `host-video-${user.uid}`;
                 
-                console.log(`🎥 Loading drone video locally for synchronized viewing`);
+                // Play the host's video stream
+                user.videoTrack!.play(hostVideo);
+                
+                console.log(`📹 Host video stream playing`);
                 
                 // Add event listeners for debugging
-                droneVideo.addEventListener('loadeddata', () => {
-                  console.log(`📹 Local drone video loaded: ${droneVideo.videoWidth}x${droneVideo.videoHeight}`);
-                });
-                
-                droneVideo.addEventListener('playing', () => {
-                  console.log(`📹 Local drone video is playing`);
-                });
-                
-                droneVideo.addEventListener('error', async (e) => {
-                  console.error(`❌ Local drone video error:`, e);
-                  console.log('🔄 Fallback to webcam for synchronized viewing...');
+                hostVideo.addEventListener('loadeddata', () => {
+                  console.log(`📹 Host video loaded: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
                   
-                  try {
-                    // Fallback to webcam
-                    const stream = await navigator.mediaDevices.getUserMedia({ 
-                      video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                      } 
-                    });
-                    
-                    console.log('📹 Webcam access granted for viewer');
-                    
-                    // Replace drone video with webcam video
-                    droneVideo.srcObject = stream;
-                    droneVideo.src = ''; // Clear the src
-                    droneVideo.style.transform = 'scaleX(-1)'; // Mirror webcam
-                    
-                    console.log('✅ Using webcam as fallback for synchronized viewing');
-                  } catch (webcamError) {
-                    console.error('❌ Failed to access webcam as fallback:', webcamError);
-                    
-                    // Show error message in video container
-                    mainContainer.innerHTML = `
-                      <div class="w-full h-full flex items-center justify-center bg-gray-800 text-white">
-                        <div class="text-center">
-                          <p class="text-lg font-semibold mb-2">Video Source Error</p>
-                          <p class="text-sm">Failed to load demo video and camera</p>
-                        </div>
-                      </div>
-                    `;
-                  }
+                  // Initialize AR overlay once host video is ready
+                  setTimeout(() => {
+                    if (hostVideo.videoWidth > 0 && hostVideo.videoHeight > 0) {
+                      console.log(`📐 Host video dimensions ready: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
+                      hostVideoRef.current = hostVideo;
+                      initializeAROverlay();
+                    }
+                  }, 500);
                 });
                 
-                mainContainer.appendChild(droneVideo);
+                hostVideo.addEventListener('playing', () => {
+                  console.log(`📹 Host video is playing`);
+                });
                 
-                // Store reference for AR detection
-                hostVideoRef.current = droneVideo;
+                hostVideo.addEventListener('error', (e) => {
+                  console.error(`❌ Host video error:`, e);
+                });
+                
+                mainContainer.appendChild(hostVideo);
                 
                 // Add to main view container
                 if (mainViewRef.current) {
-                  console.log(`📺 Adding local drone video to main view`);
+                  console.log(`📺 Adding host video to main view`);
                   mainViewRef.current.appendChild(mainContainer);
-                  
-                  // Start playing the video
-                  droneVideo.play().then(() => {
-                    console.log(`✅ Local drone video started playing successfully`);
-                    
-                    // Initialize AR overlay once video is playing
-                    setTimeout(() => {
-                      if (droneVideo.videoWidth > 0 && droneVideo.videoHeight > 0) {
-                        console.log(`📐 Video dimensions ready: ${droneVideo.videoWidth}x${droneVideo.videoHeight}`);
-                        initializeAROverlay();
-                      }
-                    }, 500);
-                    
-                  }).catch((playError) => {
-                    console.error(`❌ Failed to play local drone video:`, playError);
-                    // Error handler above will handle fallback to webcam
-                  });
                 } else {
                   console.error(`❌ mainViewRef.current is null`);
                 }
               }, 500);
             } else {
               console.log(`👥 User ${user.uid} is a VIEWER with video`);
-              // This is a viewer - display in participant tile (tile already exists from user-joined)
               existingUser.isHost = false;
               setViewerUsers(prev => new Map(prev.set(user.uid as number, existingUser)));
-              
-              setTimeout(() => {
-                const videoElement = document.getElementById(`video-${user.uid}`) as HTMLVideoElement;
-                const avatarElement = document.getElementById(`avatar-${user.uid}`);
-                const statusElement = document.getElementById(`status-${user.uid}`);
-                
-                if (videoElement && avatarElement && statusElement) {
-                  // Play video in tile
-                  user.videoTrack!.play(videoElement);
-                  
-                  // Show video, hide avatar
-                  videoElement.classList.remove('hidden');
-                  avatarElement.style.display = 'none';
-                  statusElement.textContent = 'Live';
-                  
-                  console.log(`📱 Viewer video displayed in tile for user ${user.uid}`);
-                } else {
-                  console.log(`❌ Could not find video elements for user ${user.uid}`);
-                }
-              }, 100);
             }
           }
           

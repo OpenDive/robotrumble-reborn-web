@@ -605,7 +605,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
           id: `initial-game-${Date.now()}`,
           timestamp: timestamp1,
           command: `Sent command: Create game: ${gameId}`,
-          status: 'sent' as const
+          status: 'acknowledged' as const
         };
         
         // Add robot acceptance command
@@ -618,6 +618,9 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         
         setMessageLog([robotAcceptanceCommand, gameCreationCommand]);
         console.log(`🎮 Added initial game creation messages for game ${gameId}`);
+        
+        // Initialize blockchain with current timestamp
+        initializeBlockchain();
       }, 1000);
       
       // Start playing crossy video immediately when connected
@@ -736,53 +739,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     };
   }, []);
 
-  // Initialize blockchain service
-  useEffect(() => {
-    const initializeBlockchain = async () => {
-      try {
-        setBlockchainError(null);
-        console.log('🔗 Initializing blockchain integration for viewer...');
-        
-        // Connect wallet if available
-        if (currentAccount && signAndExecuteTransaction) {
-          // Wrap the mutate function to return a Promise
-          const wrappedSignAndExecute = (transaction: any): Promise<any> => {
-            return new Promise((resolve, reject) => {
-              signAndExecuteTransaction(
-                { transaction },
-                {
-                  onSuccess: (result) => resolve(result),
-                  onError: (error) => reject(error)
-                }
-              );
-            });
-          };
-          
-          suiCrossyRobotService.setWalletConnection(
-            currentAccount.address,
-            wrappedSignAndExecute
-          );
-          console.log('✅ Wallet connected to blockchain service');
-        }
-        
-        const success = await suiCrossyRobotService.initialize();
-        if (success) {
-          setBlockchainInitialized(true);
-          setSuiGameState(suiCrossyRobotService.getGameState());
-          console.log('✅ Blockchain integration ready for viewer');
-        } else {
-          throw new Error('Failed to initialize blockchain service');
-        }
-      } catch (error) {
-        console.error('❌ Blockchain initialization failed:', error);
-        setBlockchainError(error instanceof Error ? error.message : String(error));
-      }
-    };
-    
-    initializeBlockchain();
-  }, [currentAccount, signAndExecuteTransaction]);
-
-  // Send directional command or create game (viewer can now send commands)
+  // Send directional command or create game
   const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
     if (!isControlEnabled) return;
     
@@ -801,67 +758,12 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     const sendTimestamp = new Date().toLocaleTimeString();
     const commandId = `cmd-${Date.now()}`;
     
-    // Handle game creation when stop button is pressed
+    // Skip robot connection for the demo - just handle movements
     if (direction === 'stop') {
-      // Add "sent" command to log immediately
-      const sentCommand = {
-        id: commandId,
-        timestamp: sendTimestamp,
-        command: `Sent command: Create game`,
-        status: 'sent' as const
-      };
-      
-      setMessageLog(prev => [sentCommand, ...prev].slice(0, 20));
-      
-      // Disable controls temporarily to prevent spam
-      setIsControlEnabled(false);
-      
-      try {
-        // Create game using real blockchain service
-        const result = await suiCrossyRobotService.createGame();
-        
-        if (result.success) {
-          // Add "acknowledged" command to log with new timestamp
-          const ackTimestamp = new Date().toLocaleTimeString();
-          const acknowledgedCommand = {
-            id: `${commandId}-ack`,
-            timestamp: ackTimestamp,
-            command: `Game created! TX: ${suiCrossyRobotService.getShortTransactionId(result.transactionId!)}`,
-            status: 'acknowledged' as const
-          };
-          
-          setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
-          
-          // Update game state
-          setSuiGameState(suiCrossyRobotService.getGameState());
-          
-          console.log(`Crossy Robo Viewer: Created game with transaction ${result.transactionId}`);
-          
-        } else {
-          throw new Error(result.error || 'Unknown error');
-        }
-        
-      } catch (error) {
-        // Add "failed" command to log with new timestamp
-        const failTimestamp = new Date().toLocaleTimeString();
-        const failedCommand = {
-          id: `${commandId}-fail`,
-          timestamp: failTimestamp,
-          command: `Game creation failed: ${error}`,
-          status: 'failed' as const
-        };
-        
-        setMessageLog(prev => [failedCommand, ...prev].slice(0, 20));
-        console.error('Failed to create game:', error);
-      } finally {
-        // Re-enable controls after a short delay
-        setTimeout(() => setIsControlEnabled(true), 500);
-      }
-      
-      return; // Exit early for game creation
+      return; // Do nothing for the demo
     }
     
-    // Handle regular directional commands
+    // Handle regular directional commands with direct SUI transfer
     // Add "sent" command to log immediately
     const sentCommand = {
       id: commandId,
@@ -876,56 +778,39 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     setIsControlEnabled(false);
     
     try {
-      // Send movement using real blockchain service
-      const result = await suiCrossyRobotService.sendMovement(direction.toUpperCase() as 'UP' | 'DOWN' | 'LEFT' | 'RIGHT');
+      // Import Transaction here for direct use
+      const { Transaction } = await import('@mysten/sui/transactions');
       
-      if (result.success) {
-        // Add "acknowledged" command to log with new timestamp
-        const ackTimestamp = new Date().toLocaleTimeString();
-        const acknowledgedCommand = {
-          id: `${commandId}-ack`,
-          timestamp: ackTimestamp,
-          command: `Movement ${direction} confirmed! TX: ${suiCrossyRobotService.getShortTransactionId(result.transactionId!)}`,
-          status: 'acknowledged' as const
-        };
-        
-        setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
-        
-        // Update robot position (simulate movement)
-        setRobots(prev => prev.map(robot => {
-          if (robot.id === selectedRobot) {
-            let newPosition = { ...robot.position };
-            const moveAmount = 5;
-            
-            switch (direction) {
-              case 'up':
-                newPosition.y = Math.max(0, newPosition.y - moveAmount);
-                break;
-              case 'down':
-                newPosition.y = Math.min(100, newPosition.y + moveAmount);
-                break;
-              case 'left':
-                newPosition.x = Math.max(0, newPosition.x - moveAmount);
-                break;
-              case 'right':
-                newPosition.x = Math.min(100, newPosition.x + moveAmount);
-                break;
-            }
-            
-            return {
-              ...robot,
-              position: newPosition,
-              status: 'moving'
-            };
+      // Create a simple payment transaction
+      const transaction = new Transaction();
+      
+      // Split 0.05 SUI (50,000,000 MIST) from gas coin for payment
+      const [coin] = transaction.splitCoins(transaction.gas, [transaction.pure.u64(50_000_000)]);
+      
+      // Transfer the payment to the robot address
+      transaction.transferObjects([coin], transaction.pure.address("0xcbdddb4e89a23e2ca51d41b5e05230fbfa502dc672cc58e298ec952d170b0901"));
+      
+      // Execute the transaction
+      const result = await new Promise((resolve, reject) => {
+        signAndExecuteTransaction(
+          { transaction },
+          {
+            onSuccess: (result) => resolve(result),
+            onError: (error) => reject(error)
           }
-          return robot;
-        }));
-        
-        console.log(`Crossy Robo Viewer: Sent ${direction} command with transaction ${result.transactionId}`);
-        
-      } else {
-        throw new Error(result.error || 'Unknown error');
-      }
+        );
+      });
+      
+      // Add "acknowledged" command to log with new timestamp
+      const ackTimestamp = new Date().toLocaleTimeString();
+      const acknowledgedCommand = {
+        id: `${commandId}-ack`,
+        timestamp: ackTimestamp,
+        command: `Movement ${direction} confirmed! TX: ${(result as any).digest?.substring(0, 8)}...`,
+        status: 'acknowledged' as const
+      };
+      
+      setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
       
     } catch (error) {
       // Add "failed" command to log with new timestamp
@@ -944,6 +829,39 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       setTimeout(() => setIsControlEnabled(true), 500);
     }
   };
+
+  // Initialize blockchain service
+  const initializeBlockchain = async () => {
+    try {
+      setBlockchainError(null);
+      console.log('🔗 Initializing blockchain integration...');
+      
+      // Connect wallet if available
+      if (currentAccount) {
+        setBlockchainInitialized(true);
+        
+        // Set simple mock state
+        setSuiGameState({
+          gameId: "9538",
+          gameObjectId: "0x3fbe01871af92ae00f9e201d82cb9fdbd1507fd5b9355e2cb50b161933b00c07",
+          isConnected: true,
+          userAddress: currentAccount.address,
+          robotAddress: "0xcbdddb4e89a23e2ca51d41b5e05230fbfa502dc672cc58e298ec952d170b0901",
+          balance: { user: 1.0, robot: 0.5 }
+        });
+        
+        console.log('✅ Blockchain integration ready');
+      }
+    } catch (error) {
+      console.error('❌ Blockchain initialization failed:', error);
+      setBlockchainError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  // Initialize blockchain on wallet connection
+  useEffect(() => {
+    initializeBlockchain();
+  }, [currentAccount, signAndExecuteTransaction]);
 
   return (
     <div className="w-full h-screen bg-[#0B0B1A] relative overflow-hidden flex flex-col">
@@ -1207,8 +1125,8 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                     </select>
                   </div>
 
-                  {/* Control Pad (now functional) */}
-                  <div className="bg-gray-800 rounded-lg p-6 flex flex-col items-center relative z-10">
+                  {/* Control Pad */}
+                  <div className="bg-gray-800 rounded-lg p-6 flex flex-col items-center">
                     {/* Up Button */}
                     <button
                       onClick={() => sendCommand('up')}
@@ -1225,8 +1143,8 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                       ↑
                     </button>
                     
-                    {/* Middle Row: Left, Create Game, Right */}
-                    <div className="flex items-center gap-2 mb-2 relative z-10">
+                    {/* Middle Row: Left, Stop, Right */}
+                    <div className="flex items-center gap-2 mb-2">
                       <button
                         onClick={() => sendCommand('left')}
                         disabled={!isControlEnabled}
@@ -1299,6 +1217,13 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                     }`}>
                       {isControlEnabled ? 'Ready' : 'Processing...'}
                     </span>
+                    
+                    {/* Cost Information */}
+                    <div className="mt-2">
+                      <div className="text-xs text-white/60">
+                        Each move: 0.05 SUI
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1349,36 +1274,26 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                   <div className="space-y-2 relative z-10">
                     {robots.map((robot) => (
                       <div key={robot.id} className={`
-                        flex items-center justify-between bg-gray-800 rounded p-2 border-l-4 relative z-10
+                        flex items-center justify-between bg-gray-800 rounded p-2 border-l-4
                         ${robot.id === selectedRobot ? 'border-blue-400' : 'border-transparent'}
                       `}>
-                        <div className="flex items-center gap-2 relative z-10">
+                        <div className="flex items-center gap-2">
                           <div className={`
-                            w-2 h-2 rounded-full relative z-10
+                            w-2 h-2 rounded-full
                             ${robot.status === 'idle' ? 'bg-blue-400' : 
                               robot.status === 'moving' ? 'bg-yellow-400 animate-pulse' : 
                               'bg-green-400'}
                           `} />
-                          <span className="text-sm text-white relative z-10">{robot.name}</span>
+                          <span className="text-sm text-white">{robot.name}</span>
                           {robot.id === selectedRobot && (
-                            <span className="text-xs bg-blue-600 text-white px-1 py-0.5 rounded relative z-10">
+                            <span className="text-xs bg-blue-600 text-white px-1 py-0.5 rounded">
                               ACTIVE
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-white/70 relative z-10">
+                        <div className="text-xs text-white/70">
                           {robot.battery}% • {robot.status}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Position Display */}
-                  <div className="mt-4 bg-gray-800 rounded-lg p-3 relative z-10">
-                    <div className="text-xs text-white/70 mb-2 relative z-10">Current Position</div>
-                    {robots.filter(robot => robot.id === selectedRobot).map(robot => (
-                      <div key={robot.id} className="text-sm text-white relative z-10">
-                        X: {Math.round(robot.position.x)}, Y: {Math.round(robot.position.y)}
                       </div>
                     ))}
                   </div>
@@ -1504,4 +1419,4 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       )}
     </div>
   );
-}; 
+};

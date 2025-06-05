@@ -45,7 +45,6 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const roboRumbleDemoVideoRef = useRef<HTMLVideoElement>(null);
   
   // AR System refs - for camera + overlay (like viewer experience)
   const arDetectorRef = useRef<EnhancedARDetector | null>(null);
@@ -90,9 +89,6 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
   const [streamingError, setStreamingError] = useState<string | null>(null);
   const [localUid, setLocalUid] = useState<number | null>(null);
   const [remoteUsers, setRemoteUsers] = useState<Map<number, RemoteUser>>(new Map());
-  const [roboRumbleVideoElement, setRoboRumbleVideoElement] = useState<HTMLVideoElement | null>(null);
-  const [roboRumbleDemoPlaying, setRoboRumbleDemoPlaying] = useState(false);
-  const [roboRumbleDemoInitialized, setRoboRumbleDemoInitialized] = useState(false);
   
   // Robotics control state
   const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
@@ -298,9 +294,9 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
       frameCount++;
       
       // Run AR detection on RoboRumble demo video
-      if (roboRumbleDemoVideoRef.current && arDetectorRef.current) {
+      if (videoRef.current && arDetectorRef.current) {
         // Check video readiness - only detect if video is properly loaded
-        const video = roboRumbleDemoVideoRef.current;
+        const video = videoRef.current;
         
         // Check video readiness every 60 frames (roughly once per second at 60fps)
         if (frameCount % 60 === 0) {
@@ -309,7 +305,7 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
         
         // Only attempt detection if video has valid dimensions and is playing
         if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
-          const markers = arDetectorRef.current.detectMarkers(roboRumbleDemoVideoRef.current);
+          const markers = arDetectorRef.current.detectMarkers(video);
           
           if (markers.length > 0 && frameCount % 60 === 0) {
             console.log(`[AR Robo Rumble Host] Detected ${markers.length} markers`);
@@ -394,162 +390,73 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
     }
   };
 
-  // Initialize RoboRumble demo video
-  const initializeRoboRumbleDemoVideo = async () => {
-    // Prevent duplicate initialization
-    if (roboRumbleDemoInitialized || roboRumbleDemoPlaying) {
-      console.log('RoboRumble demo video already initialized, skipping...');
-      return;
-    }
-    
-    try {
-      console.log('Initializing RoboRumble demo video...');
-      
-      if (roboRumbleDemoVideoRef.current) {
-        const video = roboRumbleDemoVideoRef.current;
-        video.src = '/assets/videos/roborumble.mp4';
-        video.loop = true;
-        video.muted = true;
-        video.playsInline = true;
-        
-        // Set flags immediately to prevent re-initialization
-        setRoboRumbleDemoInitialized(true);
-        
-        // Simple approach - just start playing and set state
-        video.onloadeddata = () => {
-          console.log('RoboRumble demo video loaded successfully');
-          video.play().then(() => {
-            console.log('RoboRumble demo video is now playing');
-            setRoboRumbleDemoPlaying(true);
-            
-            // Initialize AR system now that video is ready
-            setTimeout(() => {
-              console.log('Initializing AR system after RoboRumble video is ready...');
-              if (!renderSystemRef.current) {
-                initializeARSystem();
-              }
-            }, 500);
-          }).catch((playError) => {
-            console.error('Failed to play RoboRumble demo video:', playError);
-            // Still set as playing to prevent re-initialization
-            setRoboRumbleDemoPlaying(true);
-          });
-        };
-        
-        video.onerror = (error) => {
-          console.error('RoboRumble demo video loading error:', error);
-          // Still set as initialized to prevent re-initialization
-          setRoboRumbleDemoPlaying(true);
-        };
-        
-        // Force load the video
-        video.load();
-        
-        console.log('RoboRumble demo video initialization started');
-      }
-    } catch (error) {
-      console.error('Failed to initialize RoboRumble demo video:', error);
-      // Set as initialized to prevent re-initialization
-      setRoboRumbleDemoInitialized(true);
-      setRoboRumbleDemoPlaying(true);
-    }
-  };
-
   // Initialize webcam and AR on component mount
   useEffect(() => {
-    const initializeRoboRumbleVideoAndAR = async () => {
-      // Initialize robo rumble demo video first - only if not already initialized
-      if (!roboRumbleDemoInitialized && !roboRumbleDemoPlaying) {
-        try {
-          await initializeRoboRumbleDemoVideo();
-        } catch (error) {
-          console.error('Failed to initialize robo rumble demo video:', error);
-          setRoboRumbleDemoInitialized(true);
-          setRoboRumbleDemoPlaying(false);
-        }
-      }
-      
-      // Wait a bit to see if robo rumble video loads successfully
-      setTimeout(async () => {
-        if (!roboRumbleDemoPlaying) {
-          console.log('Robo rumble demo video failed to load, falling back to webcam...');
+    const initializeWebcamAndAR = async () => {
+      try {
+        console.log('Requesting webcam access...');
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        });
+        
+        console.log('Webcam access granted');
+        setWebcamStream(stream);
+        setWebcamError(null);
+        
+        // Set up video element
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
           
-          try {
-            console.log('Requesting webcam access...');
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-              video: { 
-                facingMode: 'environment',
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-              } 
-            });
+          const onVideoLoaded = async () => {
+            console.log('Webcam video loaded, video dimensions:', 
+              videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
             
-            console.log('Webcam access granted');
-            setWebcamStream(stream);
-            setWebcamError(null);
-            
-            // Set up video element
+            // Ensure video is playing before starting AR
             if (videoRef.current) {
-              videoRef.current.srcObject = stream;
+              try {
+                await videoRef.current.play();
+                console.log('Webcam video is now playing, starting AR initialization...');
+              } catch (error) {
+                console.log('Video play() returned promise, likely already playing');
+              }
               
-              const onVideoLoaded = async () => {
-                console.log('Webcam video loaded, video dimensions:', 
-                  videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
-                
-                // Ensure video is playing before starting AR
-                if (videoRef.current) {
-                  try {
-                    await videoRef.current.play();
-                    console.log('Webcam video is now playing, starting AR initialization...');
-                  } catch (error) {
-                    console.log('Video play() returned promise, likely already playing');
-                  }
-                  
-                  // Set AR mode to true now that video is ready
-                  setArMode(true);
-                  
-                  // Wait a bit more to ensure video is fully ready
-                  setTimeout(() => {
-                    initializeARSystem();
-                  }, 500);
-                }
-                
-                videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
-              };
-              
-              const onVideoError = (error: any) => {
-                console.error('Video element error:', error);
-                setWebcamError('Failed to load video stream');
-              };
-              
-              videoRef.current.addEventListener('loadeddata', onVideoLoaded);
-              videoRef.current.addEventListener('error', onVideoError);
-              
-              // Also listen for when video starts playing
-              const onVideoPlay = () => {
-                console.log('Webcam video started playing');
-              };
-              videoRef.current.addEventListener('play', onVideoPlay);
+              // Wait a bit more to ensure video is fully ready
+              setTimeout(() => {
+                initializeARSystem();
+              }, 500);
             }
-          } catch (error) {
-            console.error('Failed to access webcam:', error);
-            setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
-            setArMode(false);
-          }
-        } else {
-          // Robo rumble video is playing, set AR mode to true
-          console.log('Using robo rumble demo video for AR');
-          setArMode(true);
+            
+            videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
+          };
           
-          // Initialize AR system after a short delay to ensure robo rumble video is ready
-          setTimeout(() => {
-            initializeARSystem();
-          }, 1000);
+          const onVideoError = (error: any) => {
+            console.error('Video element error:', error);
+            setWebcamError('Failed to load video stream');
+          };
+          
+          videoRef.current.addEventListener('loadeddata', onVideoLoaded);
+          videoRef.current.addEventListener('error', onVideoError);
+          
+          // Also listen for when video starts playing
+          const onVideoPlay = () => {
+            console.log('Webcam video started playing');
+          };
+          videoRef.current.addEventListener('play', onVideoPlay);
         }
-      }, 2000); // Wait 2 seconds for robo rumble video to initialize
+      } catch (error) {
+        console.error('Failed to access webcam:', error);
+        setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
+        setArMode(false);
+        
+        console.log('❌ Webcam access failed, AR features will be disabled');
+      }
     };
 
-    initializeRoboRumbleVideoAndAR();
+    initializeWebcamAndAR();
 
     // Set up resize observer for canvas sizing
     let resizeObserver: ResizeObserver | null = null;
@@ -605,7 +512,7 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
         webcamStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, []); // Empty dependency array to run only once
 
   // Robotics control functions
   const handleGridClick = (row: number, col: number) => {
@@ -787,90 +694,21 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
       await client.join(APP_ID, session.id, token, uid);
       console.log(`Joined channel ${session.id} with UID ${uid} as Robo Rumble host`);
       
-      // Create video track from RoboRumble demo video instead of webcam
+      // Create video track from webcam
       try {
-        console.log('🎬 Creating video track from RoboRumble demo video...');
+        console.log('🎬 Creating video track for streaming...');
         
-        // Create a video element to load the RoboRumble video
-        const demoVideo = document.createElement('video');
-        demoVideo.src = '/assets/videos/roborumble.mp4';
-        demoVideo.loop = true;
-        demoVideo.muted = true;
-        demoVideo.playsInline = true;
-        demoVideo.crossOrigin = 'anonymous'; // Add CORS support
-        
-        console.log('📹 RoboRumble video element created, attempting to load...');
-        
-        // Wait for video to load and start playing
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('RoboRumble video loading timeout after 15 seconds'));
-          }, 15000);
-          
-          demoVideo.onloadeddata = () => {
-            console.log('✅ RoboRumble demo video loaded successfully');
-            console.log(`📐 Video dimensions: ${demoVideo.videoWidth}x${demoVideo.videoHeight}`);
-            console.log(`⏱️ Video duration: ${demoVideo.duration}s`);
-            clearTimeout(timeout);
-            
-            demoVideo.play().then(() => {
-              console.log('▶️ RoboRumble video is now playing');
-              setRoboRumbleDemoPlaying(true);
-              setRoboRumbleDemoInitialized(true);
-              resolve(undefined);
-            }).catch((playError) => {
-              console.error('❌ Failed to play RoboRumble video:', playError);
-              reject(playError);
-            });
-          };
-          
-          demoVideo.onerror = (error) => {
-            console.error('❌ RoboRumble video loading error:', error);
-            clearTimeout(timeout);
-            reject(new Error('Failed to load RoboRumble demo video'));
-          };
-          
-          demoVideo.onloadstart = () => {
-            console.log('🔄 RoboRumble video loading started...');
-          };
-          
-          demoVideo.oncanplay = () => {
-            console.log('✅ RoboRumble video can start playing');
-          };
-          
-          demoVideo.onplaying = () => {
-            console.log('🎬 RoboRumble video is playing');
-          };
-        });
-        
-        console.log('🎥 RoboRumble video ready, creating Agora video track...');
-        
-        // Check if captureStream is available
-        if (typeof (demoVideo as any).captureStream !== 'function') {
-          throw new Error('captureStream not supported in this browser');
+        if (!webcamStream || webcamStream.getVideoTracks().length === 0) {
+          throw new Error('No webcam stream available for streaming');
         }
         
-        // Create video track from the demo video with higher frame rate
-        const videoStream = (demoVideo as any).captureStream(30);
-        const videoTracks = videoStream.getVideoTracks();
-        
-        if (videoTracks.length === 0) {
-          throw new Error('No video tracks available from RoboRumble video stream');
-        }
-        
-        console.log(`📊 Video stream captured with ${videoTracks.length} tracks`);
-        console.log(`🎯 Video track settings:`, videoTracks[0].getSettings());
+        console.log('📹 Using webcam for streaming');
         
         const videoTrack = await AgoraRTC.createCustomVideoTrack({
-          mediaStreamTrack: videoTracks[0],
+          mediaStreamTrack: webcamStream.getVideoTracks()[0],
         });
         
-        console.log('✅ Agora video track created successfully');
-        console.log('🎯 Video track info:', {
-          trackId: videoTrack.getTrackId(),
-          enabled: videoTrack.enabled,
-          muted: videoTrack.muted
-        });
+        console.log('✅ Agora video track created from webcam successfully');
         
         // Create audio track from microphone for host commentary
         const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
@@ -880,54 +718,30 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
         localAudioTrackRef.current = audioTrack;
         
         // Publish tracks
-        console.log('📤 Publishing video and audio tracks...');
+        console.log('📤 Publishing webcam video and audio tracks...');
         await client.publish([videoTrack, audioTrack]);
-        console.log('✅ Published Robo Rumble stream with RoboRumble video');
+        console.log('✅ Published webcam stream successfully');
         
         setIsStreaming(true);
-        setRoboRumbleVideoElement(demoVideo);
         
         // Add periodic logging to monitor stream health
         const streamMonitor = setInterval(() => {
-          console.log('📊 Stream health check:', {
-            videoTrackEnabled: videoTrack.enabled,
-            videoTrackMuted: videoTrack.muted,
-            audioTrackEnabled: audioTrack.enabled,
-            audioTrackMuted: audioTrack.muted,
-            clientConnectionState: client.connectionState,
-            publishedTracks: client.localTracks.length
-          });
-        }, 10000);
+          console.log(`🔍 ROBO RUMBLE HOST STREAM CHECK:`);
+          console.log(`  - Local UID: ${uid}`);
+          console.log(`  - Viewers: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
+          console.log(`  - Agora client state:`, client.connectionState);
+          console.log(`  - Channel: ${session.id}`);
+        }, 10000); // Every 10 seconds
         
-        // Store monitor for cleanup
+        // Store interval ID for cleanup
         (client as any)._streamMonitor = streamMonitor;
         
       } catch (videoError) {
-        console.error('❌ Failed to create video track from RoboRumble video, falling back to webcam:', videoError);
-        
-        // Fallback to webcam if RoboRumble video fails
-        if (webcamStream) {
-          const [videoTrack, audioTrack] = await Promise.all([
-            AgoraRTC.createCustomVideoTrack({
-              mediaStreamTrack: webcamStream.getVideoTracks()[0],
-            }),
-            AgoraRTC.createMicrophoneAudioTrack()
-          ]);
-          
-          localVideoTrackRef.current = videoTrack;
-          localAudioTrackRef.current = audioTrack;
-          
-          // Publish tracks
-          await client.publish([videoTrack, audioTrack]);
-          console.log('✅ Published Robo Rumble stream with webcam fallback');
-          
-          setIsStreaming(true);
-        } else {
-          throw new Error('No video source available (RoboRumble video failed and no webcam)');
-        }
+        console.error('❌ Failed to create video track for streaming:', videoError);
+        setStreamingError(`Failed to start stream: ${videoError instanceof Error ? videoError.message : String(videoError)}`);
       }
     } catch (error) {
-      console.error('❌ Error starting stream:', error);
+      console.error('Error starting stream:', error);
       setStreamingError(`Failed to start stream: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
@@ -1143,21 +957,6 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
 
           {/* Main Camera + AR View - Takes remaining space */}
           <div className="flex-1 relative min-h-0 overflow-hidden">
-            {/* RoboRumble Demo Video - show when playing */}
-            <video 
-              ref={roboRumbleDemoVideoRef}
-              className="w-full h-full object-cover"
-              style={{ 
-                zIndex: 1,
-                display: roboRumbleDemoPlaying ? 'block' : 'none',
-                filter: 'brightness(0.8)'
-              }}
-              autoPlay
-              loop
-              playsInline
-              muted
-            />
-            
             {/* Webcam Video Background - show when robo rumble video is not available */}
             <video 
               ref={videoRef}
@@ -1165,7 +964,7 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
               style={{ 
                 transform: 'scaleX(-1)', // Mirror the video
                 zIndex: 1,
-                display: (!roboRumbleDemoPlaying && webcamStream) ? 'block' : 'none'
+                display: (!webcamStream) ? 'block' : 'none'
               }}
               autoPlay
               playsInline
@@ -1173,7 +972,7 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
             />
             
             {/* Debug overlay to show loading status */}
-            {!roboRumbleDemoPlaying && !webcamStream && (
+            {!webcamStream && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-800 z-10">
                 <div className="text-white text-center">
                   <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -1183,7 +982,7 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
             )}
             
             {/* Show error if both video sources fail */}
-            {!roboRumbleDemoPlaying && webcamError && (
+            {!webcamStream && webcamError && (
               <div className="absolute inset-0 flex items-center justify-center bg-red-900/20 z-10">
                 <div className="text-red-400 text-center p-4">
                   <p className="font-semibold mb-2">Video Source Error</p>
@@ -1220,8 +1019,7 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
                   UID: {localUid}<br />
                   Viewers: {remoteUsers.size}<br />
                   AR Markers: {detectedMarkers.length}<br />
-                  RoboRumble Demo: {roboRumbleDemoPlaying ? 'Playing' : 'Stopped'}<br />
-                  Video Size: {roboRumbleDemoVideoRef.current?.videoWidth}x{roboRumbleDemoVideoRef.current?.videoHeight}
+                  Video Size: {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}
                 </div>
               </div>
             )}
@@ -1232,10 +1030,8 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
                 <div className="text-sm font-medium mb-1">Robo Rumble Debug Info</div>
                 <div className="text-xs text-white/70">
                   Mode: {arMode ? 'AR (Camera + Overlay)' : '3D (Full Game)'}<br />
-                  RoboRumble Demo: {roboRumbleDemoPlaying ? 'Playing' : 'Loading/Stopped'}<br />
-                  AR System: {arMode && renderSystemRef.current ? 'Initialized' : 'Not Active'}<br />
                   3D Game: {!arMode && gameLoopRef.current ? 'Running' : 'Not Active'}<br />
-                  Video Size: {roboRumbleDemoVideoRef.current?.videoWidth}x{roboRumbleDemoVideoRef.current?.videoHeight}<br />
+                  Video Size: {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}<br />
                   AR Markers: {detectedMarkers.length}
                 </div>
               </div>
