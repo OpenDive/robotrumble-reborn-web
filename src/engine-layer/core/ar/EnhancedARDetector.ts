@@ -268,9 +268,122 @@ export class EnhancedARDetector {
   }
   
   /**
+   * Calculate distance-based scale factor for the key (from reference implementation)
+   */
+  private calculateDistanceScale(marker: DetectedMarker, videoElement: HTMLVideoElement): number {
+    let distanceScale = 1.0;
+    
+    // Method 1: Use pose translation Z if available (most accurate)
+    if (marker.pose && marker.pose.translation) {
+      const zDistance = Math.abs(marker.pose.translation.z * 1000); // Convert back to mm
+      // Scale inversely with distance - closer markers get bigger keys
+      // Normalize distance to a reasonable scale (assuming 50-500mm typical range)
+      const normalizedDistance = Math.max(50, Math.min(500, zDistance));
+      distanceScale = 500 / normalizedDistance; // Inverse relationship
+      
+      this.logMessage(`Marker ${marker.id} Z-distance: ${zDistance.toFixed(2)}mm, scale: ${distanceScale.toFixed(2)}`);
+    } 
+    // Method 2: Use marker apparent size as distance proxy (fallback)
+    else if (marker.corners && marker.corners.length >= 4) {
+      // Calculate marker area from corners
+      const bounds = this.calculateBounds(marker.corners);
+      const markerArea = bounds.width * bounds.height;
+      const videoArea = (videoElement.videoWidth || 640) * (videoElement.videoHeight || 480);
+      const relativeSize = markerArea / videoArea;
+      
+      // Scale based on relative marker size
+      // Typical marker might be 1-10% of screen area
+      const minRelativeSize = 0.001; // Very far
+      const maxRelativeSize = 0.1;   // Very close
+      const clampedSize = Math.max(minRelativeSize, Math.min(maxRelativeSize, relativeSize));
+      
+      // Logarithmic scaling for natural distance perception
+      distanceScale = Math.pow(clampedSize / minRelativeSize, 0.3);
+      
+      this.logMessage(`Marker ${marker.id} relative size: ${(relativeSize * 100).toFixed(2)}%, scale: ${distanceScale.toFixed(2)}`);
+    }
+    
+    // Clamp scale to reasonable bounds
+    return Math.max(0.2, Math.min(3.0, distanceScale));
+  }
+
+  /**
+   * Calculate marker bounds from corners
+   */
+  private calculateBounds(corners: { x: number; y: number }[]): { width: number; height: number; minX: number; maxX: number; minY: number; maxY: number } {
+    const xs = corners.map(c => c.x);
+    const ys = corners.map(c => c.y);
+    
+    return {
+      minX: Math.min(...xs),
+      maxX: Math.max(...xs),
+      minY: Math.min(...ys),
+      maxY: Math.max(...ys),
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys)
+    };
+  }
+
+  /**
+   * Calculate the scale and position to fit the key within marker bounds
+   */
+  private calculateMarkerConstraints(marker: DetectedMarker, videoElement: HTMLVideoElement): { scale: number; distanceScale: number; bounds?: any } {
+    if (!marker.corners || marker.corners.length < 4) {
+      return { scale: 1, distanceScale: 1 };
+    }
+
+    // Calculate marker dimensions in 2D space
+    const bounds = this.calculateBounds(marker.corners);
+    
+    // Use marker size to determine appropriate scale
+    // Assuming marker is roughly square, use the smaller dimension
+    const markerSize = Math.min(bounds.width, bounds.height);
+    
+    // Scale factor to keep key within marker bounds (with some padding)
+    const maxKeySize = markerSize * 0.12; // 12% of marker size (same as reference)
+    const keyScale = maxKeySize / 90; // Divide by 90 to get the right scale (same as reference)
+    
+    // Calculate distance-based scale
+    const distanceScale = this.calculateDistanceScale(marker, videoElement);
+    
+    return {
+      scale: Math.max(keyScale, 0.1), // Minimum scale to ensure visibility
+      distanceScale: distanceScale,
+      bounds: bounds
+    };
+  }
+
+  /**
+   * Convert 2D marker coordinates to 3D position using perspective transformation
+   */
+  private markerTo3DPosition(marker: DetectedMarker, videoElement: HTMLVideoElement, depth: number = -1.0): THREE.Vector3 {
+    if (!marker.center) {
+      return new THREE.Vector3(0, 0, depth);
+    }
+
+    // Convert from screen coordinates to normalized device coordinates
+    const videoWidth = videoElement.videoWidth || 640;
+    const videoHeight = videoElement.videoHeight || 480;
+    
+    // Normalize coordinates to [-1, 1] range
+    const normalizedX = (marker.center.x / videoWidth) * 2 - 1;
+    const normalizedY = -((marker.center.y / videoHeight) * 2 - 1); // Flip Y axis
+    
+    // Convert to world coordinates based on camera position and field of view
+    const aspectRatio = videoWidth / videoHeight;
+    const fov = 75 * Math.PI / 180; // Assume 75 degree FOV, convert to radians
+    const distance = Math.abs(depth);
+    
+    const worldY = Math.tan(fov / 2) * distance * normalizedY;
+    const worldX = worldY * aspectRatio * normalizedX;
+    
+    return new THREE.Vector3(worldX, worldY, depth);
+  }
+
+  /**
    * Update 3D models based on detected markers
    */
-  private updateARModels(markers: DetectedMarker[]): void {
+  public updateARModels(markers: DetectedMarker[]): void {
     if (!this.arScene || !this.assetsLoaded || !this.keyModelTemplate) {
       return;
     }
@@ -296,50 +409,73 @@ export class EnhancedARDetector {
           this.logMessage(`Created key object for marker ${marker.id}`);
         }
         
-        // Always show and position the key (remove hiding logic)
+        // Always show and position the key
         if (keyObject) {
-          keyObject.visible = true; // Always make it visible
+          keyObject.visible = true;
           
-          // Reset transform before applying new one to avoid accumulation
-          keyObject.matrix.identity();
-          keyObject.matrixAutoUpdate = false;
-          
-          // Apply the pose matrix directly
-          if (marker.poseMatrix) {
-            // Extract position and calculate distance-based scale
-            const position = new THREE.Vector3();
-            position.setFromMatrixPosition(marker.poseMatrix);
+          try {
+            // Get video element for calculations (need to find it from the scene context)
+            // For now, assume 640x480 default, but this could be improved with actual video reference
+            const mockVideoElement = { videoWidth: 640, videoHeight: 480 } as HTMLVideoElement;
             
-            // Calculate scale based on distance - MUCH LARGER SCALE
-            const distance = Math.abs(position.z);
-            const baseScale = 5.6; // Reduced by another 20% from 7.0 to 5.6
-            const minDistance = 0.5; // Minimum distance for scaling calculation
-            const maxDistance = 10.0; // Maximum distance for scaling calculation
+            // Calculate constraints based on marker corners and distance
+            const constraints = this.calculateMarkerConstraints(marker, mockVideoElement);
             
-            // Simpler scaling: just use base scale with slight distance adjustment
-            const normalizedDistance = Math.max(minDistance, Math.min(maxDistance, distance));
-            const distanceScale = Math.max(0.5, Math.min(2.0, 5.0 / normalizedDistance)); // Keep scale between 0.5x and 2x
-            const finalScale = baseScale * distanceScale;
+            // Position the key based on marker center and constraints
+            let position: THREE.Vector3;
             
-            // Create scale matrix
-            const scaleMatrix = new THREE.Matrix4().makeScale(finalScale, finalScale, finalScale);
+            if (marker.poseMatrix) {
+              // Use pose matrix if available for accurate 3D positioning
+              const matrix = new THREE.Matrix4().fromArray(marker.poseMatrix.elements);
+              const pos = new THREE.Vector3();
+              const quaternion = new THREE.Quaternion();
+              const scale = new THREE.Vector3();
+              matrix.decompose(pos, quaternion, scale);
+              
+              // Apply constraints to keep key within reasonable bounds
+              pos.multiplyScalar(0.01); // Bring it closer
+              pos.z = Math.max(pos.z, -4.0); // Don't go too far back
+              pos.z = Math.min(pos.z, -0.3); // Don't come too close
+              
+              position = pos;
+              keyObject.quaternion.copy(quaternion);
+              
+              this.logMessage(`Using pose matrix positioning for marker ${marker.id}`);
+            } else {
+              // Fallback to 2D-to-3D conversion using marker center
+              position = this.markerTo3DPosition(marker, mockVideoElement, -1.5);
+              this.logMessage(`Using fallback 2D-to-3D positioning for marker ${marker.id}`);
+            }
             
-            // Combine pose matrix with scale
-            const finalMatrix = new THREE.Matrix4();
-            finalMatrix.multiplyMatrices(marker.poseMatrix, scaleMatrix);
+            // Apply position
+            keyObject.position.copy(position);
             
-            // Apply the combined matrix
-            keyObject.matrix.copy(finalMatrix);
+            // Apply constrained scale based on marker size AND distance (same as reference)
+            const keyScaleOption = 2.0; // Increased from 0.5 to make keys more visible
+            const baseScale = constraints.scale * keyScaleOption;
+            const finalScale = baseScale * constraints.distanceScale; // Apply distance scaling
             
-            this.logMessage(`Key positioned at: ${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}, Scale: ${finalScale.toFixed(2)}, Distance: ${distance.toFixed(2)}`);
-          } else {
-            // Fallback: position at marker center with fixed distance and scale
+            // Apply the scale directly (no additional clamping beyond what's in constraints)
+            keyObject.scale.set(finalScale, finalScale, finalScale);
+            
+            // Optional: Add slight rotation for visual effect, but keep it subtle
+            keyObject.rotation.y += 0.005; // Slower rotation to avoid distraction
+            
+            // Make sure matrix auto-update is enabled for proper rendering
+            keyObject.matrixAutoUpdate = true;
+            
+            // Log positioning info for debugging
+            this.logMessage(`Key ${marker.id} positioned at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) with scale ${finalScale.toFixed(2)} (base: ${baseScale.toFixed(2)}, distance: ${constraints.distanceScale.toFixed(2)})`);
+            
+          } catch (err) {
+            this.logMessage(`Error positioning key: ${err instanceof Error ? err.message : String(err)}`);
+            
+            // Fallback: simple positioning
             const centerX = (marker.center.x - 320) / 320; // Normalize to [-1, 1]
             const centerY = -(marker.center.y - 240) / 240; // Normalize and flip Y
             keyObject.position.set(centerX * 2, centerY * 2, -2.0);
-            keyObject.scale.set(5.6, 5.6, 5.6); // Reduced by another 20% from 7.0 to 5.6
+            keyObject.scale.set(5.6, 5.6, 5.6);
             keyObject.matrixAutoUpdate = true;
-            this.logMessage(`Key positioned at fallback location: ${centerX * 2}, ${centerY * 2}, -2.0 with large scale`);
           }
           
           this.logMessage(`Key is visible and positioned for marker ${marker.id}`);

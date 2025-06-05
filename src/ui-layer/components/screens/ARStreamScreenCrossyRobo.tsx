@@ -797,11 +797,11 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
       console.log(`  - Local UID: ${localUid}`);
       console.log(`  - Viewers: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
       console.log(`  - Agora client state:`, rtcClientRef.current?.connectionState);
-      console.log(`  - Channel: ${session.id}`);
+      console.log(`  - Channel: robot-video`); // Hardcoded channel name
     }, 10000); // Every 10 seconds
     
     return () => clearInterval(debugInterval);
-  }, [isStreaming, localUid, remoteUsers, session.id]);
+  }, [isStreaming, localUid, remoteUsers]);
 
   const executeDelivery = async () => {
     if (!startPoint || !endPoint) return;
@@ -947,10 +947,11 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
       const uid = Math.floor(Math.random() * 100000);
       setLocalUid(uid);
       
-      // Join channel
-      const token = await fetchToken(session.id, uid, 'host');
-      await client.join(APP_ID, session.id, token, uid);
-      console.log(`Joined channel ${session.id} with UID ${uid} as Crossy Robo host`);
+      // Join channel - HARDCODED FOR TESTING
+      const channelName = 'robot-video'; // Hardcoded channel name
+      const token = await fetchToken(channelName, uid, 'host');
+      await client.join(APP_ID, channelName, token, uid);
+      console.log(`Joined channel ${channelName} with UID ${uid} as Crossy Robo host`);
       
       // Create video track from webcam
       try {
@@ -1170,7 +1171,7 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                   <span className="text-sm font-medium">Broadcasting Crossy Robo</span>
                 </div>
                 <div className="text-xs text-white/70">
-                  Channel: {session.id}<br />
+                  Channel: robot-video<br />
                   UID: {localUid}<br />
                   Viewers: {remoteUsers.size}<br />
                   AR Markers: {detectedMarkers.length}<br />
@@ -1190,7 +1191,8 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                   AR System: {arMode && renderSystemRef.current ? 'Initialized' : 'Not Active'}<br />
                   3D Game: {!arMode && gameLoopRef.current ? 'Running' : 'Not Active'}<br />
                   Video Size: {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}<br />
-                  AR Markers: {detectedMarkers.length}
+                  AR Markers: {detectedMarkers.length}<br />
+                  Channel: robot-video
                   {webcamError && <><br />Webcam Error: {webcamError}</>}
                 </div>
               </div>
