@@ -8,6 +8,7 @@ export interface CollisionData {
   impulse: number;
   bodyA: any;  // Replace with proper type
   bodyB: any;  // Replace with proper type
+  [key: string]: unknown; // Add index signature for compatibility
 }
 
 export class CollisionManager {

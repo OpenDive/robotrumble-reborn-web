@@ -58,11 +58,11 @@ export const TestGameScreen: React.FC = () => {
     setDebugMarkersEnabled(newEnabled);
     
     if (renderSystemRef.current) {
-      renderSystemRef.current.setDebugMarkersEnabled(newEnabled);
+      renderSystemRef.current.setAREffectsEnabled(newEnabled);
       
       // If enabling debug markers in AR mode, update markers
       if (newEnabled && arMode && detectedMarkers.length > 0) {
-        renderSystemRef.current.updateARMarkers(detectedMarkers);
+        renderSystemRef.current.updateAREffects(detectedMarkers);
       }
     }
   };
@@ -306,7 +306,7 @@ export const TestGameScreen: React.FC = () => {
         // EnhancedARDetector handles all 3D AR object rendering directly
         // Only update debug markers if debug visualization is enabled
         if (debugMarkersEnabled && renderSystemRef.current) {
-          renderSystemRef.current.updateARMarkers(markers);
+          renderSystemRef.current.updateAREffects(markers);
         }
       }
       
