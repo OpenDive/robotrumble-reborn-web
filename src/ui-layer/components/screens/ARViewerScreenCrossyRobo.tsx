@@ -46,6 +46,13 @@ interface ThreeJSKey {
   lastSeen: number;
 }
 
+interface ARViewerScreenCrossyRoboState {
+  isInitialized: boolean;
+  isLoading: boolean;
+  error: string | null;
+  keyScale: number;
+}
+
 class ThreeViewerEngine {
   private hostVideoElement: HTMLVideoElement;
   private logMessage: (message: string) => void;
@@ -60,7 +67,7 @@ class ThreeViewerEngine {
   private keys: ThreeJSKey[] = [];
   private resizeHandler: () => void;
 
-  constructor(hostVideoElement: HTMLVideoElement, logMessage: (message: string) => void, options: { keyScale: number } = { keyScale: 2.0 }) {
+  constructor(hostVideoElement: HTMLVideoElement, logMessage: (message: string) => void, options: { keyScale: number } = { keyScale: 7.0 }) {
     this.hostVideoElement = hostVideoElement;
     this.logMessage = logMessage;
     this.options = options;
@@ -370,8 +377,13 @@ class ThreeViewerEngine {
     const now = Date.now();
 
     if (markers && markers.length > 0) {
-      // Process each detected marker
-      markers.forEach(marker => {
+      // Filter out marker ID 0 and only process specific marker IDs (64, 1, 2, 3)
+      const validMarkers = markers.filter(marker => 
+        marker.id !== 0 && (marker.id === 64 || marker.id === 1 || marker.id === 2 || marker.id === 3)
+      );
+
+      // Process each valid marker
+      validMarkers.forEach(marker => {
         // Find corresponding key for this marker
         let key = this.keys.find(k => k.markerId === marker.id);
 
@@ -436,7 +448,7 @@ class ThreeViewerEngine {
 
       // Hide keys for markers that are no longer visible
       this.keys.forEach(key => {
-        const markerVisible = markers.some(m => m.id === key.markerId);
+        const markerVisible = validMarkers.some(m => m.id === key.markerId);
         const timeSinceLastSeen = now - key.lastSeen;
 
         if (!markerVisible || timeSinceLastSeen > 500) {
@@ -490,6 +502,11 @@ class ThreeViewerEngine {
     window.removeEventListener('resize', this.resizeHandler);
 
     this.logMessage('ThreeJS AR Viewer Engine disposed');
+  }
+
+  updateKeyScale(newScale: number): void {
+    this.options.keyScale = newScale;
+    this.logMessage(`Updated key scale to: ${newScale}`);
   }
 }
 
@@ -676,6 +693,9 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   // AR effects renderer
   const arEffectsRendererRef = useRef<AREffectsRenderer | null>(null);
 
+  // Add key scale state
+  const [keyScale, setKeyScale] = useState(5.0);
+
   // Helper function to get the host video element
   const getHostVideoElement = (): HTMLVideoElement | null => {
     // Find all video elements and return the one with valid dimensions
@@ -762,7 +782,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         threeViewerEngineRef.current = new ThreeViewerEngine(
           video,
           (msg: string) => logMessage(`[AR Crossy Robo Viewer] ${msg}`),
-          { keyScale: 2.0 } // Make keys more visible
+          { keyScale: keyScale } // Use state value
         );
         
         // Wait for assets to load before proceeding
@@ -887,20 +907,9 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
 
           logMessage(`[AR Crossy Robo Viewer] Detected ${formattedMarkers.length} markers on host stream`);
         } else {
-          // Debug: Create a test marker to verify ThreeJS rendering is working
-          // This will show a key in the center of the video for testing
+          // No markers detected - do nothing
           if (frameCount % 300 === 0) { // Every 5 seconds
-            logMessage(`[AR Crossy Robo Viewer] No markers detected - creating test marker for verification`);
-            formattedMarkers = [{
-              id: 1,
-              corners: [
-                { x: video.videoWidth * 0.4, y: video.videoHeight * 0.4 },
-                { x: video.videoWidth * 0.6, y: video.videoHeight * 0.4 },
-                { x: video.videoWidth * 0.6, y: video.videoHeight * 0.6 },
-                { x: video.videoWidth * 0.4, y: video.videoHeight * 0.6 }
-              ],
-              center: { x: video.videoWidth * 0.5, y: video.videoHeight * 0.5 }
-            }];
+            logMessage(`[AR Crossy Robo Viewer] No markers detected`);
           }
         }
         
@@ -1067,7 +1076,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                   hostVideo.autoplay = true;
                   hostVideo.playsInline = true;
                   hostVideo.muted = true;
-                  hostVideo.style.transform = 'scaleX(-1)'; // Mirror the video
+                  // Remove mirroring for host video
                   hostVideo.id = `host-video-${user.uid}`;
                   hostVideo.setAttribute('data-uid', user.uid.toString()); // Add data-uid attribute for AR detection
                   mainContainer.appendChild(hostVideo);
@@ -1559,6 +1568,14 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     initializeBlockchain();
   }, [currentAccount, signAndExecuteTransaction]);
 
+  // Add key scale slider handler
+  const handleKeyScaleChange = (newScale: number) => {
+    setKeyScale(newScale);
+    if (threeViewerEngineRef.current) {
+      threeViewerEngineRef.current.updateKeyScale(newScale);
+    }
+  };
+
   return (
     <div className="w-full h-screen bg-[#0B0B1A] relative overflow-hidden flex flex-col">
       {/* Background */}
@@ -1792,6 +1809,18 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                         {detectedMarkers.length > 0 && (
                           <span className="text-green-400"> ✓ RENDERING</span>
                         )}
+                        <div className="mt-2">
+                          <label className="block text-xs mb-1">Key Size: {keyScale.toFixed(1)}</label>
+                          <input
+                            type="range"
+                            min="5.0"
+                            max="20"
+                            step="0.5"
+                            value={keyScale}
+                            onChange={(e) => handleKeyScaleChange(parseFloat(e.target.value))}
+                            className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
                       </>
                     )}
                   </div>

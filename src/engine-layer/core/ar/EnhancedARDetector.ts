@@ -135,7 +135,7 @@ export class EnhancedARDetector {
             
             // Scale the model appropriately - make it much larger and more visible
             if (this.keyModelTemplate) {
-              this.keyModelTemplate.scale.set(2.0, 2.0, 2.0); // Much larger scale
+              this.keyModelTemplate.scale.set(4.0, 4.0, 4.0); // Doubled from 2.0 to 4.0
               
               // Ensure all materials are visible and have proper properties
               this.keyModelTemplate.traverse((child) => {
@@ -223,7 +223,7 @@ export class EnhancedARDetector {
     keyGroup.add(teeth2);
     
     // Scale the fallback key
-    keyGroup.scale.set(0.5, 0.5, 0.5);
+    keyGroup.scale.set(1.0, 1.0, 1.0); // Doubled from 0.5 to 1.0
     
     return keyGroup;
   }
@@ -279,7 +279,7 @@ export class EnhancedARDetector {
       // Scale inversely with distance - closer markers get bigger keys
       // Normalize distance to a reasonable scale (assuming 50-500mm typical range)
       const normalizedDistance = Math.max(50, Math.min(500, zDistance));
-      distanceScale = 500 / normalizedDistance; // Inverse relationship
+      distanceScale = 1000 / normalizedDistance; // Increased base scale (500 to 1000)
       
       this.logMessage(`Marker ${marker.id} Z-distance: ${zDistance.toFixed(2)}mm, scale: ${distanceScale.toFixed(2)}`);
     } 
@@ -297,14 +297,14 @@ export class EnhancedARDetector {
       const maxRelativeSize = 0.1;   // Very close
       const clampedSize = Math.max(minRelativeSize, Math.min(maxRelativeSize, relativeSize));
       
-      // Logarithmic scaling for natural distance perception
-      distanceScale = Math.pow(clampedSize / minRelativeSize, 0.3);
+      // Logarithmic scaling for natural distance perception with increased base scale
+      distanceScale = Math.pow(clampedSize / minRelativeSize, 0.5) * 2.0; // Increased power and multiplier
       
       this.logMessage(`Marker ${marker.id} relative size: ${(relativeSize * 100).toFixed(2)}%, scale: ${distanceScale.toFixed(2)}`);
     }
     
-    // Clamp scale to reasonable bounds
-    return Math.max(0.2, Math.min(3.0, distanceScale));
+    // Clamp scale to reasonable bounds with higher maximum
+    return Math.max(0.5, Math.min(6.0, distanceScale)); // Increased max scale from 3.0 to 6.0
   }
 
   /**
@@ -340,14 +340,14 @@ export class EnhancedARDetector {
     const markerSize = Math.min(bounds.width, bounds.height);
     
     // Scale factor to keep key within marker bounds (with some padding)
-    const maxKeySize = markerSize * 0.12; // 12% of marker size (same as reference)
+    const maxKeySize = markerSize * 0.24; // Doubled from 0.12 to 0.24
     const keyScale = maxKeySize / 90; // Divide by 90 to get the right scale (same as reference)
     
     // Calculate distance-based scale
     const distanceScale = this.calculateDistanceScale(marker, videoElement);
     
     return {
-      scale: Math.max(keyScale, 0.1), // Minimum scale to ensure visibility
+      scale: Math.max(keyScale, 0.2), // Doubled minimum scale from 0.1 to 0.2
       distanceScale: distanceScale,
       bounds: bounds
     };
@@ -442,16 +442,24 @@ export class EnhancedARDetector {
               
               this.logMessage(`Using pose matrix positioning for marker ${marker.id}`);
             } else {
-              // Fallback to 2D-to-3D conversion using marker center
-              position = this.markerTo3DPosition(marker, mockVideoElement, -1.5);
-              this.logMessage(`Using fallback 2D-to-3D positioning for marker ${marker.id}`);
+              // Use 2D-to-3D conversion using marker center with adjusted depth
+              position = this.markerTo3DPosition(marker, mockVideoElement, -1.0); // Closer Z position (-1.0 instead of -1.5)
+              
+              // Adjust position to be more accurate to marker location
+              const normalizedX = (marker.center.x / mockVideoElement.videoWidth) * 2 - 1;
+              const normalizedY = -((marker.center.y / mockVideoElement.videoHeight) * 2 - 1);
+              position.x = normalizedX * 2; // Increase spread factor
+              position.y = normalizedY * 2;
+              position.y += 0.5; // Lift key slightly above marker
+              
+              this.logMessage(`Using enhanced 2D-to-3D positioning for marker ${marker.id}`);
             }
             
             // Apply position
             keyObject.position.copy(position);
             
-            // Apply constrained scale based on marker size AND distance (same as reference)
-            const keyScaleOption = 2.0; // Increased from 0.5 to make keys more visible
+            // Apply constrained scale based on marker size AND distance (increased significantly)
+            const keyScaleOption = 7.0; // Increased from 3.0 to 7.0
             const baseScale = constraints.scale * keyScaleOption;
             const finalScale = baseScale * constraints.distanceScale; // Apply distance scaling
             
@@ -470,11 +478,15 @@ export class EnhancedARDetector {
           } catch (err) {
             this.logMessage(`Error positioning key: ${err instanceof Error ? err.message : String(err)}`);
             
-            // Fallback: simple positioning
-            const centerX = (marker.center.x - 320) / 320; // Normalize to [-1, 1]
-            const centerY = -(marker.center.y - 240) / 240; // Normalize and flip Y
-            keyObject.position.set(centerX * 2, centerY * 2, -2.0);
-            keyObject.scale.set(5.6, 5.6, 5.6);
+            // Improved fallback positioning that better matches marker location
+            const normalizedX = (marker.center.x - 320) / 320; // Normalize to [-1, 1]
+            const normalizedY = -(marker.center.y - 240) / 240; // Normalize and flip Y
+            keyObject.position.set(
+              normalizedX * 3, // Increased spread
+              normalizedY * 3 + 0.5, // Increased spread and lifted
+              -1.5 // Closer to camera
+            );
+            keyObject.scale.set(14.0, 14.0, 14.0); // Increased from 8.4 to 14.0
             keyObject.matrixAutoUpdate = true;
           }
           
@@ -496,30 +508,37 @@ export class EnhancedARDetector {
   }
 
   /**
-   * Extract ImageData from video element
+   * Extract ImageData from video element, flipping horizontally if needed
    */
   private extractImageData(videoElement: HTMLVideoElement): ImageData | null {
     try {
-      const width = videoElement.videoWidth;
-      const height = videoElement.videoHeight;
-
-      if (width === 0 || height === 0) {
-        return null;
+      // Update canvas dimensions if needed
+      if (this.extractionCanvas.width !== videoElement.videoWidth ||
+          this.extractionCanvas.height !== videoElement.videoHeight) {
+        this.extractionCanvas.width = videoElement.videoWidth;
+        this.extractionCanvas.height = videoElement.videoHeight;
       }
 
-      // Update canvas size if needed
-      if (this.extractionCanvas.width !== width || this.extractionCanvas.height !== height) {
-        this.extractionCanvas.width = width;
-        this.extractionCanvas.height = height;
-      }
-
-      // Draw video frame to canvas
-      this.extractionCtx.drawImage(videoElement, 0, 0, width, height);
+      // Clear canvas and draw video
+      this.extractionCtx.clearRect(0, 0, this.extractionCanvas.width, this.extractionCanvas.height);
       
-      // Extract ImageData
-      return this.extractionCtx.getImageData(0, 0, width, height);
+      // Save context state
+      this.extractionCtx.save();
+      
+      // Flip context horizontally
+      this.extractionCtx.scale(-1, 1);
+      this.extractionCtx.translate(-this.extractionCanvas.width, 0);
+      
+      // Draw the video frame
+      this.extractionCtx.drawImage(videoElement, 0, 0);
+      
+      // Restore context state
+      this.extractionCtx.restore();
+
+      // Get image data from the flipped frame
+      return this.extractionCtx.getImageData(0, 0, this.extractionCanvas.width, this.extractionCanvas.height);
     } catch (error) {
-      this.logMessage(`EnhancedARDetector: Failed to extract ImageData: ${error}`);
+      this.logMessage(`Error extracting image data: ${error}`);
       return null;
     }
   }
