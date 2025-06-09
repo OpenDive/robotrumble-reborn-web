@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { LoginScreen } from './components/screens/LoginScreen';
+import { VideoIntroScreen } from './components/screens/VideoIntroScreen';
 import { DriversLicenseScreen } from './components/screens/DriversLicenseScreen';
 import { WelcomeScreen } from './components/screens/WelcomeScreen';
 import { LobbyScreen } from './components/screens/LobbyScreen';
@@ -175,8 +176,8 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/" element={
-        <RouteTransition route="login">
-          <LoginScreen onLoginComplete={handleLoginComplete} />
+        <RouteTransition route="video-intro">
+          <VideoIntroScreen onLoginComplete={handleLoginComplete} />
         </RouteTransition>
       } />
       <Route path="/test-game" element={
