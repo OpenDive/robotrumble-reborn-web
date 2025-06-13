@@ -71,6 +71,8 @@ export class SuiCrossyRobotService {
     console.log('🔗 Wallet connected:', userAddress);
   }
 
+
+
   /**
    * Get current game state
    */
@@ -326,6 +328,8 @@ export class SuiCrossyRobotService {
       return { success: false, error: 'No valid game object ID available - please create a game first' };
     }
 
+
+
     // Check if we're using the hardcoded demo game object ID
     const isDemoMode = this.gameState.gameObjectId === "0x3fbe01871af92ae00f9e201d82cb9fdbd1507fd5b9355e2cb50b161933b00c07";
     
@@ -458,6 +462,8 @@ export class SuiCrossyRobotService {
     }
 
     try {
+
+
       if (!this.signAndExecuteTransaction || !this.gameState.userAddress) {
         throw new Error('Wallet not connected');
       }

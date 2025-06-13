@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useCurrentAccount, useConnectWallet, useDisconnectWallet, useWallets, ConnectButton } from '@mysten/dapp-kit';
 import { useAuth } from '../../../shared/contexts/AuthContext';
-import { FaWallet, FaChevronDown, FaCopy, FaSignOutAlt } from 'react-icons/fa';
+import { FaWallet, FaChevronDown, FaCopy, FaSignOutAlt, FaTrash, FaWrench } from 'react-icons/fa';
 
 export default function SuiWalletConnect() {
   const { user, setUser, logout } = useAuth();
@@ -73,6 +73,21 @@ export default function SuiWalletConnect() {
       // You could add a toast notification here
       console.log('Address copied to clipboard');
     }
+  };
+
+  const handleFixCorruptedZkLogin = () => {
+    // With Enoki, we just sign out and sign back in
+    logout();
+    console.log('🔧 Enoki session cleared (keeping same address)');
+    setShowDropdown(false);
+  };
+
+  const handleClearZkLogin = () => {
+    // With Enoki, we clear local storage and sign out
+    localStorage.clear();
+    logout();
+    console.log('🧹 All Enoki data cleared (will generate new address)');
+    setShowDropdown(false);
   };
 
   const toggleDropdown = () => {
@@ -154,6 +169,24 @@ export default function SuiWalletConnect() {
             </div>
             
             <div className="border-t border-white/10">
+              {user?.loginMethod === 'google' && (
+                <>
+                  <button
+                    onClick={handleFixCorruptedZkLogin}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-blue-400 hover:bg-blue-500/10 transition-colors text-sm border-b border-white/10"
+                  >
+                    <FaWrench className="text-sm" />
+                    Fix Corrupted Data (Keep Address)
+                  </button>
+                  <button
+                    onClick={handleClearZkLogin}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-yellow-400 hover:bg-yellow-500/10 transition-colors text-sm border-b border-white/10"
+                  >
+                    <FaTrash className="text-sm" />
+                    Clear All Data (New Address)
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => {
                   console.log('Disconnect button clicked');

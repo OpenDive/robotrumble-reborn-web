@@ -19,8 +19,9 @@
     "@dimforge/rapier3d-compat": "^0.17.0",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/react-fontawesome": "^0.2.2",
-    "@mysten/dapp-kit": "^0.16.5",
-    "@mysten/sui": "^1.30.1",
+    "@mysten/dapp-kit": "^0.16.11",
+    "@mysten/enoki": "^0.6.19",
+    "@mysten/sui": "^1.32.0",
     "@mysten/wallet-adapter-react": "^11.0.0",
     "@mysten/wallet-adapter-sui-wallet": "^0.3.0",
     "@mysten/wallet-adapter-unsafe-burner": "^0.10.0",
@@ -43,7 +44,8 @@
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.6.0",
     "socket.io-client": "^4.8.1",
-    "three": "^0.176.0"
+    "three": "^0.176.0",
+    "zod": "^3.25.63"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",

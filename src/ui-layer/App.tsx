@@ -19,20 +19,21 @@ import { RaceScreen } from './components/screens/RaceScreen';
 import BabylonTestScreen from './components/screens/BabylonTestScreen';
 import { RaceSession } from '../shared/types/race';
 import { AuthProvider, useAuth } from '../shared/contexts/AuthContext';
-import { SuiClientProvider, WalletProvider } from '@mysten/dapp-kit';
+import { SuiClientProvider, WalletProvider, createNetworkConfig } from '@mysten/dapp-kit';
 import { getFullnodeUrl } from '@mysten/sui/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { EnokiProvider } from './components/shared/EnokiProvider';
 import './App.css';
 
 // Create a query client for React Query
 const queryClient = new QueryClient();
 
-// Sui network configuration
-const networks = {
+// Sui network configuration using createNetworkConfig (Enoki recommended format)
+const { networkConfig } = createNetworkConfig({
   devnet: { url: getFullnodeUrl('devnet') },
   testnet: { url: getFullnodeUrl('testnet') },
   mainnet: { url: getFullnodeUrl('mainnet') },
-};
+});
 
 function AppContent() {
   const navigate = useNavigate();
@@ -277,7 +278,8 @@ function AppContent() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <SuiClientProvider networks={networks} defaultNetwork="testnet">
+      <SuiClientProvider networks={networkConfig} defaultNetwork="testnet">
+        <EnokiProvider />
         <WalletProvider>
           <AuthProvider>
             <Router>

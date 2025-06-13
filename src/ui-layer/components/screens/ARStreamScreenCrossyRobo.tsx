@@ -13,6 +13,8 @@ import { GameState, KeyState } from '../../../shared/types/GameTypes';
 import { suiCrossyRobotService, GameState as SuiGameState } from '../../../shared/services/suiCrossyRobotService';
 import SuiWalletConnect from '../shared/SuiWalletConnect';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { useAuth } from '../../../shared/contexts/AuthContext';
+import { useEnokiTransactions, createEnokiTransactionSigner } from '../../../shared/utils/enokiTransactions';
 
 interface ARStreamScreenCrossyRoboProps {
   session: RaceSession;
@@ -123,6 +125,12 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const suiClient = useSuiClient();
+  
+  // Enoki transaction handling
+  const { executeTransaction } = useEnokiTransactions();
+  
+  // Authentication
+  const { user } = useAuth();
   
   // AR effects toggle handler
   const toggleAREffects = () => {
@@ -528,16 +536,15 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
     };
   }, []); // Empty dependency array to run only once
 
-  // Initialize blockchain service
+  // Initialize blockchain integration
   useEffect(() => {
     const initializeBlockchain = async () => {
       try {
-        setBlockchainError(null);
         console.log('🔗 Initializing blockchain integration...');
         
-        // Connect wallet if available
-        if (currentAccount && signAndExecuteTransaction) {
-          // Wrap the mutate function to return a Promise
+        // Check if we have either traditional wallet or Enoki connection
+        if (currentAccount) {
+          // Traditional wallet connection
           const wrappedSignAndExecute = (transaction: any): Promise<any> => {
             return new Promise((resolve, reject) => {
               signAndExecuteTransaction(
@@ -554,7 +561,17 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
             currentAccount.address,
             wrappedSignAndExecute
           );
-          console.log('✅ Wallet connected to blockchain service');
+          console.log('✅ Traditional wallet connected:', currentAccount.address);
+        } else if (user && user.suiAddress) {
+          // Enoki wallet connection - use Enoki transaction handling
+          const enokiSigner = createEnokiTransactionSigner(executeTransaction);
+          
+          suiCrossyRobotService.setWalletConnection(
+            user.suiAddress,
+            enokiSigner
+          );
+          console.log('✅ Enoki wallet connected with full blockchain transaction support');
+          console.log('🔐 Using Enoki for automatic zkLogin handling');
         }
         
         const success = await suiCrossyRobotService.initialize();
@@ -570,16 +587,16 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
         setBlockchainError(error instanceof Error ? error.message : String(error));
       }
     };
-    
+
     initializeBlockchain();
-  }, [currentAccount, signAndExecuteTransaction]);
+  }, [currentAccount, signAndExecuteTransaction, user]); // Added user to dependency array
 
   // Send directional command or create game
   const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
     if (!isControlEnabled || !blockchainInitialized) return;
     
-    // Check wallet connection
-    if (!currentAccount) {
+    // Check wallet connection - support both traditional wallet and zkLogin
+    if (!currentAccount && !user) {
       const errorMsg = 'Please connect your wallet first';
       setMessageLog(prev => [{
         id: `error-${Date.now()}`,

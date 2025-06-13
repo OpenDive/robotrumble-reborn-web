@@ -19,17 +19,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// Helper function to get current epoch from Sui network
-async function getCurrentEpoch() {
-  try {
-    // For development, return a mock epoch
-    // In production, you would fetch this from Sui network
-    return Math.floor(Date.now() / 1000 / 86400); // Rough epoch calculation
-  } catch (error) {
-    console.error('Error getting current epoch:', error);
-    return Math.floor(Date.now() / 1000 / 86400);
-  }
-}
+
 
 // Get Agora credentials from environment
 const getAgoraCredentials = () => {
@@ -47,116 +37,61 @@ const getAgoraCredentials = () => {
   return { appId, appCertificate };
 };
 
-// ZK Login API route
-app.post('/api/zk-login', async (req, res) => {
+// Google OAuth API route
+app.post('/api/google-oauth', async (req, res) => {
   try {
-    const body = req.body;
-    const { action, jwt, salt, publicKey, maxEpoch, randomness } = body;
+    const { code, redirect_uri } = req.body;
 
-    // Step 1: Initialize ZK Login
-    if (action === 'init') {
-      // Dynamic imports for Sui packages
-      const { Ed25519Keypair } = await import('@mysten/sui/keypairs/ed25519');
-      const { generateNonce, generateRandomness, getExtendedEphemeralPublicKey } = await import('@mysten/sui/zklogin');
-      
-      // Generate ephemeral keypair for this session
-      const keypair = new Ed25519Keypair();
-      const extendedEphemeralPublicKey = getExtendedEphemeralPublicKey(keypair.getPublicKey());
-      console.log("SUI PUBKEY: " + keypair.getPublicKey().toBase64());
-
-      // Generate random values for the ZK proof
-      const randomness = generateRandomness();
-      const userSalt = generateRandomness();
-      
-      // Get current epoch and set max epoch
-      const currentEpoch = await getCurrentEpoch();
-      const maxEpoch = currentEpoch + 2;
-      
-      // Generate nonce for OAuth flow
-      const nonce = generateNonce(
-        keypair.getPublicKey(),
-        maxEpoch,
-        randomness
-      );
-
-      // Return all necessary values for the frontend
-      const response = {
-        success: true,
-        data: {
-          publicKey: keypair.getPublicKey().toBase64(),
-          extendedEphemeralPublicKey,
-          randomness,
-          nonce,
-          maxEpoch,
-          userSalt
-        }
-      };
-
-      return res.json(response);
+    if (!code || !redirect_uri) {
+      return res.status(400).json({ error: 'Missing code or redirect_uri' });
     }
 
-    // Step 2: Complete ZK Login
-    if (action === 'complete') {
-      if (!jwt || !salt) {
-        const response = {
-          success: false,
-          error: 'Missing jwt or salt'
-        };
-        return res.status(400).json(response);
-      }
+    // Get Google OAuth credentials from environment variables
+    const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
+    const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
-      try {
-        // Get Sui address from JWT
-        const { jwtToAddress } = await import('@mysten/sui/zklogin');
-        const address = jwtToAddress(jwt, salt);
-        
-        // Return address without proof for now
-        const response = {
-          success: true,
-          data: { 
-            address
-          }
-        };
-
-        return res.json(response);
-
-        /* TODO: ZK Proof generation (currently not working)
-        const proof = await getProof(
-          jwt,
-          body.extendedEphemeralPublicKey,
-          body.maxEpoch,
-          body.randomness,
-          salt
-        );
-
-        return res.json({
-          success: true,
-          data: { 
-            address,
-            proof
-          }
-        });
-        */
-      } catch (error) {
-        console.error('ZK Login error:', error);
-        return res.status(500).json({
-          success: false,
-          error: 'Failed to complete ZK Login'
-        });
-      }
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      console.error('Google OAuth credentials missing', {
+        hasClientId: !!GOOGLE_CLIENT_ID,
+        hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+        envKeys: Object.keys(process.env).filter(k => k.includes('GOOGLE'))
+      });
+      return res.status(500).json({ error: 'Google OAuth credentials not configured' });
     }
 
-    return res.status(400).json({ 
-      success: false, 
-      error: 'Invalid action' 
+    // Exchange code for tokens
+    const tokenEndpoint = 'https://oauth2.googleapis.com/token';
+    const params = new URLSearchParams({
+      code,
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      redirect_uri,
+      grant_type: 'authorization_code',
     });
 
+    const response = await fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params,
+    });
+
+    const responseData = await response.text();
+
+    if (!response.ok) {
+      console.error('Google token exchange error:', responseData);
+      return res.status(400).json({ error: 'Failed to exchange code for tokens' });
+    }
+
+    const tokens = JSON.parse(responseData);
+    
+    // Return tokens to frontend
+    res.status(200).json(tokens);
+    
   } catch (error) {
-    console.error('ZK Login error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: 'Internal server error' 
-    });
+    console.error('Error in Google OAuth exchange:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -217,7 +152,7 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Development token server running on http://localhost:${PORT}`);
   console.log(`📡 Ready to generate Agora tokens for local development`);
-  console.log(`🔐 ZK Login API available at /api/zk-login`);
+  console.log(`🔐 Google OAuth API available at /api/google-oauth`);
   
   // Test environment variables on startup
   try {

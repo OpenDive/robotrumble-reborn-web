@@ -4,6 +4,7 @@ import { FaChevronLeft, FaUsers, FaCrown, FaLock, FaStar } from 'react-icons/fa'
 import { Button } from '../shared/Button';
 import SuiWalletConnect from '../shared/SuiWalletConnect';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { useAuth } from '../../../shared/contexts/AuthContext';
 import { Transaction } from '@mysten/sui/transactions';
 
 interface Team {
@@ -36,6 +37,9 @@ export const TeamRegistrationScreen: React.FC<TeamRegistrationScreenProps> = ({
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const suiClient = useSuiClient();
+  
+  // Authentication (wallet or Enoki)
+  const { user } = useAuth();
 
   // State management
   const [teams, setTeams] = useState<Team[]>([]);
@@ -155,7 +159,9 @@ export const TeamRegistrationScreen: React.FC<TeamRegistrationScreenProps> = ({
 
   const handleRegistration = async () => {
     if (!validateForm()) return;
-    if (!currentAccount) {
+    
+    // Check for both traditional wallet and Enoki users
+    if (!currentAccount && !user) {
       setError('Please connect your wallet first');
       return;
     }
@@ -164,13 +170,25 @@ export const TeamRegistrationScreen: React.FC<TeamRegistrationScreenProps> = ({
     setError(null);
 
     try {
+      // For now, only traditional wallet transactions are supported  
+      // Enoki transactions would need additional implementation
+      if (!currentAccount) {
+        throw new Error('Please connect a traditional wallet to participate in staking');
+      }
+      
       // Execute staking transaction
       const txDigest = await stakeTokens();
       console.log('Staking successful, transaction:', txDigest);
 
+      // Get user address (traditional wallet or Enoki)
+      const userAddress = currentAccount?.address || user?.suiAddress;
+      if (!userAddress) {
+        throw new Error('No user address available');
+      }
+
       // Create member data
       const memberData: TeamMember = {
-        address: currentAccount.address,
+        address: userAddress,
         username: formData.username,
         email: formData.email,
         joinedAt: new Date(),
@@ -321,7 +339,7 @@ export const TeamRegistrationScreen: React.FC<TeamRegistrationScreenProps> = ({
           <SuiWalletConnect />
         </div>
 
-        {!currentAccount ? (
+        {!currentAccount && !user ? (
           <div className="text-center p-6 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
             <p className="text-yellow-400">Please connect your wallet to continue</p>
           </div>

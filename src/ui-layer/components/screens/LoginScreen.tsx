@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaChevronLeft } from 'react-icons/fa';
 import { useAuth } from '../../../shared/contexts/AuthContext';
-import GoogleSignIn from '../shared/GoogleSignIn';
+import EnokiSignIn from '../shared/EnokiSignIn';
 import SuiWalletConnect from '../shared/SuiWalletConnect';
 
 interface LoginScreenProps {
@@ -13,13 +13,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
   const navigate = useNavigate();
   const { user } = useAuth();
   const [referralCode, setReferralCode] = useState('');
+  const [hasNavigated, setHasNavigated] = useState(false);
 
   // If user is already logged in, call onLoginComplete
   React.useEffect(() => {
-    if (user) {
+    if (user && !hasNavigated) {
+      console.log('✅ LoginScreen: User detected, navigating to drivers license');
+      setHasNavigated(true);
       onLoginComplete();
+    } else if (!user && hasNavigated) {
+      // Reset flag if user logs out
+      setHasNavigated(false);
     }
-  }, [user, onLoginComplete]);
+  }, [user, onLoginComplete, hasNavigated]);
 
   const handleReferralChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setReferralCode(e.target.value);
@@ -116,7 +122,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
             </div>
           </div>
 
-          <GoogleSignIn />
+          <EnokiSignIn />
           <SuiWalletConnect />
         </div>
 
