@@ -8,7 +8,8 @@ import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/a
 import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
 import { suiCrossyRobotService, GameState as SuiGameState } from '../../../shared/services/suiCrossyRobotService';
 import { SuiWalletConnect } from '../shared/SuiWalletConnect';
-import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { useEnokiFlow, useZkLogin, useZkLoginSession } from '@mysten/enoki/react';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 
 import { AREffectsRenderer } from '../../../engine-layer/core/ar/AREffectsRenderer';
@@ -195,10 +196,11 @@ class ThreeViewerEngine {
 
         // Successfully loaded GLTF model
         this.keyModelTemplate = gltf.scene.clone();
-        this.keyModelTemplate.visible = false;
-
-        // Scale the model appropriately
-        this.keyModelTemplate.scale.set(0.5, 0.5, 0.5);
+        if (this.keyModelTemplate) {
+          this.keyModelTemplate.visible = false;
+          // Scale the model appropriately
+          this.keyModelTemplate.scale.set(0.5, 0.5, 0.5);
+        }
 
         this.logMessage('Successfully loaded key.glb model');
       } catch (gltfError) {
@@ -248,7 +250,9 @@ class ThreeViewerEngine {
 
         // Use fallback key
         this.keyModelTemplate = createFallbackKey();
-        this.keyModelTemplate.visible = false;
+        if (this.keyModelTemplate) {
+          this.keyModelTemplate.visible = false;
+        }
       }
 
       // Add to scene but keep hidden
@@ -578,8 +582,13 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   // Wallet connection hooks
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutateAsync: signTransaction } = useSignTransaction();
+  const suiClient = useSuiClient();
   
-
+  // Enoki hooks
+  const enokiFlow = useEnokiFlow();
+  const { address: enokiAddress } = useZkLogin();
+  const zkLoginSession = useZkLoginSession();
   
   // Authentication
   const { user } = useAuth();
@@ -1458,8 +1467,8 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
     if (!isControlEnabled) return;
     
-    // Check wallet connection (both traditional wallet and zkLogin)
-    if (!currentAccount && !user) {
+    // Check wallet connection - support both traditional wallet and Enoki
+    if (!currentAccount && !enokiAddress) {
       const errorMsg = 'Please connect your wallet first';
       setMessageLog(prev => [{
         id: `error-${Date.now()}`,
@@ -1505,16 +1514,48 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       // Transfer the payment to the robot address
       transaction.transferObjects([coin], transaction.pure.address("0xcbdddb4e89a23e2ca51d41b5e05230fbfa502dc672cc58e298ec952d170b0901"));
       
-      // Execute the transaction
-      const result = await new Promise((resolve, reject) => {
-        signAndExecuteTransaction(
-          { transaction },
-          {
-            onSuccess: (result) => resolve(result),
-            onError: (error) => reject(error)
-          }
-        );
-      });
+      let result;
+      
+      // Execute transaction based on wallet type
+      if (currentAccount && signAndExecuteTransaction) {
+        // Traditional wallet execution
+        result = await new Promise((resolve, reject) => {
+          signAndExecuteTransaction(
+            { transaction },
+            {
+              onSuccess: (result) => resolve(result),
+              onError: (error) => reject(error)
+            }
+          );
+        });
+      } else if (enokiAddress && zkLoginSession) {
+        // Enoki wallet execution
+        // Set the sender address
+        transaction.setSender(enokiAddress);
+        
+        // Build the transaction
+        const txBytes = await transaction.build({ client: suiClient });
+        
+        // Get Enoki keypair and sign
+        const signer = await enokiFlow.getKeypair({
+          network: 'testnet',
+        });
+        const signature = await signer.signTransaction(txBytes);
+        
+        // Execute the transaction
+        result = await suiClient.executeTransactionBlock({
+          transactionBlock: txBytes,
+          signature: signature.signature,
+          requestType: "WaitForLocalExecution",
+          options: {
+            showEffects: true,
+            showEvents: true,
+            showObjectChanges: true,
+          },
+        });
+      } else {
+        throw new Error('No valid wallet connection found');
+      }
       
       // Add "acknowledged" command to log with new timestamp
       const ackTimestamp = new Date().toLocaleTimeString();
@@ -1552,14 +1593,14 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       console.log('🔗 Initializing blockchain integration...');
       
       // Connect wallet if available (both traditional wallet and Enoki)
-      if (currentAccount || user) {
+      if (currentAccount || enokiAddress) {
         setBlockchainInitialized(true);
         
         // Get user address from either traditional wallet or Enoki
-        const userAddress = currentAccount?.address || user?.suiAddress;
+        const userAddress = currentAccount?.address || enokiAddress;
         
         // Connect traditional wallet if available
-        if (currentAccount) {
+        if (currentAccount && signAndExecuteTransaction) {
           // Traditional wallet connection
           const wrappedSignAndExecute = (transaction: any): Promise<any> => {
             return new Promise((resolve, reject) => {
@@ -1579,20 +1620,62 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
           );
           console.log('✅ Traditional wallet connected:', currentAccount.address);
         }
-        // Connect Enoki user if available
-        else if (user && user.suiAddress) {
+        // Connect Enoki wallet if available
+        else if (enokiAddress && zkLoginSession) {
+          // Enoki wallet connection - use Enoki's direct transaction execution
+          const enokiSigner = async (transaction: any): Promise<any> => {
+            try {
+              // Set the sender address
+              transaction.setSender(enokiAddress);
+              
+              // Build the transaction
+              const txBytes = await transaction.build({ client: suiClient });
+              
+              // Get Enoki keypair and sign
+              const signer = await enokiFlow.getKeypair({
+                network: 'testnet',
+              });
+              const signature = await signer.signTransaction(txBytes);
+              
+              // Execute the transaction
+              const result = await suiClient.executeTransactionBlock({
+                transactionBlock: txBytes,
+                signature: signature.signature,
+                requestType: "WaitForLocalExecution",
+                options: {
+                  showEffects: true,
+                  showEvents: true,
+                  showObjectChanges: true,
+                },
+              });
+              
+              return result;
+            } catch (error) {
+              console.error('Enoki transaction execution failed:', error);
+              throw error;
+            }
+          };
+
+          // Set up the service with Enoki wallet connection
+          suiCrossyRobotService.setWalletConnection(enokiAddress, enokiSigner);
           console.log('✅ Enoki wallet connected with blockchain transaction support');
           console.log('🔐 Using Enoki for automatic zkLogin handling');
         }
         
         // Set simple mock state
         setSuiGameState({
-          gameId: "9538",
-          gameObjectId: "0x3fbe01871af92ae00f9e201d82cb9fdbd1507fd5b9355e2cb50b161933b00c07",
-          isConnected: true,
           userAddress: userAddress || '',
-          robotAddress: "0xcbdddb4e89a23e2ca51d41b5e05230fbfa502dc672cc58e298ec952d170b0901",
-          balance: { user: 1.0, robot: 0.5 }
+          isInitialized: true,
+          balance: { user: 1.0, robot: 0.5 },
+          gameObjectId: "0x3fbe01871af92ae00f9e201d82cb9fdbd1507fd5b9355e2cb50b161933b00c07",
+          lastTransactionId: null,
+          gameCreated: true,
+          gameStarted: true,
+          gameEnded: false,
+          score: 0,
+          lives: 3,
+          position: { x: 0, y: 0 },
+          direction: 'up'
         });
         
         console.log('✅ Blockchain integration ready');
@@ -1606,7 +1689,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   // Initialize blockchain on wallet connection
   useEffect(() => {
     initializeBlockchain();
-  }, [currentAccount, user, signAndExecuteTransaction]);
+  }, [currentAccount, enokiAddress, zkLoginSession]);
 
   // Add key scale slider handler
   const handleKeyScaleChange = (newScale: number) => {
