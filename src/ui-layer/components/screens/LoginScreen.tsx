@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaChevronLeft } from 'react-icons/fa';
 import { useAuth } from '../../../shared/contexts/AuthContext';
-import EnokiSignIn from '../shared/EnokiSignIn';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 
 interface LoginScreenProps {
   onLoginComplete: () => void;
@@ -122,7 +121,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
             </div>
           </div>
 
-          <EnokiSignIn />
           <SuiWalletConnect />
         </div>
 

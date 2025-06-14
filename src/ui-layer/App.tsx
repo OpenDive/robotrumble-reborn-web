@@ -14,6 +14,7 @@ import { ARViewerScreenCrossyRobo } from './components/screens/ARViewerScreenCro
 import { ARStreamScreenRoboRumble } from './components/screens/ARStreamScreenRoboRumble';
 import { ARViewerScreenRoboRumble } from './components/screens/ARViewerScreenRoboRumble';
 import { TeamRegistrationScreen } from './components/screens/TeamRegistrationScreen';
+import AuthCallbackScreen from './components/screens/AuthCallbackScreen';
 import { RouteTransition } from './components/transitions/RouteTransition';
 import { RaceScreen } from './components/screens/RaceScreen';
 import BabylonTestScreen from './components/screens/BabylonTestScreen';
@@ -267,8 +268,8 @@ function AppContent() {
       <Route path="/race" element={<RaceScreen onBack={handleBackToMenu} />} />
       <Route path="/babylon-test" element={<BabylonTestScreen />} />
       <Route path="/auth/callback" element={
-        <RouteTransition route="login">
-          <LoginScreen onLoginComplete={handleLoginComplete} />
+        <RouteTransition route="auth-callback">
+          <AuthCallbackScreen />
         </RouteTransition>
       } />
     </Routes>
@@ -279,13 +280,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SuiClientProvider networks={networkConfig} defaultNetwork="testnet">
-        <EnokiProvider />
         <WalletProvider>
-          <AuthProvider>
-            <Router>
-              <AppContent />
-            </Router>
-          </AuthProvider>
+          <EnokiProvider>
+            <AuthProvider>
+              <Router>
+                <AppContent />
+              </Router>
+            </AuthProvider>
+          </EnokiProvider>
         </WalletProvider>
       </SuiClientProvider>
     </QueryClientProvider>

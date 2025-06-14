@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaChevronLeft, FaUsers, FaCrown, FaLock, FaStar } from 'react-icons/fa';
 import { Button } from '../shared/Button';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import { Transaction } from '@mysten/sui/transactions';

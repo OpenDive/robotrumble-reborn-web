@@ -2,20 +2,40 @@ import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
 import pkg from 'agora-token';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Load environment variables
-config();
+// Get current directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from parent directory
+config({ path: path.join(__dirname, '..', '.env') });
 
 const { RtcTokenBuilder, RtcRole } = pkg;
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // CORS configuration
-app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'],
-  credentials: true
-}));
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
+// Add security headers for Enoki OAuth compatibility
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+  next();
+});
 
 app.use(express.json());
 
@@ -149,16 +169,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Development token server is running' });
 });
 
+// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Development token server running on http://localhost:${PORT}`);
-  console.log(`📡 Ready to generate Agora tokens for local development`);
-  console.log(`🔐 Google OAuth API available at /api/google-oauth`);
+  console.log(`🚀 Development server running on port ${PORT}`);
+  console.log(`📱 Frontend should connect to: http://localhost:${PORT}`);
+  console.log(`🎮 Game APIs available at /api/game/*`);
+  console.log(`🤖 Robot APIs available at /api/robot/*`);
   
-  // Test environment variables on startup
-  try {
-    getAgoraCredentials();
-    console.log('✅ Agora credentials loaded successfully');
-  } catch (error) {
-    console.error('❌ Error loading Agora credentials:', error.message);
+  if (!process.env.ENOKI_PRIVATE_API_KEY) {
+    console.log('⚠️  Enoki private API key not found - some features may not work');
   }
 }); 

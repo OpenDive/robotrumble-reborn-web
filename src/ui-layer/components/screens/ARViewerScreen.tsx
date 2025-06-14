@@ -6,7 +6,7 @@ import { RaceSession } from '../../../shared/types/race';
 import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
 import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 
 interface ARViewerScreenProps {
   session: RaceSession;

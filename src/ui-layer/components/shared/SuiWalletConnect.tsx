@@ -1,93 +1,134 @@
-import React, { useState } from 'react';
-import { useCurrentAccount, useConnectWallet, useDisconnectWallet, useWallets, ConnectButton } from '@mysten/dapp-kit';
+import React, { useEffect, useState } from 'react';
+import { useCurrentAccount, useCurrentWallet, useDisconnectWallet } from '@mysten/dapp-kit';
+import { useEnokiFlow, useZkLogin, useZkLoginSession } from '@mysten/enoki/react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../shared/contexts/AuthContext';
-import { FaWallet, FaChevronDown, FaCopy, FaSignOutAlt, FaTrash, FaWrench } from 'react-icons/fa';
+import { jwtDecode } from 'jwt-decode';
+import { FaWallet, FaChevronDown, FaCopy, FaSignOutAlt } from 'react-icons/fa';
 
-export default function SuiWalletConnect() {
-  const { user, setUser, logout } = useAuth();
-  const currentAccount = useCurrentAccount();
-  const { mutate: connectWallet } = useConnectWallet();
-  const { mutate: disconnectWallet } = useDisconnectWallet();
-  const wallets = useWallets();
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id';
+
+// Debug: Log the Google Client ID
+console.log('🔑 Google Client ID loaded:', GOOGLE_CLIENT_ID ? 'Yes' : 'No');
+console.log('🔑 Client ID preview:', GOOGLE_CLIENT_ID ? `${GOOGLE_CLIENT_ID.substring(0, 8)}...` : 'Not found');
+
+export const SuiWalletConnect: React.FC = () => {
+  const navigate = useNavigate();
+  const { user, setUser } = useAuth();
+  const [isConnecting, setIsConnecting] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Update auth context when wallet connection changes
-  React.useEffect(() => {
-    if (currentAccount && !user) {
-      // User connected wallet
-      const newUser = {
-        suiAddress: currentAccount.address,
-        walletAddress: currentAccount.address,
-        loginMethod: 'wallet' as const,
-        name: currentAccount.label || 'Wallet User'
-      };
-      setUser(newUser);
-    } else if (!currentAccount && user?.loginMethod === 'wallet') {
-      // User disconnected wallet
-      setUser(null);
-    }
-  }, [currentAccount, user, setUser]);
+  // Enoki Flow hooks
+  const enokiFlow = useEnokiFlow();
+  const { address: enokiAddress } = useZkLogin();
+  const zkLoginSession = useZkLoginSession();
 
-  const handleDisconnect = () => {
-    console.log('handleDisconnect called');
-    console.log('user:', user);
-    console.log('user?.loginMethod:', user?.loginMethod);
-    
-    // Handle both wallet and ZkLogin disconnection
-    if (user?.loginMethod === 'google') {
-      // Clear ZkLogin data
-      console.log('Disconnecting ZkLogin user...');
-      logout();
-      setShowDropdown(false);
-      console.log('ZkLogin user disconnected');
+  // Regular wallet hooks
+  const currentAccount = useCurrentAccount();
+  const { isConnected: isWalletConnected } = useCurrentWallet();
+  const { mutate: disconnect } = useDisconnectWallet();
+
+  // Determine connection state
+  const isConnected = !!enokiAddress || isWalletConnected;
+  const isUsingEnoki = !!enokiAddress;
+  const address = enokiAddress || currentAccount?.address;
+
+  console.log('🔍 Wallet Connection State:', {
+    isConnected,
+    isUsingEnoki,
+    address,
+    zkLoginSession: !!zkLoginSession,
+    jwt: !!zkLoginSession?.jwt
+  });
+
+  // Handle Enoki authentication when session is available
+  useEffect(() => {
+    if (isConnected && zkLoginSession && zkLoginSession.jwt && !user) {
+      try {
+        const token = zkLoginSession.jwt;
+        const decoded = jwtDecode(token) as any;
+
+        console.log('🎯 Processing Enoki authentication:', {
+          email: decoded.email,
+          address: address
+        });
+
+                const authenticatedUser = {
+          suiAddress: address!,
+          walletAddress: address!,
+                  loginMethod: 'google' as const,
+          email: decoded.email,
+          name: decoded.name || decoded.given_name || 'Enoki User',
+          idToken: token,
+                };
+                
+                setUser(authenticatedUser);
+        console.log('✅ Enoki user authenticated successfully');
+        } catch (error) {
+        console.error('❌ Failed to process Enoki authentication:', error);
+      }
+    }
+  }, [isConnected, zkLoginSession, address, user, setUser]);
+
+  const handleGoogleSignIn = async () => {
+    if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'your-google-client-id') {
+      console.error('❌ Google Client ID is missing');
+      alert('Google Client ID is not configured. Please check your environment variables.');
       return;
     }
     
-    // Clear any stored wallet connection data
     try {
-      // Clear dApp Kit storage
-      localStorage.removeItem('sui-dapp-kit:wallet-connection-info');
-      localStorage.removeItem('sui-dapp-kit:last-connected-wallet-name');
-      localStorage.removeItem('sui-dapp-kit:wallet-connection-status');
-      
-      // Clear any other wallet-related storage
-      Object.keys(localStorage).forEach(key => {
-        if (key.includes('wallet') || key.includes('sui') || key.includes('dapp')) {
-          localStorage.removeItem(key);
-        }
+      setIsConnecting(true);
+      console.log('🚀 Starting Google OAuth flow...');
+
+      // Navigate to auth page first
+      navigate('/auth/callback');
+
+      // Create authorization URL
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const customRedirectUri = `${protocol}//${host}/auth/callback`;
+
+      console.log('🔗 Using redirect URI:', customRedirectUri);
+
+      const url = await enokiFlow.createAuthorizationURL({
+        provider: 'google',
+        network: 'testnet', // or 'mainnet' based on your config
+        clientId: GOOGLE_CLIENT_ID,
+        redirectUrl: customRedirectUri,
+        extraParams: {
+          scope: ['openid', 'email', 'profile'],
+        },
       });
+
+      console.log('🔗 Redirecting to OAuth URL:', url);
       
-      console.log('Cleared wallet storage');
+      // Redirect to the OAuth URL
+      window.location.href = url;
+
     } catch (error) {
-      console.error('Error clearing wallet storage:', error);
+      console.error('❌ Failed to start OAuth flow:', error);
+      setIsConnecting(false);
+      alert('Failed to start sign-in process. Please try again.');
     }
-    
-    disconnectWallet();
+  };
+
+  const handleDisconnect = () => {
+    if (isUsingEnoki) {
+      enokiFlow.logout();
+    } else {
+      disconnect();
+    }
+    setUser(null);
     setShowDropdown(false);
+    console.log('🔌 Wallet disconnected');
   };
 
   const handleCopyAddress = () => {
-    const address = currentAccount?.address || user?.suiAddress;
     if (address) {
       navigator.clipboard.writeText(address);
-      // You could add a toast notification here
       console.log('Address copied to clipboard');
     }
-  };
-
-  const handleFixCorruptedZkLogin = () => {
-    // With Enoki, we just sign out and sign back in
-    logout();
-    console.log('🔧 Enoki session cleared (keeping same address)');
-    setShowDropdown(false);
-  };
-
-  const handleClearZkLogin = () => {
-    // With Enoki, we clear local storage and sign out
-    localStorage.clear();
-    logout();
-    console.log('🧹 All Enoki data cleared (will generate new address)');
-    setShowDropdown(false);
   };
 
   const toggleDropdown = () => {
@@ -95,7 +136,7 @@ export default function SuiWalletConnect() {
   };
 
   // Close dropdown when clicking outside
-  React.useEffect(() => {
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element;
       if (!target.closest('.wallet-dropdown')) {
@@ -109,12 +150,7 @@ export default function SuiWalletConnect() {
     }
   }, [showDropdown]);
 
-  // Check if user is connected via wallet or ZkLogin
-  const isConnected = currentAccount || user;
-  const displayAddress = currentAccount?.address || user?.suiAddress;
-  const displayName = currentAccount?.label || user?.name || 'User';
-
-  if (isConnected && displayAddress) {
+  if (isConnected && user) {
     return (
       <div className="relative wallet-dropdown">
         <button
@@ -126,11 +162,11 @@ export default function SuiWalletConnect() {
           </div>
           <div className="text-left">
             <div className="text-sm font-medium">
-              {displayAddress.slice(0, 6)}...{displayAddress.slice(-4)}
+              {address?.slice(0, 6)}...{address?.slice(-4)}
             </div>
-            {user?.loginMethod === 'google' && (
-              <div className="text-xs text-white/60">ZkLogin</div>
-            )}
+            <div className="text-xs text-white/60">
+              {isUsingEnoki ? 'Enoki (zkLogin)' : 'Standard Wallet'}
+            </div>
           </div>
           <FaChevronDown className={`text-xs transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
         </button>
@@ -140,11 +176,11 @@ export default function SuiWalletConnect() {
           <div className="absolute top-full right-0 mt-2 w-64 bg-black/90 backdrop-blur-sm border border-white/10 rounded-lg shadow-xl z-50">
             <div className="p-4">
               <div className="text-white text-sm font-medium mb-2">
-                {user?.loginMethod === 'google' ? 'ZkLogin Address' : 'Wallet Address'}
+                {isUsingEnoki ? 'Enoki Address' : 'Wallet Address'}
               </div>
               <div className="flex items-center gap-2 p-2 bg-white/5 rounded border border-white/10">
                 <span className="text-white/80 text-xs font-mono flex-1 break-all">
-                  {displayAddress}
+                  {address}
                 </span>
                 <button
                   onClick={handleCopyAddress}
@@ -169,33 +205,12 @@ export default function SuiWalletConnect() {
             </div>
             
             <div className="border-t border-white/10">
-              {user?.loginMethod === 'google' && (
-                <>
-                  <button
-                    onClick={handleFixCorruptedZkLogin}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-blue-400 hover:bg-blue-500/10 transition-colors text-sm border-b border-white/10"
-                  >
-                    <FaWrench className="text-sm" />
-                    Fix Corrupted Data (Keep Address)
-                  </button>
-                  <button
-                    onClick={handleClearZkLogin}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-yellow-400 hover:bg-yellow-500/10 transition-colors text-sm border-b border-white/10"
-                  >
-                    <FaTrash className="text-sm" />
-                    Clear All Data (New Address)
-                  </button>
-                </>
-              )}
               <button
-                onClick={() => {
-                  console.log('Disconnect button clicked');
-                  handleDisconnect();
-                }}
+                onClick={handleDisconnect}
                 className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 transition-colors text-sm"
               >
                 <FaSignOutAlt className="text-sm" />
-                {user?.loginMethod === 'google' ? 'Sign Out' : 'Disconnect Wallet'}
+                {isUsingEnoki ? 'Sign Out' : 'Disconnect Wallet'}
               </button>
             </div>
           </div>
@@ -206,20 +221,31 @@ export default function SuiWalletConnect() {
 
   return (
     <div className="relative w-full group">
-      <ConnectButton
-        connectText="Connect Wallet"
-        className="relative w-full group flex items-center justify-center px-6 py-4 text-lg font-bold rounded-xl text-white bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-all duration-300 overflow-hidden"
-      />
-      {/* Custom styling overlay */}
-      <div className="absolute inset-0 pointer-events-none">
+      <button
+        onClick={handleGoogleSignIn}
+        disabled={isConnecting}
+        className="relative w-full group flex items-center justify-center px-6 py-4 text-lg font-bold rounded-xl text-white bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-all duration-300 overflow-hidden border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {/* Animated background shimmer */}
         <div 
-          className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-neon-purple/20 via-white/5 to-neon-purple/20 rounded-xl"
+          className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-neon-purple/20 via-white/5 to-neon-purple/20"
           style={{
             backgroundSize: '200% 100%',
             animation: 'shimmer 2s linear infinite',
           }}
         />
+        
+        {/* Google icon and text */}
+        <div className="relative flex items-center justify-center space-x-3">
+          <svg className="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          <span>{isConnecting ? 'Connecting...' : 'Sign in with Google'}</span>
       </div>
+      </button>
     </div>
   );
-} 
+}; 

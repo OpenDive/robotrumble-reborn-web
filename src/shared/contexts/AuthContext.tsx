@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
+// Legacy interface for backward compatibility - deprecated, use Enoki instead
 export interface ZkLoginState {
   publicKey: string;
   randomness: string;
@@ -16,9 +17,9 @@ export interface User {
   name?: string;
   picture?: string;
   suiAddress: string;
-  zkLoginState?: ZkLoginState;
+  zkLoginState?: ZkLoginState; // Legacy field - deprecated, use Enoki instead
   walletAddress?: string;
-  loginMethod: 'google' | 'wallet';
+  loginMethod: 'google' | 'wallet' | 'enoki';
 }
 
 interface AuthContextType {
@@ -45,9 +46,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const storedUser = localStorage.getItem('auth_user');
         const storedSuiAddress = localStorage.getItem('sui_address');
         
+        console.log('🔍 AuthContext: Checking stored auth data...');
+        console.log('🔍 Stored user:', storedUser);
+        console.log('🔍 Stored SUI address:', storedSuiAddress);
+        
         if (storedUser && storedSuiAddress) {
           const userData = JSON.parse(storedUser);
-          setUser({ ...userData, suiAddress: storedSuiAddress });
+          console.log('🔍 Parsed user data:', userData);
+          console.log('⚠️ Found stored auth data - this might be causing automatic navigation');
+          console.log('⚠️ Clearing stored auth data to prevent automatic login');
+          
+          // Clear the stored data instead of loading it
+          localStorage.removeItem('auth_user');
+          localStorage.removeItem('sui_address');
+          
+          // Don't set the user - let them authenticate fresh
+          // setUser({ ...userData, suiAddress: storedSuiAddress });
+        } else {
+          console.log('✅ No stored auth data found');
         }
       } catch (error) {
         console.error('Error loading stored auth:', error);
@@ -69,20 +85,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(null);
     localStorage.removeItem('auth_user');
     localStorage.removeItem('sui_address');
-    localStorage.removeItem('zk_login_state');
+    localStorage.removeItem('zk_login_state'); // Legacy zkLogin
     
-    console.log('User state cleared');
+    // Clear Enoki-related data
+    Object.keys(localStorage).forEach(key => {
+      if (key.includes('enoki') || key.includes('wallet') || key.includes('sui')) {
+        localStorage.removeItem(key);
+      }
+    });
+    
+    console.log('User state and all authentication data cleared');
   };
 
   const handleSetUser = (newUser: User | null) => {
     setUser(newUser);
     if (newUser) {
-      // Store user data (excluding sensitive tokens in production)
+      // Store user data (including tokens for authentication)
       const userToStore = {
         email: newUser.email,
         name: newUser.name,
         picture: newUser.picture,
-        zkLoginState: newUser.zkLoginState,
+        idToken: newUser.idToken, // Store idToken for authentication
+        zkLoginState: newUser.zkLoginState, // Legacy field
         walletAddress: newUser.walletAddress,
         loginMethod: newUser.loginMethod
       };

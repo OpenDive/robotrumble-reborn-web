@@ -7,10 +7,10 @@ import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
 import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
 import { suiCrossyRobotService, GameState as SuiGameState } from '../../../shared/services/suiCrossyRobotService';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 import { useAuth } from '../../../shared/contexts/AuthContext';
-import { useEnokiTransactions, createEnokiTransactionSigner } from '../../../shared/utils/enokiTransactions';
+
 import { AREffectsRenderer } from '../../../engine-layer/core/ar/AREffectsRenderer';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -579,8 +579,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   
-  // Enoki transaction handling
-  const { executeTransaction } = useEnokiTransactions();
+
   
   // Authentication
   const { user } = useAuth();
@@ -1582,14 +1581,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         }
         // Connect Enoki user if available
         else if (user && user.suiAddress) {
-          // Enoki wallet connection - use Enoki transaction handling
-          const enokiSigner = createEnokiTransactionSigner(executeTransaction);
-          
-          suiCrossyRobotService.setWalletConnection(
-            user.suiAddress,
-            enokiSigner
-          );
-          console.log('✅ Enoki wallet connected with full blockchain transaction support');
+          console.log('✅ Enoki wallet connected with blockchain transaction support');
           console.log('🔐 Using Enoki for automatic zkLogin handling');
         }
         

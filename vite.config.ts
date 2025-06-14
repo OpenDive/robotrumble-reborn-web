@@ -35,6 +35,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       }
+    },
+    cors: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      'Cross-Origin-Embedder-Policy': 'unsafe-none'
     }
   }
 })

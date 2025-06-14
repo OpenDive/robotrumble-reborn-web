@@ -11,7 +11,7 @@ import { InputController } from '../../../engine-layer/core/input/InputControlle
 import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
 import { suiDeliveryService, DeliveryState } from '../../../shared/services/suiDeliveryService';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
 
 interface ARStreamScreenProps {

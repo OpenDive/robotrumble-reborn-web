@@ -11,10 +11,10 @@ import { InputController } from '../../../engine-layer/core/input/InputControlle
 import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
 import { suiCrossyRobotService, GameState as SuiGameState } from '../../../shared/services/suiCrossyRobotService';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
-import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { useEnokiFlow, useZkLogin, useZkLoginSession } from '@mysten/enoki/react';
 import { useAuth } from '../../../shared/contexts/AuthContext';
-import { useEnokiTransactions, createEnokiTransactionSigner } from '../../../shared/utils/enokiTransactions';
 
 interface ARStreamScreenCrossyRoboProps {
   session: RaceSession;
@@ -124,10 +124,13 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
   // Wallet connection hooks
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutateAsync: signTransaction } = useSignTransaction();
   const suiClient = useSuiClient();
   
-  // Enoki transaction handling
-  const { executeTransaction } = useEnokiTransactions();
+  // Enoki hooks
+  const enokiFlow = useEnokiFlow();
+  const { address: enokiAddress } = useZkLogin();
+  const zkLoginSession = useZkLoginSession();
   
   // Authentication
   const { user } = useAuth();
@@ -542,9 +545,9 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
       try {
         console.log('🔗 Initializing blockchain integration...');
         
-        // Check if we have either traditional wallet or Enoki connection
-        if (currentAccount) {
-          // Traditional wallet connection
+        // Set up wallet connection for blockchain transactions
+        if (currentAccount && signAndExecuteTransaction) {
+          // Traditional wallet connection (Sui Wallet, etc.)
           const wrappedSignAndExecute = (transaction: any): Promise<any> => {
             return new Promise((resolve, reject) => {
               signAndExecuteTransaction(
@@ -556,21 +559,49 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
               );
             });
           };
-          
-          suiCrossyRobotService.setWalletConnection(
-            currentAccount.address,
-            wrappedSignAndExecute
-          );
+
+          // Set up the service with traditional wallet connection
+          suiCrossyRobotService.setWalletConnection(currentAccount.address, wrappedSignAndExecute);
           console.log('✅ Traditional wallet connected:', currentAccount.address);
-        } else if (user && user.suiAddress) {
-          // Enoki wallet connection - use Enoki transaction handling
-          const enokiSigner = createEnokiTransactionSigner(executeTransaction);
           
-          suiCrossyRobotService.setWalletConnection(
-            user.suiAddress,
-            enokiSigner
-          );
-          console.log('✅ Enoki wallet connected with full blockchain transaction support');
+        } else if (enokiAddress && zkLoginSession) {
+          // Enoki wallet connection - use Enoki's direct transaction execution
+          const enokiSigner = async (transaction: any): Promise<any> => {
+            try {
+              // Set the sender address
+              transaction.setSender(enokiAddress);
+              
+              // Build the transaction
+              const txBytes = await transaction.build({ client: suiClient });
+              
+              // Get Enoki keypair and sign
+              const signer = await enokiFlow.getKeypair({
+                network: 'testnet',
+              });
+              const signature = await signer.signTransaction(txBytes);
+              
+              // Execute the transaction
+              const result = await suiClient.executeTransactionBlock({
+                transactionBlock: txBytes,
+                signature: signature.signature,
+                requestType: "WaitForLocalExecution",
+                options: {
+                  showEffects: true,
+                  showEvents: true,
+                  showObjectChanges: true,
+                },
+              });
+              
+              return result;
+            } catch (error) {
+              console.error('Enoki transaction execution failed:', error);
+              throw error;
+            }
+          };
+
+          // Set up the service with Enoki wallet connection
+          suiCrossyRobotService.setWalletConnection(enokiAddress, enokiSigner);
+          console.log('✅ Enoki wallet connected with blockchain transaction support');
           console.log('🔐 Using Enoki for automatic zkLogin handling');
         }
         
@@ -589,14 +620,14 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
     };
 
     initializeBlockchain();
-  }, [currentAccount, signAndExecuteTransaction, user]); // Added user to dependency array
+  }, [currentAccount, signAndExecuteTransaction, enokiAddress, zkLoginSession]); // Updated deps for Enoki
 
   // Send directional command or create game
   const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
     if (!isControlEnabled || !blockchainInitialized) return;
     
-    // Check wallet connection - support both traditional wallet and zkLogin
-    if (!currentAccount && !user) {
+    // Check wallet connection - support both traditional wallet and Enoki
+    if (!currentAccount && !enokiAddress) {
       const errorMsg = 'Please connect your wallet first';
       setMessageLog(prev => [{
         id: `error-${Date.now()}`,
@@ -1473,12 +1504,16 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
                     
                     <div className="flex justify-between text-xs">
                       <span className="text-white/70">User Balance:</span>
-                      <span className="text-white">{suiGameState.balance.user.toFixed(3)} SUI</span>
+                      <span className="text-white">
+                        {suiGameState.balance ? suiGameState.balance.user.toFixed(3) : '0.000'} SUI
+                      </span>
                     </div>
                     
                     <div className="flex justify-between text-xs">
                       <span className="text-white/70">Robot Balance:</span>
-                      <span className="text-white">{suiGameState.balance.robot.toFixed(3)} SUI</span>
+                      <span className="text-white">
+                        {suiGameState.balance ? suiGameState.balance.robot.toFixed(3) : '0.000'} SUI
+                      </span>
                     </div>
                   </div>
                 </div>

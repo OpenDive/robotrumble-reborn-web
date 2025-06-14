@@ -3,7 +3,7 @@ import { SplitLayout } from '../layout/SplitLayout';
 import { MenuButton } from '../buttons/MenuButton';
 import { NavigationButton } from '../buttons/NavigationButton';
 import { FaUser, FaUsers, FaInfoCircle, FaStar } from 'react-icons/fa';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 import { WorldGlobe } from '../shared/WorldGlobe';
 
 interface GameMenuScreenProps {

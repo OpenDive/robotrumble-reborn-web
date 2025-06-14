@@ -10,7 +10,7 @@ import { GamePhysicsSystem } from '../../../engine-layer/core/physics/GamePhysic
 import { InputController } from '../../../engine-layer/core/input/InputController';
 import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 
 interface ARStreamScreenRoboRumbleProps {
   session: RaceSession;

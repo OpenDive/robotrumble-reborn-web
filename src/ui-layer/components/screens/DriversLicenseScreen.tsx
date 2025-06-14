@@ -5,7 +5,7 @@ import { faGamepad } from '@fortawesome/free-solid-svg-icons';
 import { DriversLicenseCard } from '../cards/DriversLicenseCard';
 import { CountdownOverlay } from '../overlays/CountdownOverlay';
 import { triggerNeonConfetti } from '../../utils/confetti';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 
 type CaptureState = 'camera' | 'preview';
 type CountdownState = 'idle' | 'counting' | 'capturing';

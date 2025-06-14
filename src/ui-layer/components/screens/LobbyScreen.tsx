@@ -5,7 +5,7 @@ import { RaceCardGrid } from './lobby/RaceCard/RaceCardGrid';
 import { RoleModal } from './lobby/RoleModal/RoleModal';
 import { Header } from '../layout/Header';
 import { PageContainer } from '../layout/PageContainer';
-import SuiWalletConnect from '../shared/SuiWalletConnect';
+import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 
 interface LobbyScreenProps {
   onStartRace: () => void;
