@@ -1742,8 +1742,8 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       setRobotCommands(prev => [failedCommand, ...prev].slice(0, 20));
       console.error('Failed to send robot command:', error);
     } finally {
-      // Re-enable controls after a short delay
-      setTimeout(() => setIsControlEnabled(true), 10);
+      // Re-enable controls immediately
+      setIsControlEnabled(true);
     }
   };
 
