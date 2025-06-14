@@ -140,6 +140,234 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
   
   // Authentication
   const { user } = useAuth();
+
+  // Initialize webcam and AR on component mount - MOVED BEFORE CONDITIONAL RETURN
+  useEffect(() => {
+    // Only initialize if authenticated
+    if (!isAuthenticated) return;
+
+    const initializeWebcamAndAR = async () => {
+      try {
+        console.log('Requesting webcam access...');
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        });
+        
+        console.log('Webcam access granted');
+        setWebcamStream(stream);
+        setWebcamError(null);
+        
+        // Set up video element
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          
+          const onVideoLoaded = async () => {
+            console.log('Webcam video loaded, video dimensions:', 
+              videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+            
+            // Ensure video is playing before starting AR
+            if (videoRef.current) {
+              try {
+                await videoRef.current.play();
+                console.log('Webcam video is now playing, starting AR initialization...');
+              } catch (error) {
+                console.log('Video play() returned promise, likely already playing');
+              }
+              
+              // Wait a bit more to ensure video is fully ready
+              setTimeout(() => {
+                initializeARSystem();
+              }, 500);
+            }
+            
+            videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
+          };
+          
+          const onVideoError = (error: any) => {
+            console.error('Video element error:', error);
+            setWebcamError('Failed to load video stream');
+          };
+          
+          videoRef.current.addEventListener('loadeddata', onVideoLoaded);
+          videoRef.current.addEventListener('error', onVideoError);
+          
+          // Also listen for when video starts playing
+          const onVideoPlay = () => {
+            console.log('Webcam video started playing');
+          };
+          videoRef.current.addEventListener('play', onVideoPlay);
+        }
+      } catch (error) {
+        console.error('Failed to access webcam:', error);
+        setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
+        setArMode(false);
+        
+        console.log('❌ Webcam access failed, AR features will be disabled');
+      }
+    };
+
+    initializeWebcamAndAR();
+
+    // Set up resize observer for canvas sizing
+    let resizeObserver: ResizeObserver | null = null;
+    
+    if (canvasRef.current) {
+      resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (canvasRef.current) {
+            canvasRef.current.width = width;
+            canvasRef.current.height = height;
+            console.log(`Canvas resized to: ${width}x${height}`);
+            
+            // Update render system if it exists
+            if (renderSystemRef.current) {
+              renderSystemRef.current.resize();
+            }
+          }
+        }
+      });
+      
+      resizeObserver.observe(canvasRef.current.parentElement || canvasRef.current);
+    }
+
+    return () => {
+      console.log('Component cleanup...');
+      
+      // Cleanup resize observer
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      
+      // Cleanup AR systems
+      cleanupARSystem();
+      
+      // Cleanup 3D game systems
+      if (gameLoopRef.current) {
+        gameLoopRef.current.dispose();
+        gameLoopRef.current = null;
+      }
+      if (inputControllerRef.current) {
+        inputControllerRef.current.dispose();
+        inputControllerRef.current = null;
+      }
+      if (physicsSystemRef.current) {
+        physicsSystemRef.current.dispose();
+        physicsSystemRef.current = null;
+      }
+      
+      // Stop webcam
+      if (webcamStream) {
+        console.log('Stopping webcam tracks');
+        webcamStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [isAuthenticated]); // Depend on authentication state
+
+  // Initialize blockchain integration - MOVED BEFORE CONDITIONAL RETURN
+  useEffect(() => {
+    // Only initialize if authenticated
+    if (!isAuthenticated) return;
+
+    const initializeBlockchain = async () => {
+      try {
+        console.log('🔗 Initializing blockchain integration...');
+        
+        // Set up wallet connection for blockchain transactions
+        if (currentAccount && signAndExecuteTransaction) {
+          // Traditional wallet connection (Sui Wallet, etc.)
+          const wrappedSignAndExecute = (transaction: any): Promise<any> => {
+            return new Promise((resolve, reject) => {
+              signAndExecuteTransaction(
+                { transaction },
+                {
+                  onSuccess: (result) => resolve(result),
+                  onError: (error) => reject(error)
+                }
+              );
+            });
+          };
+
+          // Set up the service with traditional wallet connection
+          suiCrossyRobotService.setWalletConnection(currentAccount.address, wrappedSignAndExecute);
+          console.log('✅ Traditional wallet connected:', currentAccount.address);
+          
+        } else if (enokiAddress && zkLoginSession) {
+          // Enoki wallet connection - use Enoki's direct transaction execution
+          const enokiSigner = async (transaction: any): Promise<any> => {
+            try {
+              // Set the sender address
+              transaction.setSender(enokiAddress);
+              
+              // Build the transaction
+              const txBytes = await transaction.build({ client: suiClient });
+              
+              // Get Enoki keypair and sign
+              const signer = await enokiFlow.getKeypair({
+                network: 'testnet',
+              });
+              const signature = await signer.signTransaction(txBytes);
+              
+              // Execute the transaction
+              const result = await suiClient.executeTransactionBlock({
+                transactionBlock: txBytes,
+                signature: signature.signature,
+                requestType: "WaitForLocalExecution",
+                options: {
+                  showEffects: true,
+                  showEvents: true,
+                  showObjectChanges: true,
+                },
+              });
+              
+              return result;
+            } catch (error) {
+              console.error('Enoki transaction execution failed:', error);
+              throw error;
+            }
+          };
+
+          // Set up the service with Enoki wallet connection
+          suiCrossyRobotService.setWalletConnection(enokiAddress, enokiSigner);
+          console.log('✅ Enoki wallet connected with blockchain transaction support');
+          console.log('🔐 Using Enoki for automatic zkLogin handling');
+        }
+        
+        const success = await suiCrossyRobotService.initialize();
+        if (success) {
+          setBlockchainInitialized(true);
+          setSuiGameState(suiCrossyRobotService.getGameState());
+          console.log('✅ Blockchain integration ready');
+        } else {
+          throw new Error('Failed to initialize blockchain service');
+        }
+      } catch (error) {
+        console.error('❌ Blockchain initialization failed:', error);
+        setBlockchainError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    
+    initializeBlockchain();
+  }, [isAuthenticated, currentAccount, signAndExecuteTransaction, enokiAddress, zkLoginSession, enokiFlow, suiClient]);
+  
+  // Add periodic debug logging for streaming state - MOVED BEFORE CONDITIONAL RETURN
+  useEffect(() => {
+    if (!isStreaming) return;
+    
+    const debugInterval = setInterval(() => {
+      console.log(`🔍 CROSSY ROBO HOST DEBUG CHECK:`);
+      console.log(`  - Local UID: ${localUid}`);
+      console.log(`  - Viewers: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
+      console.log(`  - Agora client state:`, rtcClientRef.current?.connectionState);
+      console.log(`  - Channel: robot-video`); // Hardcoded channel name
+    }, 10000); // Every 10 seconds
+    
+    return () => clearInterval(debugInterval);
+  }, [isStreaming, localUid, remoteUsers]);
   
   // Password verification function
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -498,213 +726,6 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
     }
   };
 
-  // Initialize webcam and AR on component mount
-  useEffect(() => {
-    const initializeWebcamAndAR = async () => {
-      try {
-        console.log('Requesting webcam access...');
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          } 
-        });
-        
-        console.log('Webcam access granted');
-        setWebcamStream(stream);
-        setWebcamError(null);
-        
-        // Set up video element
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          
-          const onVideoLoaded = async () => {
-            console.log('Webcam video loaded, video dimensions:', 
-              videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
-            
-            // Ensure video is playing before starting AR
-            if (videoRef.current) {
-              try {
-                await videoRef.current.play();
-                console.log('Webcam video is now playing, starting AR initialization...');
-              } catch (error) {
-                console.log('Video play() returned promise, likely already playing');
-              }
-              
-              // Wait a bit more to ensure video is fully ready
-              setTimeout(() => {
-                initializeARSystem();
-              }, 500);
-            }
-            
-            videoRef.current?.removeEventListener('loadeddata', onVideoLoaded);
-          };
-          
-          const onVideoError = (error: any) => {
-            console.error('Video element error:', error);
-            setWebcamError('Failed to load video stream');
-          };
-          
-          videoRef.current.addEventListener('loadeddata', onVideoLoaded);
-          videoRef.current.addEventListener('error', onVideoError);
-          
-          // Also listen for when video starts playing
-          const onVideoPlay = () => {
-            console.log('Webcam video started playing');
-          };
-          videoRef.current.addEventListener('play', onVideoPlay);
-        }
-      } catch (error) {
-        console.error('Failed to access webcam:', error);
-        setWebcamError(`Failed to access camera: ${error instanceof Error ? error.message : String(error)}`);
-        setArMode(false);
-        
-        console.log('❌ Webcam access failed, AR features will be disabled');
-      }
-    };
-
-    initializeWebcamAndAR();
-
-    // Set up resize observer for canvas sizing
-    let resizeObserver: ResizeObserver | null = null;
-    
-    if (canvasRef.current) {
-      resizeObserver = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          const { width, height } = entry.contentRect;
-          if (canvasRef.current) {
-            canvasRef.current.width = width;
-            canvasRef.current.height = height;
-            console.log(`Canvas resized to: ${width}x${height}`);
-            
-            // Update render system if it exists
-            if (renderSystemRef.current) {
-              renderSystemRef.current.resize();
-            }
-          }
-        }
-      });
-      
-      resizeObserver.observe(canvasRef.current.parentElement || canvasRef.current);
-    }
-
-    return () => {
-      console.log('Component cleanup...');
-      
-      // Cleanup resize observer
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-      
-      // Cleanup AR systems
-      cleanupARSystem();
-      
-      // Cleanup 3D game systems
-      if (gameLoopRef.current) {
-        gameLoopRef.current.dispose();
-        gameLoopRef.current = null;
-      }
-      if (inputControllerRef.current) {
-        inputControllerRef.current.dispose();
-        inputControllerRef.current = null;
-      }
-      if (physicsSystemRef.current) {
-        physicsSystemRef.current.dispose();
-        physicsSystemRef.current = null;
-      }
-      
-      // Stop webcam
-      if (webcamStream) {
-        console.log('Stopping webcam tracks');
-        webcamStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []); // Empty dependency array to run only once
-
-  // Initialize blockchain integration
-  useEffect(() => {
-    const initializeBlockchain = async () => {
-      try {
-        console.log('🔗 Initializing blockchain integration...');
-        
-        // Set up wallet connection for blockchain transactions
-        if (currentAccount && signAndExecuteTransaction) {
-          // Traditional wallet connection (Sui Wallet, etc.)
-          const wrappedSignAndExecute = (transaction: any): Promise<any> => {
-            return new Promise((resolve, reject) => {
-              signAndExecuteTransaction(
-                { transaction },
-                {
-                  onSuccess: (result) => resolve(result),
-                  onError: (error) => reject(error)
-                }
-              );
-            });
-          };
-
-          // Set up the service with traditional wallet connection
-          suiCrossyRobotService.setWalletConnection(currentAccount.address, wrappedSignAndExecute);
-          console.log('✅ Traditional wallet connected:', currentAccount.address);
-          
-        } else if (enokiAddress && zkLoginSession) {
-          // Enoki wallet connection - use Enoki's direct transaction execution
-          const enokiSigner = async (transaction: any): Promise<any> => {
-            try {
-              // Set the sender address
-              transaction.setSender(enokiAddress);
-              
-              // Build the transaction
-              const txBytes = await transaction.build({ client: suiClient });
-              
-              // Get Enoki keypair and sign
-              const signer = await enokiFlow.getKeypair({
-                network: 'testnet',
-              });
-              const signature = await signer.signTransaction(txBytes);
-              
-              // Execute the transaction
-              const result = await suiClient.executeTransactionBlock({
-                transactionBlock: txBytes,
-                signature: signature.signature,
-                requestType: "WaitForLocalExecution",
-                options: {
-                  showEffects: true,
-                  showEvents: true,
-                  showObjectChanges: true,
-                },
-              });
-              
-              return result;
-            } catch (error) {
-              console.error('Enoki transaction execution failed:', error);
-              throw error;
-            }
-          };
-
-          // Set up the service with Enoki wallet connection
-          suiCrossyRobotService.setWalletConnection(enokiAddress, enokiSigner);
-          console.log('✅ Enoki wallet connected with blockchain transaction support');
-          console.log('🔐 Using Enoki for automatic zkLogin handling');
-        }
-        
-        const success = await suiCrossyRobotService.initialize();
-        if (success) {
-          setBlockchainInitialized(true);
-          setSuiGameState(suiCrossyRobotService.getGameState());
-          console.log('✅ Blockchain integration ready');
-        } else {
-          throw new Error('Failed to initialize blockchain service');
-        }
-      } catch (error) {
-        console.error('❌ Blockchain initialization failed:', error);
-        setBlockchainError(error instanceof Error ? error.message : String(error));
-      }
-    };
-
-    initializeBlockchain();
-  }, [currentAccount, signAndExecuteTransaction, enokiAddress, zkLoginSession]); // Updated deps for Enoki
-
   // Send directional command or create game
   const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
     if (!isControlEnabled || !blockchainInitialized) return;
@@ -918,21 +939,6 @@ export const ARStreamScreenCrossyRobo: React.FC<ARStreamScreenCrossyRoboProps> =
       setDeliveryStatus('Select end point');
     }
   };
-
-  // Add periodic debug logging for streaming state
-  useEffect(() => {
-    if (!isStreaming) return;
-    
-    const debugInterval = setInterval(() => {
-      console.log(`🔍 CROSSY ROBO HOST DEBUG CHECK:`);
-      console.log(`  - Local UID: ${localUid}`);
-      console.log(`  - Viewers: ${remoteUsers.size}`, Array.from(remoteUsers.keys()));
-      console.log(`  - Agora client state:`, rtcClientRef.current?.connectionState);
-      console.log(`  - Channel: robot-video`); // Hardcoded channel name
-    }, 10000); // Every 10 seconds
-    
-    return () => clearInterval(debugInterval);
-  }, [isStreaming, localUid, remoteUsers]);
 
   const executeDelivery = async () => {
     if (!startPoint || !endPoint) return;

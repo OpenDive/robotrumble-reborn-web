@@ -6,11 +6,14 @@ interface VideoIntroScreenProps {
 }
 
 export const VideoIntroScreen: React.FC<VideoIntroScreenProps> = ({ onLoginComplete }) => {
-  const [showLanding, setShowLanding] = useState(false);
+  // DEMO MODE: Skip video and go directly to login screen
+  const [showLanding, setShowLanding] = useState(true); // Changed to true for live demo
   const [videoError, setVideoError] = useState(false);
   const [showSoundPrompt, setShowSoundPrompt] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // DEMO MODE: Video logic commented out for live demo
+  /*
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -71,6 +74,7 @@ export const VideoIntroScreen: React.FC<VideoIntroScreenProps> = ({ onLoginCompl
       document.removeEventListener('touchstart', handleUserInteraction);
     };
   }, []);
+  */
 
   const handleSkipVideo = () => {
     setShowLanding(true);

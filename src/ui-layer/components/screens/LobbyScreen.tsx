@@ -127,8 +127,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       
       {/* Header */}
       <Header
-        title="Race Lobby"
-        subtitle="Select a race to join"
+        title="Lobby"
+        subtitle="Select a session to join"
         className="relative z-10 bg-gradient-to-r from-game-900/50 via-game-800/50 to-game-900/50 backdrop-blur-sm border-b border-white/5"
       />
 
