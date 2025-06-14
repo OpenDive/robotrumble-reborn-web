@@ -70,7 +70,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
       {/* Main container */}
       <div className="relative max-w-md w-full space-y-8 p-8 bg-black/40 backdrop-blur-md rounded-3xl border border-white/5 shadow-[0_0_50px_rgba(178,75,243,0.3)] animate-float z-10">
         <div className="text-center relative">
-          <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-white/80">S</h1>
+          <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-white/80">Robot Rumble</h1>
           <div className="h-1 w-32 mx-auto bg-racing-yellow rounded-full mt-4 relative">
             <div className="absolute inset-0 animate-pulse-slow bg-racing-yellow blur-md opacity-50" />
           </div>
@@ -133,14 +133,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
             className="w-full px-6 py-4 text-lg font-medium rounded-xl text-white bg-black/40 placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-neon-purple focus:ring-opacity-50 transition-all duration-300 backdrop-blur-sm"
           />
         </div>
-
-        <button
-          onClick={handleBackToWelcome}
-          className="group flex items-center text-sm font-medium text-white/60 hover:text-white transition-colors duration-300"
-        >
-          <FaChevronLeft className="mr-2 group-hover:-translate-x-1 transition-transform duration-300" />
-          Back to Welcome
-        </button>
       </div>
     </div>
   );
