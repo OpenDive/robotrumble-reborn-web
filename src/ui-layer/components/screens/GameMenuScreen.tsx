@@ -117,7 +117,7 @@ export const GameMenuScreen: React.FC<GameMenuScreenProps> = ({
             {/* Game logo */}
             <div className="mb-12 mt-8 relative">
               <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-white/80 text-center">
-                ROBOT KARTS
+                ROBOT RUMBLE
               </h1>
               <div className="h-1 w-32 mx-auto bg-racing-yellow rounded-full mt-4 relative">
                 <div className="absolute inset-0 animate-pulse-slow bg-racing-yellow blur-md opacity-50" />

@@ -46,6 +46,12 @@ interface RemoteUser {
 }
 
 export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack }) => {
+  // Host password protection
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const HOST_PASSWORD = 'robot2025'; // You can change this password
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -122,6 +128,83 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   const zkLoginSession = useZkLoginSession();
   const { user } = useAuth();
   const enokiFlow = useEnokiFlow();
+  
+  // Password verification function
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordInput === HOST_PASSWORD) {
+      setIsAuthenticated(true);
+      setPasswordError('');
+      console.log('✅ Host authentication successful');
+    } else {
+      setPasswordError('Incorrect password. Please try again.');
+      setPasswordInput('');
+      console.log('❌ Host authentication failed');
+    }
+  };
+  
+  // If not authenticated, show password prompt
+  if (!isAuthenticated) {
+    return (
+      <div className="w-full h-screen bg-[#0B0B1A] relative overflow-hidden flex items-center justify-center">
+        {/* Background */}
+        <div className="absolute inset-0 bg-gradient-radial from-transparent via-[#0B0B1A]/80 to-[#0B0B1A]"/>
+        
+        {/* Password Prompt */}
+        <div className="relative z-10 bg-black/60 backdrop-blur-sm border border-white/20 rounded-xl p-8 max-w-md w-full mx-4">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Host Authentication</h2>
+            <p className="text-white/70">Enter the host password to access robot control</p>
+          </div>
+          
+          <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <div>
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Enter host password"
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                autoFocus
+              />
+              {passwordError && (
+                <p className="mt-2 text-red-400 text-sm">{passwordError}</p>
+              )}
+            </div>
+            
+            <div className="flex gap-3">
+              <Button
+                variant="secondary"
+                size="medium"
+                onClick={onBack}
+                className="flex-1 !bg-white/10 hover:!bg-white/20"
+              >
+                Back
+              </Button>
+              <button
+                type="submit"
+                disabled={!passwordInput.trim()}
+                className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+              >
+                Access Host Mode
+              </button>
+            </div>
+          </form>
+          
+          <div className="mt-6 pt-4 border-t border-white/10">
+            <p className="text-xs text-white/50 text-center">
+              Session: {session.trackName} • Channel: {session.id}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   // AR effects toggle handler
   const toggleAREffects = () => {

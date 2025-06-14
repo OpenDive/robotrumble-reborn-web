@@ -70,7 +70,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginComplete }) => 
       {/* Main container */}
       <div className="relative max-w-md w-full space-y-8 p-8 bg-black/40 backdrop-blur-md rounded-3xl border border-white/5 shadow-[0_0_50px_rgba(178,75,243,0.3)] animate-float z-10">
         <div className="text-center relative">
-          <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-white/80">ROBOT KARTS</h1>
+          <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-white/80">S</h1>
           <div className="h-1 w-32 mx-auto bg-racing-yellow rounded-full mt-4 relative">
             <div className="absolute inset-0 animate-pulse-slow bg-racing-yellow blur-md opacity-50" />
           </div>
