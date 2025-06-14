@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import AgoraRTC, { IAgoraRTCClient, IRemoteVideoTrack, IRemoteAudioTrack } from 'agora-rtc-sdk-ng';
 import { Button } from '../shared/Button';
+import { LoadingModal } from '../shared/LoadingModal';
+import { ErrorModal } from '../shared/ErrorModal';
+import { JoinGameView } from '../shared/JoinGameView';
 import { RaceSession } from '../../../shared/types/race';
 import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
 import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
@@ -14,6 +17,12 @@ import { useAuth } from '../../../shared/contexts/AuthContext';
 
 import { AREffectsRenderer } from '../../../engine-layer/core/ar/AREffectsRenderer';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { robotWebSocketService, RobotFeedback, RobotCommand } from '../../services/RobotWebSocketService';
+
+// Environment configuration for robot WebSocket
+const ROBOT_WS_URL = 'wss://hurricane-laboratories-ddc1627c10dd.herokuapp.com/ws';
+const ROBOT_ROOM_ID = 'default';
+const ROBOT_WS_ENABLED = 'false';
 
 interface ARViewerScreenCrossyRoboProps {
   session: RaceSession;
@@ -533,10 +542,19 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   const renderSystemRef = useRef<GameRenderSystem | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
-  // Streaming state
-  const [isConnected, setIsConnected] = useState(false);
+  // Connection state - unified for both video and robot
+  const [gameState, setGameState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
+  
+  // Video streaming state
+  const [isAgoraConnected, setIsAgoraConnected] = useState(false);
   const [localUid, setLocalUid] = useState<number | null>(null);
+  
+  // Robot WebSocket state
+  const [isRobotConnected, setIsRobotConnected] = useState(false);
+  const [robotFeedback, setRobotFeedback] = useState<RobotFeedback | null>(null);
+  const [robotCommands, setRobotCommands] = useState<RobotCommand[]>([]);
   const [remoteUsers, setRemoteUsers] = useState<Map<number, RemoteUser>>(new Map());
   const [hostUser, setHostUser] = useState<RemoteUser | null>(null);
   const [viewerUsers, setViewerUsers] = useState<Map<number, RemoteUser>>(new Map());
@@ -625,7 +643,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         setIsCameraEnabled(true);
         
         // Publish the video track if connected
-        if (rtcClientRef.current && isConnected) {
+        if (rtcClientRef.current && isAgoraConnected) {
           await rtcClientRef.current.publish([videoTrack]);
           console.log('📤 Published camera video');
         }
@@ -641,7 +659,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         
         if (localVideoTrack) {
           // Unpublish first if connected
-          if (rtcClientRef.current && isConnected) {
+          if (rtcClientRef.current && isAgoraConnected) {
             await rtcClientRef.current.unpublish([localVideoTrack]);
             console.log('📤❌ Unpublished camera video');
           }
@@ -676,7 +694,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         setIsMicEnabled(true);
         
         // Publish the audio track if connected
-        if (rtcClientRef.current && isConnected) {
+        if (rtcClientRef.current && isAgoraConnected) {
           await rtcClientRef.current.publish([audioTrack]);
           console.log('📤 Published microphone audio');
         }
@@ -686,7 +704,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         
         if (localAudioTrack) {
           // Unpublish first if connected
-          if (rtcClientRef.current && isConnected) {
+          if (rtcClientRef.current && isAgoraConnected) {
             await rtcClientRef.current.unpublish([localAudioTrack]);
             console.log('📤❌ Unpublished microphone audio');
           }
@@ -997,8 +1015,117 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     }
   };
 
-  // Connect to stream
-  const connectToStream = async () => {
+  // Connect to Robot WebSocket
+  const connectToRobot = async (): Promise<void> => {
+    if (!ROBOT_WS_ENABLED) {
+      console.log('Robot WebSocket disabled via environment');
+      return;
+    }
+    
+    try {
+      setLoadingMessage('Connecting to robot control system...');
+      console.log('🤖 Connecting to Robot WebSocket...');
+      
+      // Connect to robot WebSocket
+      await robotWebSocketService.connect(ROBOT_WS_URL, ROBOT_ROOM_ID);
+      
+      // Set up robot event listeners
+      const handleRobotStatus = (data: { connected: boolean; room_id?: string }) => {
+        console.log('🤖 Robot status update:', data);
+        setIsRobotConnected(data.connected);
+      };
+      
+      const handleControlAck = (data: { status: string; command?: string }) => {
+        console.log('🤖 Control acknowledgment:', data);
+        const ackCommand: RobotCommand = {
+          id: `ack-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString(),
+          command: `✅ ${data.command || 'Command'} acknowledged: ${data.status}`,
+          status: 'acknowledged',
+          source: 'websocket'
+        };
+        setRobotCommands(prev => [ackCommand, ...prev].slice(0, 20));
+      };
+      
+      const handleRobotFeedback = (data: RobotFeedback) => {
+        console.log('🤖 Robot feedback:', data);
+        setRobotFeedback({
+          ...data,
+          lastUpdate: new Date()
+        });
+      };
+      
+      const handleHeartbeat = (data: { robot_name?: string; status: string }) => {
+        console.log('🤖 Robot heartbeat:', data);
+        const heartbeatCommand: RobotCommand = {
+          id: `heartbeat-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString(),
+          command: `💓 ${data.robot_name || 'Robot'}: ${data.status}`,
+          status: 'acknowledged',
+          source: 'websocket'
+        };
+        setRobotCommands(prev => [heartbeatCommand, ...prev].slice(0, 20));
+      };
+      
+      // Add event listeners
+      robotWebSocketService.addEventListener('robotStatus', handleRobotStatus);
+      robotWebSocketService.addEventListener('controlAck', handleControlAck);
+      robotWebSocketService.addEventListener('robotFeedback', handleRobotFeedback);
+      robotWebSocketService.addEventListener('heartbeat', handleHeartbeat);
+      
+      // Get initial robot state
+      const roomInfo = robotWebSocketService.getCurrentRoom();
+      setIsRobotConnected(roomInfo.isRobotConnected);
+      
+      console.log('✅ Robot WebSocket connected successfully');
+    } catch (error) {
+      console.error('❌ Robot WebSocket connection failed:', error);
+      throw new Error(`Robot connection failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  // Disconnect from Robot WebSocket
+  const disconnectFromRobot = async (): Promise<void> => {
+    try {
+      robotWebSocketService.disconnect();
+      setIsRobotConnected(false);
+      setRobotFeedback(null);
+      console.log('🤖 Robot WebSocket disconnected');
+    } catch (error) {
+      console.error('Error disconnecting from robot:', error);
+    }
+  };
+
+  // Connect to game (both video and robot)
+  const connectToGame = async () => {
+    setGameState('connecting');
+    setConnectionError(null);
+    
+    try {
+      // Step 1: Connect to Agora (video streaming)
+      setLoadingMessage('Connecting to video stream...');
+      await connectToAgoraStream();
+      
+      // Step 2: Connect to Robot WebSocket
+      setLoadingMessage('Connecting to robot control...');
+      await connectToRobot();
+      
+      // Step 3: Both connections successful
+      setGameState('connected');
+      console.log('✅ Full game connection established');
+      
+    } catch (error) {
+      console.error('❌ Game connection failed:', error);
+      setConnectionError(error instanceof Error ? error.message : String(error));
+      setGameState('error');
+      
+      // Cleanup any partial connections
+      await cleanupConnections();
+    }
+  };
+
+  // Connect to Agora stream only (renamed from connectToStream)
+  const connectToAgoraStream = async () => {
     try {
       setConnectionError(null);
       console.log('Connecting to Crossy Robo stream...');
@@ -1315,8 +1442,8 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         console.log(`📤 Published ${tracksToPublish.length} existing media tracks`);
       }
       
-      setIsConnected(true);
-      console.log('✅ Connected to stream successfully');
+      setIsAgoraConnected(true);
+      console.log('✅ Connected to Agora stream successfully');
       
       // Add initial game creation messages when joining
       setTimeout(() => {
@@ -1354,7 +1481,28 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     }
   };
 
-  // Disconnect from stream
+  // Cleanup all connections
+  const cleanupConnections = async () => {
+    try {
+      await disconnectFromStream();
+      await disconnectFromRobot();
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+    }
+  };
+
+  // Disconnect from game (both connections)
+  const disconnectFromGame = async () => {
+    try {
+      setGameState('disconnected');
+      await cleanupConnections();
+      console.log('🎮 Disconnected from game');
+    } catch (error) {
+      console.error('Error disconnecting from game:', error);
+    }
+  };
+
+  // Disconnect from Agora stream
   const disconnectFromStream = async () => {
     try {
       // Clean up AR overlay first
@@ -1394,7 +1542,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         participantGrid.innerHTML = '';
       }
       
-      setIsConnected(false);
+      setIsAgoraConnected(false);
       setLocalUid(null);
       setRemoteUsers(new Map());
       setHostUser(null);
@@ -1407,7 +1555,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
 
   // Add periodic debug logging
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isAgoraConnected) return;
     
     const debugInterval = setInterval(() => {
       console.log(`🔍 CROSSY ROBO DEBUG STATE CHECK:`);
@@ -1421,7 +1569,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     }, 10000); // Every 10 seconds
     
     return () => clearInterval(debugInterval);
-  }, [isConnected, localUid, remoteUsers, hostUser, viewerUsers]);
+  }, [isAgoraConnected, localUid, remoteUsers, hostUser, viewerUsers]);
 
   // Handle window resize
   useEffect(() => {
@@ -1463,123 +1611,136 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     };
   }, []);
 
-  // Send directional command or create game
+  // Send directional command via WebSocket (with optional blockchain payment)
   const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
     if (!isControlEnabled) return;
     
-    // Check wallet connection - support both traditional wallet and Enoki
-    if (!currentAccount && !enokiAddress) {
-      const errorMsg = 'Please connect your wallet first';
-      setMessageLog(prev => [{
+    // Check robot WebSocket connection first
+    if (!isRobotConnected || !robotWebSocketService.isConnected) {
+      const errorMsg = 'Robot not connected';
+      const errorCommand: RobotCommand = {
         id: `error-${Date.now()}`,
         timestamp: new Date().toLocaleTimeString(),
-        command: `Error: ${errorMsg}`,
-        status: 'failed' as const
-      }, ...prev].slice(0, 20));
+        command: `❌ Error: ${errorMsg}`,
+        status: 'failed',
+        source: 'websocket'
+      };
+      setRobotCommands(prev => [errorCommand, ...prev].slice(0, 20));
       return;
     }
     
     const sendTimestamp = new Date().toLocaleTimeString();
     const commandId = `cmd-${Date.now()}`;
     
-    // Skip robot connection for the demo - just handle movements
-    if (direction === 'stop') {
-      return; // Do nothing for the demo
-    }
+    // Map directions to robot commands
+    const robotCommand = direction === 'up' ? 'forward' : 
+                         direction === 'down' ? 'backward' :
+                         direction === 'left' ? 'left' :
+                         direction === 'right' ? 'right' : 'stop';
     
-    // Handle regular directional commands with direct SUI transfer
     // Add "sent" command to log immediately
-    const sentCommand = {
+    const sentCommand: RobotCommand = {
       id: commandId,
       timestamp: sendTimestamp,
-      command: `Sent command: ${direction}`,
-      status: 'sent' as const
+      command: `🚀 Sending: ${robotCommand}`,
+      status: 'sent',
+      source: 'websocket'
     };
     
-    setMessageLog(prev => [sentCommand, ...prev].slice(0, 20));
+    setRobotCommands(prev => [sentCommand, ...prev].slice(0, 20));
     
     // Disable controls temporarily to prevent spam
     setIsControlEnabled(false);
     
     try {
-      // Import Transaction here for direct use
-      const { Transaction } = await import('@mysten/sui/transactions');
+      // Send WebSocket command
+      const success = robotWebSocketService.sendControlCommand(robotCommand, 0.5);
       
-      // Create a simple payment transaction
-      const transaction = new Transaction();
-      
-      // Split 0.05 SUI (50,000,000 MIST) from gas coin for payment
-      const [coin] = transaction.splitCoins(transaction.gas, [transaction.pure.u64(50_000_000)]);
-      
-      // Transfer the payment to the robot address
-      transaction.transferObjects([coin], transaction.pure.address("0xcbdddb4e89a23e2ca51d41b5e05230fbfa502dc672cc58e298ec952d170b0901"));
-      
-      let result;
-      
-      // Execute transaction based on wallet type
-      if (currentAccount && signAndExecuteTransaction) {
-        // Traditional wallet execution
-        result = await new Promise((resolve, reject) => {
-          signAndExecuteTransaction(
-            { transaction },
-            {
-              onSuccess: (result) => resolve(result),
-              onError: (error) => reject(error)
-            }
-          );
-        });
-      } else if (enokiAddress && zkLoginSession) {
-        // Enoki wallet execution
-        // Set the sender address
-        transaction.setSender(enokiAddress);
-        
-        // Build the transaction
-        const txBytes = await transaction.build({ client: suiClient });
-        
-        // Get Enoki keypair and sign
-        const signer = await enokiFlow.getKeypair({
-          network: 'testnet',
-        });
-        const signature = await signer.signTransaction(txBytes);
-        
-        // Execute the transaction
-        result = await suiClient.executeTransactionBlock({
-          transactionBlock: txBytes,
-          signature: signature.signature,
-          requestType: "WaitForLocalExecution",
-          options: {
-            showEffects: true,
-            showEvents: true,
-            showObjectChanges: true,
-          },
-        });
-      } else {
-        throw new Error('No valid wallet connection found');
+      if (!success) {
+        throw new Error('Failed to send WebSocket command');
       }
       
-      // Add "acknowledged" command to log with new timestamp
-      const ackTimestamp = new Date().toLocaleTimeString();
-      const acknowledgedCommand = {
-        id: `${commandId}-ack`,
-        timestamp: ackTimestamp,
-        command: `Movement ${direction} confirmed! TX: ${(result as any).digest?.substring(0, 8)}...`,
-        status: 'acknowledged' as const
-      };
-      
-      setMessageLog(prev => [acknowledgedCommand, ...prev].slice(0, 20));
+      // Optional: Execute blockchain payment if wallet is connected and direction is not stop
+      if ((currentAccount || enokiAddress) && direction !== 'stop') {
+        try {
+          // Import Transaction here for direct use
+          const { Transaction } = await import('@mysten/sui/transactions');
+          
+          // Create a simple payment transaction
+          const transaction = new Transaction();
+          
+          // Split 0.05 SUI (50,000,000 MIST) from gas coin for payment
+          const [coin] = transaction.splitCoins(transaction.gas, [transaction.pure.u64(50_000_000)]);
+          
+          // Transfer the payment to the robot address
+          transaction.transferObjects([coin], transaction.pure.address("0xcbdddb4e89a23e2ca51d41b5e05230fbfa502dc672cc58e298ec952d170b0901"));
+          
+          let result;
+          
+          // Execute transaction based on wallet type
+          if (currentAccount && signAndExecuteTransaction) {
+            // Traditional wallet execution
+            result = await new Promise((resolve, reject) => {
+              signAndExecuteTransaction(
+                { transaction },
+                {
+                  onSuccess: (result) => resolve(result),
+                  onError: (error) => reject(error)
+                }
+              );
+            });
+          } else if (enokiAddress && zkLoginSession) {
+            // Enoki wallet execution
+            transaction.setSender(enokiAddress);
+            const txBytes = await transaction.build({ client: suiClient });
+            const signer = await enokiFlow.getKeypair({ network: 'testnet' });
+            const signature = await signer.signTransaction(txBytes);
+            
+            result = await suiClient.executeTransactionBlock({
+              transactionBlock: txBytes,
+              signature: signature.signature,
+              requestType: "WaitForLocalExecution",
+              options: { showEffects: true, showEvents: true, showObjectChanges: true },
+            });
+          }
+          
+          // Add blockchain payment confirmation
+          if (result) {
+            const paymentCommand: RobotCommand = {
+              id: `${commandId}-payment`,
+              timestamp: new Date().toLocaleTimeString(),
+              command: `💰 Payment sent: TX ${(result as any).digest?.substring(0, 8)}...`,
+              status: 'acknowledged',
+              source: 'blockchain'
+            };
+            setRobotCommands(prev => [paymentCommand, ...prev].slice(0, 20));
+          }
+        } catch (paymentError) {
+          console.warn('Blockchain payment failed, but robot command was sent:', paymentError);
+          const paymentFailCommand: RobotCommand = {
+            id: `${commandId}-payment-fail`,
+            timestamp: new Date().toLocaleTimeString(),
+            command: `💰 Payment failed: ${paymentError}`,
+            status: 'failed',
+            source: 'blockchain'
+          };
+          setRobotCommands(prev => [paymentFailCommand, ...prev].slice(0, 20));
+        }
+      }
       
     } catch (error) {
-      // Add "failed" command to log with new timestamp
+      // Add "failed" command to log
       const failTimestamp = new Date().toLocaleTimeString();
-      const failedCommand = {
+      const failedCommand: RobotCommand = {
         id: `${commandId}-fail`,
         timestamp: failTimestamp,
-        command: `Movement failed: ${error}`,
-        status: 'failed' as const
+        command: `❌ Command failed: ${error}`,
+        status: 'failed',
+        source: 'websocket'
       };
       
-      setMessageLog(prev => [failedCommand, ...prev].slice(0, 20));
-      console.error('Failed to send command:', error);
+      setRobotCommands(prev => [failedCommand, ...prev].slice(0, 20));
+      console.error('Failed to send robot command:', error);
     } finally {
       // Re-enable controls after a short delay
       setTimeout(() => setIsControlEnabled(true), 500);
@@ -1699,6 +1860,26 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     }
   };
 
+  // Handle different game states
+  if (gameState === 'connecting') {
+    return <LoadingModal message={loadingMessage} onCancel={() => setGameState('disconnected')} />;
+  }
+  
+  if (gameState === 'error') {
+    return (
+      <ErrorModal 
+        message={connectionError || 'Unknown connection error'}
+        onRetry={connectToGame}
+        onBack={onBack}
+      />
+    );
+  }
+  
+  if (gameState === 'disconnected') {
+    return <JoinGameView onJoin={connectToGame} sessionName={session.trackName} />;
+  }
+
+  // Main UI when connected
   return (
     <div className="w-full h-screen bg-[#0B0B1A] relative overflow-hidden flex flex-col">
       {/* Background */}
@@ -1727,7 +1908,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
           
           <div className="flex items-center gap-3">
             {/* Camera Toggle */}
-            {isConnected && (
+            {isAgoraConnected && (
               <Button
                 variant="secondary"
                 size="small"
@@ -1746,7 +1927,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
             )}
 
             {/* Microphone Toggle */}
-            {isConnected && (
+            {isAgoraConnected && (
               <Button
                 variant="secondary"
                 size="small"
@@ -1765,7 +1946,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
             )}
 
             {/* Debug State Button */}
-            {isConnected && (
+            {isAgoraConnected && (
               <Button
                 variant="secondary"
                 size="small"
@@ -1795,40 +1976,38 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
             )}
             
             {/* Connection Status */}
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
-              <span className="text-white/90 text-sm">
-                {isConnected ? 'Connected' : 'Disconnected'}
-              </span>
+            <div className="flex items-center gap-4">
+              {/* Video Status */}
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${isAgoraConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
+                <span className="text-white/90 text-sm">
+                  Video: {isAgoraConnected ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+              
+              {/* Robot Status */}
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${isRobotConnected ? 'bg-blue-500 animate-pulse' : 'bg-gray-500'}`} />
+                <span className="text-white/90 text-sm">
+                  Robot: {isRobotConnected ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
             </div>
             
             {/* Participants Count */}
-            {isConnected && (
-              <div className="text-white/70 text-sm">
-                {remoteUsers.size} Participant{remoteUsers.size !== 1 ? 's' : ''}
-              </div>
-            )}
+            <div className="text-white/70 text-sm">
+              {remoteUsers.size} Participant{remoteUsers.size !== 1 ? 's' : ''}
+            </div>
             
             {/* Connection Controls */}
-            {!isConnected ? (
-              <Button
-                variant="primary"
-                size="small"
-                onClick={connectToStream}
-                disabled={!!connectionError}
-              >
-                Join Stream
-              </Button>
-            ) : (
-              <Button
-                variant="secondary"
-                size="small"
-                onClick={disconnectFromStream}
-                className="!bg-red-600 hover:!bg-red-700"
-              >
-                Leave Stream
-              </Button>
-            )}
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={disconnectFromGame}
+              className="!bg-red-600 hover:!bg-red-700"
+            >
+              Leave Game
+            </Button>
             
             {/* Wallet Connect */}
             <div className="ml-2">
@@ -1853,21 +2032,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
 
       {/* Main Content Area - Explicitly sized to exclude bottom panel */}
       <div className="flex" style={{ height: 'calc(100vh - 10rem)' }}>
-        {!isConnected ? (
-          /* Not Connected State */
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center text-white/70">
-              <div className="w-16 h-16 mx-auto mb-4 bg-white/5 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-medium text-white mb-2">Ready to Watch Crossy Robo</h3>
-              <p className="text-sm mb-4">Join to watch the host's navigation experience with other viewers</p>
-              <p className="text-xs text-white/50">Channel: robot-video</p>
-            </div>
-          </div>
-        ) : (
+        {/* Always show content when we reach this point since gameState is 'connected' */}
           <>
             {/* Left Side: Main AR View Area */}
             <div className="flex-1 relative">
@@ -1914,7 +2079,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
               )}
 
               {/* Stream Info Overlay */}
-              {isConnected && (
+              {isAgoraConnected && (
                 <div className="absolute top-4 left-4 z-50 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -2083,39 +2248,45 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                   </div>
                 </div>
 
-                {/* Message Log */}
+                {/* Robot Command Log */}
                 <div className="p-4 border-b border-white/10 relative z-10">
-                  <h3 className="text-sm font-medium text-white mb-3 relative z-10">Message Log</h3>
+                  <h3 className="text-sm font-medium text-white mb-3 relative z-10">Robot Commands</h3>
                   <div className="bg-gray-800 rounded-lg p-3 h-48 overflow-y-auto relative z-10">
-                    {messageLog.length === 0 ? (
+                    {robotCommands.length === 0 ? (
                       <div className="text-center text-white/50 text-sm py-8">
                         No commands sent yet
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {messageLog.map((message) => (
-                          <div key={message.id} className="text-xs">
+                        {robotCommands.map((command) => (
+                          <div key={command.id} className="text-xs">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-white/70">{message.timestamp}</span>
+                              <span className="text-white/70">{command.timestamp}</span>
                               <div className="flex items-center gap-1">
                                 <div className={`w-2 h-2 rounded-full ${
-                                  message.status === 'sent' ? 'bg-yellow-400' :
-                                  message.status === 'acknowledged' ? 'bg-green-400' :
+                                  command.status === 'sent' ? 'bg-yellow-400' :
+                                  command.status === 'acknowledged' ? 'bg-green-400' :
                                   'bg-red-400'
                                 }`} />
                                 <span className={`text-xs ${
-                                  message.status === 'sent' ? 'text-yellow-400' :
-                                  message.status === 'acknowledged' ? 'text-green-400' :
+                                  command.status === 'sent' ? 'text-yellow-400' :
+                                  command.status === 'acknowledged' ? 'text-green-400' :
                                   'text-red-400'
                                 }`}>
-                                  {message.status === 'sent' ? 'Sending' :
-                                   message.status === 'acknowledged' ? 'Received' :
+                                  {command.status === 'sent' ? 'Sending' :
+                                   command.status === 'acknowledged' ? 'Confirmed' :
                                    'Failed'}
+                                </span>
+                                <span className={`text-xs px-1 py-0.5 rounded ${
+                                  command.source === 'websocket' ? 'bg-blue-600/20 text-blue-400' :
+                                  'bg-purple-600/20 text-purple-400'
+                                }`}>
+                                  {command.source === 'websocket' ? 'WS' : 'BC'}
                                 </span>
                               </div>
                             </div>
                             <div className="text-white font-medium">
-                              {message.command}
+                              {command.command}
                             </div>
                           </div>
                         ))}
@@ -2157,16 +2328,14 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
               </div>
             </div>
           </>
-        )}
       </div>
 
       {/* Bottom Viewer Panel - Fixed Height, Always Present */}
-      {isConnected && (
         <div className="h-24 bg-gray-900/90 backdrop-blur-sm border-t border-white/10 flex items-center px-4 flex-shrink-0">
           <div className="flex items-center gap-3 w-full">
             {/* Viewers Label */}
             <div className="text-white/70 text-sm font-medium whitespace-nowrap">
-              Viewers ({isConnected ? Math.max(0, remoteUsers.size - (hostUser ? 1 : 0)) + 1 : 0})
+              Viewers ({Math.max(0, remoteUsers.size - (hostUser ? 1 : 0)) + 1})
             </div>
             
             {/* Horizontal Scroll Container */}
@@ -2272,7 +2441,6 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
             </div>
           </div>
         </div>
-      )}
     </div>
   );
 };
