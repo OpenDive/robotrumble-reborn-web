@@ -12,7 +12,9 @@ import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
 import { suiDeliveryService, DeliveryState } from '../../../shared/services/suiDeliveryService';
 import { SuiWalletConnect } from '../shared/SuiWalletConnect';
-import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { useEnokiFlow, useZkLogin, useZkLoginSession } from '@mysten/enoki/react';
+import { useAuth } from '../../../shared/contexts/AuthContext';
 
 interface ARStreamScreenProps {
   session: RaceSession;
@@ -111,10 +113,15 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   const [blockchainInitialized, setBlockchainInitialized] = useState(false);
   const [blockchainError, setBlockchainError] = useState<string | null>(null);
   
-  // Wallet connection hooks
+  // Wallet connection hooks - Enhanced with Enoki support
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutate: signTransaction } = useSignTransaction();
   const suiClient = useSuiClient();
+  const { address: zkLoginAddress } = useZkLogin();
+  const zkLoginSession = useZkLoginSession();
+  const { user } = useAuth();
+  const enokiFlow = useEnokiFlow();
   
   // AR effects toggle handler
   const toggleAREffects = () => {
@@ -518,23 +525,83 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
     };
   }, []); // Empty dependency array to run only once
 
-  // Initialize blockchain service
+  // Initialize blockchain service with enhanced Enoki support
   useEffect(() => {
     const initializeBlockchain = async () => {
       try {
         setBlockchainError(null);
         console.log('🔗 Initializing delivery blockchain integration...');
         
-        // Connect wallet if available
-        if (currentAccount && signAndExecuteTransaction) {
-          // Wrap the mutate function to return a Promise
-          const wrappedSignAndExecute = (transaction: any): Promise<any> => {
+        let walletConnected = false;
+        
+        // Priority 1: Try Enoki zkLogin session (best UX)
+        if (zkLoginSession && zkLoginAddress && enokiFlow) {
+          console.log('🔐 Connecting with Enoki zkLogin session...');
+          try {
+            // Enoki wallet connection - use Enoki's direct transaction execution
+            const enokiSigner = async (transaction: any): Promise<any> => {
+              try {
+                // Set the sender address
+                transaction.setSender(zkLoginAddress);
+                
+                // Build the transaction
+                const txBytes = await transaction.build({ client: suiClient });
+                
+                // Get Enoki keypair and sign
+                const signer = await enokiFlow.getKeypair({
+                  network: 'testnet',
+                });
+                const signature = await signer.signTransaction(txBytes);
+                
+                // Execute the transaction
+                const result = await suiClient.executeTransactionBlock({
+                  transactionBlock: txBytes,
+                  signature: signature.signature,
+                  requestType: "WaitForLocalExecution",
+                  options: {
+                    showEffects: true,
+                    showEvents: true,
+                    showObjectChanges: true,
+                  },
+                });
+                
+                console.log('✅ Enoki transaction successful:', result);
+                return result;
+              } catch (error) {
+                console.error('❌ Enoki transaction execution failed:', error);
+                throw error;
+              }
+            };
+            
+            suiDeliveryService.setWalletConnection(
+              zkLoginAddress,
+              enokiSigner
+            );
+            walletConnected = true;
+            console.log('✅ Enoki zkLogin wallet connected to delivery service');
+          } catch (enokiError) {
+            console.warn('⚠️ Enoki connection failed, trying fallback:', enokiError);
+          }
+        }
+        
+        // Priority 2: Try dapp-kit wallet (standard Sui wallets)
+        if (!walletConnected && currentAccount && signAndExecuteTransaction) {
+          console.log('🏦 Connecting with dapp-kit wallet...');
+          
+          // Wrapper for dapp-kit signing
+          const dappKitSignAndExecute = (transaction: any): Promise<any> => {
             return new Promise((resolve, reject) => {
               signAndExecuteTransaction(
                 { transaction },
                 {
-                  onSuccess: (result) => resolve(result),
-                  onError: (error) => reject(error)
+                  onSuccess: (result) => {
+                    console.log('✅ dapp-kit transaction successful:', result);
+                    resolve(result);
+                  },
+                  onError: (error) => {
+                    console.error('❌ dapp-kit signing failed:', error);
+                    reject(error);
+                  }
                 }
               );
             });
@@ -542,11 +609,22 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
           
           suiDeliveryService.setWalletConnection(
             currentAccount.address,
-            wrappedSignAndExecute
+            dappKitSignAndExecute
           );
-          console.log('✅ Wallet connected to delivery blockchain service');
+          walletConnected = true;
+          console.log('✅ dapp-kit wallet connected to delivery service');
         }
         
+        // Debug wallet connection state
+        console.log('🔍 Wallet Connection State:', {
+          isConnected: walletConnected,
+          isUsingEnoki: !!(zkLoginSession && zkLoginAddress),
+          address: zkLoginAddress || currentAccount?.address,
+          zkLoginSession: !!zkLoginSession,
+          jwt: !!user
+        });
+        
+        // Initialize delivery service
         const success = await suiDeliveryService.initialize();
         if (success) {
           setBlockchainInitialized(true);
@@ -562,7 +640,7 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
     };
     
     initializeBlockchain();
-  }, [currentAccount, signAndExecuteTransaction]);
+  }, [currentAccount, signAndExecuteTransaction, zkLoginSession, zkLoginAddress, enokiFlow, user]);
 
   // Robotics control functions
   const handleGridClick = (row: number, col: number) => {
@@ -652,8 +730,17 @@ export const ARStreamScreen: React.FC<ARStreamScreenProps> = ({ session, onBack 
   const executeDelivery = async () => {
     if (!startPoint) return;
     
-    // Check wallet connection first
-    if (!currentAccount || !blockchainInitialized) {
+    // Check wallet connection first - support both Enoki and traditional wallets
+    const hasWalletConnection = (currentAccount && currentAccount.address) || (zkLoginAddress && zkLoginSession);
+    if (!hasWalletConnection || !blockchainInitialized) {
+      console.log('🔍 Wallet Connection Debug:', {
+        currentAccount: !!currentAccount,
+        currentAccountAddress: currentAccount?.address,
+        zkLoginAddress: !!zkLoginAddress,
+        zkLoginSession: !!zkLoginSession,
+        blockchainInitialized,
+        hasWalletConnection
+      });
       setDeliveryStatus('Please connect your wallet first');
       return;
     }

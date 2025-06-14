@@ -7,6 +7,10 @@ import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
 import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
 import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
 import { SuiWalletConnect } from '../shared/SuiWalletConnect';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { useEnokiFlow, useZkLogin, useZkLoginSession } from '@mysten/enoki/react';
+import { useAuth } from '../../../shared/contexts/AuthContext';
+import { suiDeliveryService, DeliveryState } from '../../../shared/services/suiDeliveryService';
 
 interface ARViewerScreenProps {
   session: RaceSession;
@@ -75,17 +79,36 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   
   // Track processed video tracks to prevent duplicate processing
   const processedVideoTracks = useRef<Set<string>>(new Set());
+  
+  // Blockchain integration state - Enhanced for viewers to watch delivery state
+  const [suiDeliveryState, setSuiDeliveryState] = useState<DeliveryState | null>(null);
+  const [blockchainInitialized, setBlockchainInitialized] = useState(false);
+  const [blockchainError, setBlockchainError] = useState<string | null>(null);
+  
+  // Wallet connection hooks - Enhanced with Enoki support  
+  const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutate: signTransaction } = useSignTransaction();
+  const suiClient = useSuiClient();
+  const { address: zkLoginAddress } = useZkLogin();
+  const zkLoginSession = useZkLoginSession();
+  const { user } = useAuth();
+  const enokiFlow = useEnokiFlow();
 
-  // Delivery control state (read-only for viewers)
+  // Delivery control state (full control for viewers - they control the robot host)
   const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
   const [endPoint, setEndPoint] = useState<DeliveryPoint | null>(null);
   const [robots, setRobots] = useState<Robot[]>([
-    { id: 'robot-a', name: 'Robot A', position: { x: 80, y: 20 }, status: 'idle', battery: 85 },
-    { id: 'robot-b', name: 'Robot B', position: { x: 20, y: 70 }, status: 'idle', battery: 92 }
+    { id: 'robot-a', name: 'Robot A', position: { x: 80, y: 70 }, status: 'idle', battery: 85 },
+    { id: 'robot-b', name: 'Robot B', position: { x: 20, y: 20 }, status: 'idle', battery: 92 }
   ]);
   const [deliveryStatus, setDeliveryStatus] = useState<string>('waiting');
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'confirmed' | 'failed'>('pending');
-  const [deliveryCost] = useState(0.5);
+  const [deliveryCost] = useState(0.05);
+  
+  // Robot animation state
+  const [originalRobotAPosition] = useState({ x: 80, y: 20 });
+  const [isRobotMoving, setIsRobotMoving] = useState(false);
 
   // AR effects toggle handler
   const toggleAREffects = () => {
@@ -100,6 +123,76 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         renderSystemRef.current.updateAREffects(detectedMarkers);
       }
     }
+  };
+
+  // Robotics control functions
+  const handleGridClick = (row: number, col: number) => {
+    // Only set start point, no end point needed
+    setStartPoint({ row, col, id: 'start' });
+    setDeliveryStatus('Ready to execute delivery');
+  };
+
+  // Robot movement animation function
+  const animateRobotMovement = () => {
+    if (!startPoint || isRobotMoving) return;
+    
+    setIsRobotMoving(true);
+    
+    // Calculate target position based on grid coordinates
+    // Grid is 8x8, so each cell is 12.5% of the total area
+    const targetX = (startPoint.col * 12.5) + 6.25; // Center of the grid cell
+    const targetY = (startPoint.row * 12.5) + 6.25; // Center of the grid cell
+    
+    console.log(`Robot A moving to grid position (${startPoint.row}, ${startPoint.col}) = (${targetX}%, ${targetY}%)`);
+    
+    // Wait 5 seconds after "Delivery in progress..." status
+    setTimeout(() => {
+      console.log('Starting robot movement to delivery point...');
+      
+      // Animate movement to start point over 12 seconds
+      const startTime = Date.now();
+      const duration = 12000; // 12 seconds
+      const startPos = { ...originalRobotAPosition };
+      
+      const animateToTarget = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Smooth easing function
+        const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        const easedProgress = easeInOut(progress);
+        
+        // Calculate current position
+        const currentX = startPos.x + (targetX - startPos.x) * easedProgress;
+        const currentY = startPos.y + (targetY - startPos.y) * easedProgress;
+        
+        // Update robot position
+        setRobots(prev => prev.map(robot => 
+          robot.id === 'robot-a' 
+            ? { ...robot, position: { x: currentX, y: currentY } }
+            : robot
+        ));
+        
+        if (progress < 1) {
+          requestAnimationFrame(animateToTarget);
+        } else {
+          console.log('Robot A reached delivery point, waiting for completion...');
+          setIsRobotMoving(false);
+          
+          // Set robot to 'delivering' status - now waiting for manual completion
+          setRobots(prev => prev.map(robot => 
+            robot.id === 'robot-a' 
+              ? { ...robot, status: 'delivering' }
+              : robot
+          ));
+          
+          // Update status to show delivery is ready for completion
+          setDeliveryStatus('Robot at delivery point - click "Delivery completed" when ready');
+        }
+      };
+      
+      animateToTarget();
+    }, 5000); // 5 seconds delay after "Delivery in progress..."
   };
 
   // Toggle camera for viewer chat
@@ -704,6 +797,247 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
     };
   }, []);
 
+  // Initialize blockchain service (for viewing delivery state)
+  useEffect(() => {
+    const initializeBlockchain = async () => {
+      try {
+        setBlockchainError(null);
+        console.log('🔗 Initializing delivery blockchain integration for viewer...');
+        
+        let walletConnected = false;
+        
+        // Connect wallet for read-only delivery state monitoring
+        if (zkLoginSession && zkLoginAddress && enokiFlow) {
+          console.log('🔐 Connecting viewer with Enoki zkLogin session...');
+          try {
+            const enokiSigner = async (transaction: any): Promise<any> => {
+              try {
+                transaction.setSender(zkLoginAddress);
+                const txBytes = await transaction.build({ client: suiClient });
+                
+                const signer = await enokiFlow.getKeypair({
+                  network: 'testnet',
+                });
+                const signature = await signer.signTransaction(txBytes);
+                
+                const result = await suiClient.executeTransactionBlock({
+                  transactionBlock: txBytes,
+                  signature: signature.signature,
+                  requestType: "WaitForLocalExecution",
+                  options: {
+                    showEffects: true,
+                    showEvents: true,
+                    showObjectChanges: true,
+                  },
+                });
+                
+                return result;
+              } catch (error) {
+                console.error('❌ Enoki viewer transaction failed:', error);
+                throw error;
+              }
+            };
+            
+            suiDeliveryService.setWalletConnection(zkLoginAddress, enokiSigner);
+            walletConnected = true;
+            console.log('✅ Enoki viewer wallet connected');
+          } catch (enokiError) {
+            console.warn('⚠️ Enoki viewer connection failed:', enokiError);
+          }
+        }
+        
+        if (!walletConnected && currentAccount && signAndExecuteTransaction) {
+          console.log('🏦 Connecting viewer with dapp-kit wallet...');
+          
+          const dappKitSignAndExecute = (transaction: any): Promise<any> => {
+            return new Promise((resolve, reject) => {
+              signAndExecuteTransaction(
+                { transaction },
+                {
+                  onSuccess: (result) => resolve(result),
+                  onError: (error) => reject(error)
+                }
+              );
+            });
+          };
+          
+          suiDeliveryService.setWalletConnection(currentAccount.address, dappKitSignAndExecute);
+          walletConnected = true;
+          console.log('✅ dapp-kit viewer wallet connected');
+        }
+        
+        console.log('🔍 Viewer Wallet Connection State:', {
+          isConnected: walletConnected,
+          isUsingEnoki: !!(zkLoginSession && zkLoginAddress),
+          address: zkLoginAddress || currentAccount?.address,
+          zkLoginSession: !!zkLoginSession,
+          jwt: !!user
+        });
+        
+        const success = await suiDeliveryService.initialize();
+        if (success) {
+          setBlockchainInitialized(true);
+          setSuiDeliveryState(suiDeliveryService.getDeliveryState());
+          console.log('✅ Viewer blockchain integration ready');
+        } else {
+          throw new Error('Failed to initialize viewer blockchain service');
+        }
+      } catch (error) {
+        console.error('❌ Viewer blockchain initialization failed:', error);
+        setBlockchainError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    
+    initializeBlockchain();
+  }, [currentAccount, signAndExecuteTransaction, zkLoginSession, zkLoginAddress, enokiFlow, user]);
+
+  const executeDelivery = async () => {
+    if (!startPoint) return;
+    
+    // Check wallet connection first - support both Enoki and traditional wallets
+    const hasWalletConnection = (currentAccount && currentAccount.address) || (zkLoginAddress && zkLoginSession);
+    if (!hasWalletConnection || !blockchainInitialized) {
+      console.log('🔍 Viewer Wallet Connection Debug:', {
+        currentAccount: !!currentAccount,
+        currentAccountAddress: currentAccount?.address,
+        zkLoginAddress: !!zkLoginAddress,
+        zkLoginSession: !!zkLoginSession,
+        blockchainInitialized,
+        hasWalletConnection
+      });
+      setDeliveryStatus('Please connect your wallet first');
+      return;
+    }
+    
+    setPaymentStatus('processing');
+    setDeliveryStatus('Sending out delivery details for 0.05 SUI');
+    
+    try {
+      // Step 1: Create delivery order on blockchain
+      console.log('📦 Creating delivery order on blockchain...');
+      const orderResult = await suiDeliveryService.createDeliveryOrder(deliveryCost);
+      
+      if (orderResult.success) {
+        console.log('✅ Delivery order created:', orderResult.transactionId);
+        setDeliveryStatus('Sending out job to robots nearby');
+        
+        // Update delivery state
+        setSuiDeliveryState(suiDeliveryService.getDeliveryState());
+        
+        // Step 2: Auto-connect robot after order creation (simulating robot responding)
+        setTimeout(async () => {
+          try {
+            console.log('🤖 Robot responding to delivery order...');
+            const connectResult = await suiDeliveryService.connectRobotToDelivery();
+            
+            if (connectResult.success) {
+              console.log('✅ Robot connected to delivery:', connectResult.transactionId);
+              setSuiDeliveryState(suiDeliveryService.getDeliveryState());
+              
+              // Continue with existing delivery flow
+              setPaymentStatus('confirmed');
+              setDeliveryStatus('Payment confirmed! Robots negotiating...');
+              
+              // Simulate robot negotiation
+              setTimeout(() => {
+                setDeliveryStatus('Robot A selected for delivery');
+                setRobots(prev => prev.map(robot => 
+                  robot.id === 'robot-a' 
+                    ? { ...robot, status: 'moving' }
+                    : robot
+                ));
+                
+                // Simulate delivery progress
+                setTimeout(() => {
+                  setDeliveryStatus('Delivery in progress...');
+                  // Trigger robot movement animation
+                  animateRobotMovement();
+                }, 2000);
+              }, 3000);
+              
+            } else {
+              throw new Error(connectResult.error || 'Robot connection failed');
+            }
+          } catch (connectError) {
+            console.error('❌ Robot connection failed:', connectError);
+            setPaymentStatus('failed');
+            setDeliveryStatus(`Robot connection failed: ${connectError}`);
+          }
+        }, 2000); // 2 second delay for robot to respond
+        
+      } else {
+        throw new Error(orderResult.error || 'Delivery order creation failed');
+      }
+      
+    } catch (error) {
+      console.error('❌ Delivery execution failed:', error);
+      setPaymentStatus('failed');
+      setDeliveryStatus(`Delivery failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const completeDelivery = () => {
+    if (!startPoint) return;
+    
+    setDeliveryStatus('Delivery completed! Robot returning to base...');
+    setPaymentStatus('confirmed');
+    
+    // Animate robot back to original position
+    const startTime = Date.now();
+    const duration = 8000; // 8 seconds to return
+    const currentPos = robots.find(r => r.id === 'robot-a')?.position || originalRobotAPosition;
+    
+    const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    
+    const animateToOriginal = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easedProgress = easeInOut(progress);
+      
+      const currentX = currentPos.x + (originalRobotAPosition.x - currentPos.x) * easedProgress;
+      const currentY = currentPos.y + (originalRobotAPosition.y - currentPos.y) * easedProgress;
+      
+      setRobots(prev => prev.map(robot => 
+        robot.id === 'robot-a' 
+          ? { ...robot, position: { x: currentX, y: currentY } }
+          : robot
+      ));
+      
+      if (progress < 1) {
+        requestAnimationFrame(animateToOriginal);
+      } else {
+        console.log('Robot A returned to base');
+        setRobots(prev => prev.map(robot => 
+          robot.id === 'robot-a' 
+            ? { ...robot, status: 'idle' }
+            : robot
+        ));
+        setDeliveryStatus('Delivery completed successfully!');
+        
+        // Auto-reset after 3 seconds
+        setTimeout(() => {
+          resetDelivery();
+        }, 3000);
+      }
+    };
+    
+    animateToOriginal();
+  };
+
+  const resetDelivery = () => {
+    setStartPoint(null);
+    setEndPoint(null);
+    setDeliveryStatus('waiting');
+    setPaymentStatus('pending');
+    setIsRobotMoving(false);
+    setRobots(prev => prev.map(robot => 
+      robot.id === 'robot-a' 
+        ? { ...robot, position: originalRobotAPosition, status: 'idle' }
+        : robot
+    ));
+    console.log('Delivery system reset');
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -734,7 +1068,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             </Button>
             <div>
               <h1 className="text-xl font-bold text-white">{session.trackName}</h1>
-              <p className="text-sm text-white/70">Multi-Viewer AR Stream {arInitialized && '(AR Active)'}</p>
+              <p className="text-sm text-white/70">Robot Control Interface {arInitialized && '(AR Active)'}</p>
             </div>
           </div>
           
@@ -949,7 +1283,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
               {/* Control Panel Header - Fixed */}
               <div className="flex-shrink-0 p-4 border-b border-white/10 relative z-10">
                 <h2 className="text-lg font-bold text-white mb-1 relative z-10">Delivery Control</h2>
-                <p className="text-sm text-white/70 relative z-10">Watching host's delivery control</p>
+                <p className="text-sm text-white/70 relative z-10">Control the robot host remotely</p>
               </div>
               
               {/* Scrollable Content */}
@@ -969,8 +1303,9 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                         return (
                           <div
                             key={index}
+                            onClick={() => handleGridClick(row, col)}
                             className={`
-                              border border-white/20 transition-colors
+                              border border-white/20 transition-colors cursor-pointer hover:bg-white/10
                               ${isStart ? 'bg-green-500' : ''}
                               ${isEnd ? 'bg-red-500' : ''}
                               ${!isStart && !isEnd ? 'bg-gray-700/30' : ''}
@@ -1010,10 +1345,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                       </div>
                     </div>
                     
-                    {/* Viewer Notice */}
-                    <div className="absolute top-2 right-2 text-xs text-white/90 bg-black/60 px-2 py-1 rounded relative z-20">
-                      View Only
-                    </div>
+
                   </div>
                 </div>
                 
@@ -1056,25 +1388,32 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                     </div>
                     
                     <div className="space-y-2 relative z-10">
-                      <Button
-                        variant="primary"
-                        size="small"
-                        onClick={() => {
-                          // Show a tip or interaction message for viewers
-                          alert('💡 Tip: This is a view-only mode. You can watch the host control the delivery system in real-time!');
-                        }}
-                        className="w-full relative z-20 pointer-events-auto"
-                      >
-                        Tip to interact
-                      </Button>
+                      {deliveryStatus === 'Robot at delivery point - click "Delivery completed" when ready' ? (
+                        <Button
+                          variant="primary"
+                          size="small"
+                          onClick={completeDelivery}
+                          className="w-full relative z-20 pointer-events-auto !bg-green-600 hover:!bg-green-700"
+                        >
+                          Delivery Completed
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          size="small"
+                          onClick={executeDelivery}
+                          disabled={!startPoint || paymentStatus === 'processing' || isRobotMoving}
+                          className="w-full relative z-20 pointer-events-auto"
+                        >
+                          {paymentStatus === 'processing' ? 'Processing...' : 'Execute Delivery'}
+                        </Button>
+                      )}
                       
                       <Button
                         variant="secondary"
                         size="small"
-                        onClick={() => {
-                          // Show reset info for viewers
-                          alert('ℹ️ Only the host can reset the delivery system. You are in view-only mode.');
-                        }}
+                        onClick={resetDelivery}
+                        disabled={paymentStatus === 'processing' || isRobotMoving}
                         className="w-full !bg-gray-700 hover:!bg-gray-600 relative z-20 pointer-events-auto"
                       >
                         Reset

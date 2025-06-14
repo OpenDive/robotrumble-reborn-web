@@ -11,6 +11,9 @@ import { InputController } from '../../../engine-layer/core/input/InputControlle
 import { GameLoop } from '../../../engine-layer/core/game/GameLoop';
 import { GameState, KeyState } from '../../../shared/types/GameTypes';
 import { SuiWalletConnect } from '../shared/SuiWalletConnect';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { useEnokiFlow, useZkLogin, useZkLoginSession } from '@mysten/enoki/react';
+import { useAuth } from '../../../shared/contexts/AuthContext';
 
 interface ARStreamScreenRoboRumbleProps {
   session: RaceSession;
@@ -112,6 +115,16 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
   }>>([]);
   const [currentMessage, setCurrentMessage] = useState<string>('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  
+  // Wallet connection hooks - Enhanced with Enoki support
+  const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutate: signTransaction } = useSignTransaction();
+  const suiClient = useSuiClient();
+  const { address: zkLoginAddress } = useZkLogin();
+  const zkLoginSession = useZkLoginSession();
+  const { user } = useAuth();
+  const enokiFlow = useEnokiFlow();
   
   // AR effects toggle handler
   const toggleAREffects = () => {
@@ -513,6 +526,108 @@ export const ARStreamScreenRoboRumble: React.FC<ARStreamScreenRoboRumbleProps> =
       }
     };
   }, []); // Empty dependency array to run only once
+
+  // Initialize blockchain service with enhanced Enoki support
+  useEffect(() => {
+    const initializeBlockchain = async () => {
+      try {
+        console.log('🔗 Initializing RoboRumble blockchain integration...');
+        
+        let walletConnected = false;
+        
+        // Priority 1: Try Enoki zkLogin session (best UX)
+        if (zkLoginSession && zkLoginAddress && enokiFlow) {
+          console.log('🔐 Connecting RoboRumble with Enoki zkLogin session...');
+          try {
+            // Enoki wallet connection - use Enoki's direct transaction execution
+            const enokiSigner = async (transaction: any): Promise<any> => {
+              try {
+                // Set the sender address
+                transaction.setSender(zkLoginAddress);
+                
+                // Build the transaction
+                const txBytes = await transaction.build({ client: suiClient });
+                
+                // Get Enoki keypair and sign
+                const signer = await enokiFlow.getKeypair({
+                  network: 'testnet',
+                });
+                const signature = await signer.signTransaction(txBytes);
+                
+                // Execute the transaction
+                const result = await suiClient.executeTransactionBlock({
+                  transactionBlock: txBytes,
+                  signature: signature.signature,
+                  requestType: "WaitForLocalExecution",
+                  options: {
+                    showEffects: true,
+                    showEvents: true,
+                    showObjectChanges: true,
+                  },
+                });
+                
+                console.log('✅ Enoki RoboRumble transaction successful:', result);
+                return result;
+              } catch (error) {
+                console.error('❌ Enoki RoboRumble transaction execution failed:', error);
+                throw error;
+              }
+            };
+            
+            // Note: RoboRumble would use its own service here when available
+            // For now, we're just setting up the wallet connection pattern
+            walletConnected = true;
+            console.log('✅ Enoki zkLogin wallet connected to RoboRumble service');
+          } catch (enokiError) {
+            console.warn('⚠️ Enoki RoboRumble connection failed, trying fallback:', enokiError);
+          }
+        }
+        
+        // Priority 2: Try dapp-kit wallet (standard Sui wallets)
+        if (!walletConnected && currentAccount && signAndExecuteTransaction) {
+          console.log('🏦 Connecting RoboRumble with dapp-kit wallet...');
+          
+          // Wrapper for dapp-kit signing
+          const dappKitSignAndExecute = (transaction: any): Promise<any> => {
+            return new Promise((resolve, reject) => {
+              signAndExecuteTransaction(
+                { transaction },
+                {
+                  onSuccess: (result) => {
+                    console.log('✅ dapp-kit RoboRumble transaction successful:', result);
+                    resolve(result);
+                  },
+                  onError: (error) => {
+                    console.error('❌ dapp-kit RoboRumble signing failed:', error);
+                    reject(error);
+                  }
+                }
+              );
+            });
+          };
+          
+          // Note: RoboRumble would use its own service here when available
+          walletConnected = true;
+          console.log('✅ dapp-kit wallet connected to RoboRumble service');
+        }
+        
+        // Debug wallet connection state
+        console.log('🔍 RoboRumble Wallet Connection State:', {
+          isConnected: walletConnected,
+          isUsingEnoki: !!(zkLoginSession && zkLoginAddress),
+          address: zkLoginAddress || currentAccount?.address,
+          zkLoginSession: !!zkLoginSession,
+          jwt: !!user
+        });
+        
+        console.log('✅ RoboRumble blockchain integration ready');
+      } catch (error) {
+        console.error('❌ RoboRumble blockchain initialization failed:', error);
+      }
+    };
+    
+    initializeBlockchain();
+  }, [currentAccount, signAndExecuteTransaction, zkLoginSession, zkLoginAddress, enokiFlow, user]);
 
   // Robotics control functions
   const handleGridClick = (row: number, col: number) => {

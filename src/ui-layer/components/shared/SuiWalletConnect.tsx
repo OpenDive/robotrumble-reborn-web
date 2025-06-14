@@ -33,13 +33,16 @@ export const SuiWalletConnect: React.FC = () => {
   const isUsingEnoki = !!enokiAddress;
   const address = enokiAddress || currentAccount?.address;
 
-  console.log('🔍 Wallet Connection State:', {
-    isConnected,
-    isUsingEnoki,
-    address,
-    zkLoginSession: !!zkLoginSession,
-    jwt: !!zkLoginSession?.jwt
-  });
+  // Debug wallet connection state only when it changes
+  useEffect(() => {
+    console.log('🔍 Wallet Connection State:', {
+      isConnected,
+      isUsingEnoki,
+      address,
+      zkLoginSession: !!zkLoginSession,
+      jwt: !!zkLoginSession?.jwt
+    });
+  }, [isConnected, isUsingEnoki, address, zkLoginSession]);
 
   // Handle Enoki authentication when session is available
   useEffect(() => {
