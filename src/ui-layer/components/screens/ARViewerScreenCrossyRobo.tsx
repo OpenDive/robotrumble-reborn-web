@@ -1653,79 +1653,18 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     setIsControlEnabled(false);
     
     try {
-      // Send WebSocket command
+      // Send WebSocket command (fast, ~10-50ms)
       const success = robotWebSocketService.sendControlCommand(robotCommand, 0.5);
       
       if (!success) {
         throw new Error('Failed to send WebSocket command');
       }
       
-      // Optional: Execute blockchain payment if wallet is connected and direction is not stop
+      // PERFORMANCE OPTIMIZATION: Fire blockchain transaction asynchronously without waiting
+      // This decouples robot control (immediate) from blockchain payments (1-3 seconds)
+      // Allows for rapid robot commands and stress testing of both systems independently
       if ((currentAccount || enokiAddress) && direction !== 'stop') {
-        try {
-          // Import Transaction here for direct use
-          const { Transaction } = await import('@mysten/sui/transactions');
-          
-          // Create a simple payment transaction
-          const transaction = new Transaction();
-          
-          // Split 0.05 SUI (50,000,000 MIST) from gas coin for payment
-          const [coin] = transaction.splitCoins(transaction.gas, [transaction.pure.u64(50_000_000)]);
-          
-          // Transfer the payment to the robot address
-          transaction.transferObjects([coin], transaction.pure.address("0xcbdddb4e89a23e2ca51d41b5e05230fbfa502dc672cc58e298ec952d170b0901"));
-          
-          let result;
-          
-          // Execute transaction based on wallet type
-          if (currentAccount && signAndExecuteTransaction) {
-            // Traditional wallet execution
-            result = await new Promise((resolve, reject) => {
-              signAndExecuteTransaction(
-                { transaction },
-                {
-                  onSuccess: (result) => resolve(result),
-                  onError: (error) => reject(error)
-                }
-              );
-            });
-          } else if (enokiAddress && zkLoginSession) {
-            // Enoki wallet execution
-            transaction.setSender(enokiAddress);
-            const txBytes = await transaction.build({ client: suiClient });
-            const signer = await enokiFlow.getKeypair({ network: 'testnet' });
-            const signature = await signer.signTransaction(txBytes);
-            
-            result = await suiClient.executeTransactionBlock({
-              transactionBlock: txBytes,
-              signature: signature.signature,
-              requestType: "WaitForLocalExecution",
-              options: { showEffects: true, showEvents: true, showObjectChanges: true },
-            });
-          }
-          
-          // Add blockchain payment confirmation
-          if (result) {
-            const paymentCommand: RobotCommand = {
-              id: `${commandId}-payment`,
-              timestamp: new Date().toLocaleTimeString(),
-              command: `💰 Payment sent: TX ${(result as any).digest?.substring(0, 8)}...`,
-              status: 'acknowledged',
-              source: 'blockchain'
-            };
-            setRobotCommands(prev => [paymentCommand, ...prev].slice(0, 20));
-          }
-        } catch (paymentError) {
-          console.warn('Blockchain payment failed, but robot command was sent:', paymentError);
-          const paymentFailCommand: RobotCommand = {
-            id: `${commandId}-payment-fail`,
-            timestamp: new Date().toLocaleTimeString(),
-            command: `💰 Payment failed: ${paymentError}`,
-            status: 'failed',
-            source: 'blockchain'
-          };
-          setRobotCommands(prev => [paymentFailCommand, ...prev].slice(0, 20));
-        }
+        executeBlockchainPaymentAsync(commandId, direction);
       }
       
     } catch (error) {
@@ -1742,8 +1681,77 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       setRobotCommands(prev => [failedCommand, ...prev].slice(0, 20));
       console.error('Failed to send robot command:', error);
     } finally {
-      // Re-enable controls immediately
+      // Re-enable controls immediately after WebSocket command (not waiting for blockchain)
+      // This enables rapid-fire commands for stress testing and responsive UX
       setIsControlEnabled(true);
+    }
+  };
+
+  // Async blockchain payment handler (runs independently of robot commands)
+  const executeBlockchainPaymentAsync = async (commandId: string, direction: string) => {
+    try {
+      // Import Transaction here for direct use
+      const { Transaction } = await import('@mysten/sui/transactions');
+      
+      // Create a simple payment transaction
+      const transaction = new Transaction();
+      
+      // Split 0.05 SUI (50,000,000 MIST) from gas coin for payment
+      const [coin] = transaction.splitCoins(transaction.gas, [transaction.pure.u64(50_000_000)]);
+      
+      // Transfer the payment to the robot address
+      transaction.transferObjects([coin], transaction.pure.address("0xcbdddb4e89a23e2ca51d41b5e05230fbfa502dc672cc58e298ec952d170b0901"));
+      
+      let result;
+      
+      // Execute transaction based on wallet type
+      if (currentAccount && signAndExecuteTransaction) {
+        // Traditional wallet execution
+        result = await new Promise((resolve, reject) => {
+          signAndExecuteTransaction(
+            { transaction },
+            {
+              onSuccess: (result) => resolve(result),
+              onError: (error) => reject(error)
+            }
+          );
+        });
+      } else if (enokiAddress && zkLoginSession) {
+        // Enoki wallet execution
+        transaction.setSender(enokiAddress);
+        const txBytes = await transaction.build({ client: suiClient });
+        const signer = await enokiFlow.getKeypair({ network: 'testnet' });
+        const signature = await signer.signTransaction(txBytes);
+        
+        result = await suiClient.executeTransactionBlock({
+          transactionBlock: txBytes,
+          signature: signature.signature,
+          requestType: "WaitForLocalExecution",
+          options: { showEffects: true, showEvents: true, showObjectChanges: true },
+        });
+      }
+      
+      // Add blockchain payment confirmation
+      if (result) {
+        const paymentCommand: RobotCommand = {
+          id: `${commandId}-payment`,
+          timestamp: new Date().toLocaleTimeString(),
+          command: `💰 Payment sent: TX ${(result as any).digest?.substring(0, 8)}...`,
+          status: 'acknowledged',
+          source: 'blockchain'
+        };
+        setRobotCommands(prev => [paymentCommand, ...prev].slice(0, 20));
+      }
+    } catch (paymentError) {
+      console.warn('Blockchain payment failed, but robot command was sent:', paymentError);
+      const paymentFailCommand: RobotCommand = {
+        id: `${commandId}-payment-fail`,
+        timestamp: new Date().toLocaleTimeString(),
+        command: `💰 Payment failed: ${paymentError}`,
+        status: 'failed',
+        source: 'blockchain'
+      };
+      setRobotCommands(prev => [paymentFailCommand, ...prev].slice(0, 20));
     }
   };
 
