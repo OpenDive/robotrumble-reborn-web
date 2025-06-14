@@ -95,9 +95,15 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   const { user } = useAuth();
   const enokiFlow = useEnokiFlow();
 
+  // Predefined delivery spots (3 locations marked with red crosses)
+  const deliverySpots = [
+    { row: 2, col: 1, id: 'spot-1' }, // Top-left area
+    { row: 2, col: 6, id: 'spot-2' }, // Top-right area  
+    { row: 5, col: 1, id: 'spot-3' }  // Bottom-left area
+  ];
+
   // Delivery control state (full control for viewers - they control the robot host)
-  const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
-  const [endPoint, setEndPoint] = useState<DeliveryPoint | null>(null);
+  const [selectedSpot, setSelectedSpot] = useState<DeliveryPoint | null>(null);
   const [robots, setRobots] = useState<Robot[]>([
     { id: 'robot-a', name: 'Robot A', position: { x: 80, y: 70 }, status: 'idle', battery: 85 },
     { id: 'robot-b', name: 'Robot B', position: { x: 20, y: 20 }, status: 'idle', battery: 92 }
@@ -107,7 +113,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   const [deliveryCost] = useState(0.05);
   
   // Robot animation state
-  const [originalRobotAPosition] = useState({ x: 80, y: 20 });
+  const [originalRobotAPosition] = useState({ x: 80, y: 70 }); // Match the current robot position
   const [isRobotMoving, setIsRobotMoving] = useState(false);
 
   // AR effects toggle handler
@@ -126,32 +132,34 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   };
 
   // Robotics control functions
-  const handleGridClick = (row: number, col: number) => {
-    // Only set start point, no end point needed
-    setStartPoint({ row, col, id: 'start' });
+  const handleSpotClick = (spot: DeliveryPoint) => {
+    if (isRobotMoving) return; // Prevent clicking during movement
+    
+    setSelectedSpot(spot);
     setDeliveryStatus('Ready to execute delivery');
+    console.log(`Selected delivery spot: ${spot.id} at (${spot.row}, ${spot.col})`);
   };
 
   // Robot movement animation function
   const animateRobotMovement = () => {
-    if (!startPoint || isRobotMoving) return;
+    if (!selectedSpot || isRobotMoving) return;
     
     setIsRobotMoving(true);
     
     // Calculate target position based on grid coordinates
     // Grid is 8x8, so each cell is 12.5% of the total area
-    const targetX = (startPoint.col * 12.5) + 6.25; // Center of the grid cell
-    const targetY = (startPoint.row * 12.5) + 6.25; // Center of the grid cell
+    const targetX = (selectedSpot.col * 12.5) + 6.25; // Center of the grid cell
+    const targetY = (selectedSpot.row * 12.5) + 6.25; // Center of the grid cell
     
-    console.log(`Robot A moving to grid position (${startPoint.row}, ${startPoint.col}) = (${targetX}%, ${targetY}%)`);
+    console.log(`Robot A moving to delivery spot ${selectedSpot.id} at grid position (${selectedSpot.row}, ${selectedSpot.col}) = (${targetX}%, ${targetY}%)`);
     
     // Wait 5 seconds after "Delivery in progress..." status
     setTimeout(() => {
       console.log('Starting robot movement to delivery point...');
       
-      // Animate movement to start point over 12 seconds
+      // Animate movement to delivery spot over 8 seconds
       const startTime = Date.now();
-      const duration = 12000; // 12 seconds
+      const duration = 8000; // 8 seconds to reach spot
       const startPos = { ...originalRobotAPosition };
       
       const animateToTarget = () => {
@@ -176,23 +184,28 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         if (progress < 1) {
           requestAnimationFrame(animateToTarget);
         } else {
-          console.log('Robot A reached delivery point, waiting for completion...');
+          console.log('Robot A reached delivery point, pausing for 20 seconds...');
           setIsRobotMoving(false);
           
-          // Set robot to 'delivering' status - now waiting for manual completion
+          // Set robot to 'delivering' status
           setRobots(prev => prev.map(robot => 
             robot.id === 'robot-a' 
               ? { ...robot, status: 'delivering' }
               : robot
           ));
           
-          // Update status to show delivery is ready for completion
+          // Update status and auto-complete after 20 seconds
           setDeliveryStatus('Robot at delivery point - click "Delivery completed" when ready');
+          
+          // Auto-complete delivery after 20 seconds
+          setTimeout(() => {
+            completeDelivery();
+          }, 20000); // 20 seconds pause
         }
       };
       
       animateToTarget();
-    }, 5000); // 5 seconds delay after "Delivery in progress..."
+    }, 5000); // 3 seconds delay after "Delivery in progress..."
   };
 
   // Toggle camera for viewer chat
@@ -892,7 +905,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   }, [currentAccount, signAndExecuteTransaction, zkLoginSession, zkLoginAddress, enokiFlow, user]);
 
   const executeDelivery = async () => {
-    if (!startPoint) return;
+    if (!selectedSpot) return;
     
     // Check wallet connection first - support both Enoki and traditional wallets
     const hasWalletConnection = (currentAccount && currentAccount.address) || (zkLoginAddress && zkLoginSession);
@@ -952,8 +965,8 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                   setDeliveryStatus('Delivery in progress...');
                   // Trigger robot movement animation
                   animateRobotMovement();
-                }, 2000);
-              }, 3000);
+                }, 5000);
+              }, 5000);
               
             } else {
               throw new Error(connectResult.error || 'Robot connection failed');
@@ -963,7 +976,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
             setPaymentStatus('failed');
             setDeliveryStatus(`Robot connection failed: ${connectError}`);
           }
-        }, 2000); // 2 second delay for robot to respond
+        }, 6000); // 2 second delay for robot to respond
         
       } else {
         throw new Error(orderResult.error || 'Delivery order creation failed');
@@ -977,14 +990,14 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   };
 
   const completeDelivery = () => {
-    if (!startPoint) return;
+    if (!selectedSpot) return;
     
     setDeliveryStatus('Delivery completed! Robot returning to base...');
     setPaymentStatus('confirmed');
     
     // Animate robot back to original position
     const startTime = Date.now();
-    const duration = 8000; // 8 seconds to return
+    const duration = 15000; // 8 seconds to return
     const currentPos = robots.find(r => r.id === 'robot-a')?.position || originalRobotAPosition;
     
     const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
@@ -1017,7 +1030,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
         // Auto-reset after 3 seconds
         setTimeout(() => {
           resetDelivery();
-        }, 3000);
+        }, 5000);
       }
     };
     
@@ -1025,8 +1038,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
   };
 
   const resetDelivery = () => {
-    setStartPoint(null);
-    setEndPoint(null);
+    setSelectedSpot(null);
     setDeliveryStatus('waiting');
     setPaymentStatus('pending');
     setIsRobotMoving(false);
@@ -1297,20 +1309,35 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                       {Array.from({ length: 64 }).map((_, index) => {
                         const row = Math.floor(index / 8);
                         const col = index % 8;
-                        const isStart = startPoint && startPoint.row === row && startPoint.col === col;
-                        const isEnd = endPoint && endPoint.row === row && endPoint.col === col;
+                        
+                        // Check if this cell is a delivery spot
+                        const deliverySpot = deliverySpots.find(spot => spot.row === row && spot.col === col);
+                        const isSelected = selectedSpot && selectedSpot.row === row && selectedSpot.col === col;
                         
                         return (
                           <div
                             key={index}
-                            onClick={() => handleGridClick(row, col)}
+                            onClick={() => deliverySpot && handleSpotClick(deliverySpot)}
                             className={`
-                              border border-white/20 transition-colors cursor-pointer hover:bg-white/10
-                              ${isStart ? 'bg-green-500' : ''}
-                              ${isEnd ? 'bg-red-500' : ''}
-                              ${!isStart && !isEnd ? 'bg-gray-700/30' : ''}
+                              border border-white/20 transition-colors relative
+                              ${deliverySpot ? 'cursor-pointer hover:bg-white/10' : ''}
+                              ${isSelected ? 'bg-green-500' : ''}
+                              ${!isSelected ? 'bg-gray-700/30' : ''}
                             `}
-                          />
+                          >
+                            {/* Red cross for delivery spots */}
+                            {deliverySpot && !isSelected && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="text-red-500 text-lg font-bold leading-none">✕</div>
+                              </div>
+                            )}
+                            {/* Green checkmark for selected spot */}
+                            {isSelected && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="text-white text-lg font-bold leading-none">✓</div>
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -1333,17 +1360,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                       />
                     ))}
                     
-                    {/* Legend */}
-                    <div className="absolute bottom-2 left-2 text-xs z-20">
-                      <div className="flex items-center gap-2 mb-1 relative z-10">
-                        <div className="w-2 h-2 bg-green-500 rounded relative z-10"></div>
-                        <span className="relative z-10 text-white">Start</span>
-                      </div>
-                      <div className="flex items-center gap-2 relative z-10">
-                        <div className="w-2 h-2 bg-red-500 rounded relative z-10"></div>
-                        <span className="relative z-10 text-white">End</span>
-                      </div>
-                    </div>
+
                     
 
                   </div>
@@ -1402,7 +1419,7 @@ export const ARViewerScreen: React.FC<ARViewerScreenProps> = ({ session, onBack 
                           variant="primary"
                           size="small"
                           onClick={executeDelivery}
-                          disabled={!startPoint || paymentStatus === 'processing' || isRobotMoving}
+                          disabled={!selectedSpot || paymentStatus === 'processing' || isRobotMoving}
                           className="w-full relative z-20 pointer-events-auto"
                         >
                           {paymentStatus === 'processing' ? 'Processing...' : 'Execute Delivery'}
