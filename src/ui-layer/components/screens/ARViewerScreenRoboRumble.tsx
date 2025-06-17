@@ -713,10 +713,11 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       const uid = Math.floor(Math.random() * 100000);
       setLocalUid(uid);
       
-      // Join channel
-      const token = await fetchToken(session.id, uid, 'host');
-      await client.join(APP_ID, session.id, token, uid);
-      console.log(`Joined channel ${session.id} with UID ${uid} as Robo Rumble viewer`);
+      // Join channel - HARDCODED FOR TESTING
+      const channelName = 'robot-video'; // Hardcoded channel name
+      const token = await fetchToken(channelName, uid, 'host');
+      await client.join(APP_ID, channelName, token, uid);
+      console.log(`Joined channel ${channelName} with UID ${uid} as Robo Rumble viewer`);
       
       // Auto-publish local media if already enabled
       const tracksToPublish = [];
@@ -1067,7 +1068,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
               </div>
               <h3 className="text-lg font-medium text-white mb-2">Ready to Join RoboRumble Session</h3>
               <p className="text-sm mb-4">Connect to watch the synchronized RoboRumble demo with AR overlay</p>
-              <p className="text-xs text-white/50">Channel: {session.id}</p>
+              <p className="text-xs text-white/50">Channel: robot-video</p>
             </div>
           </div>
         ) : (
@@ -1124,7 +1125,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                     <span className="text-sm font-medium">Watching RoboRumble AR Stream</span>
                   </div>
                   <div className="text-xs text-white/70">
-                    Channel: {session.id}<br />
+                    Channel: robot-video<br />
                     Your UID: {localUid}<br />
                     Host: {hostUser ? `User ${hostUser.uid}` : 'None'}<br />
                     Viewers: {remoteUsers.size}<br />
