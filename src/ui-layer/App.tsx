@@ -178,7 +178,7 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/" element={
-        <RouteTransition route="video-intro">
+        <RouteTransition route="login">
           <VideoIntroScreen onLoginComplete={handleLoginComplete} />
         </RouteTransition>
       } />
