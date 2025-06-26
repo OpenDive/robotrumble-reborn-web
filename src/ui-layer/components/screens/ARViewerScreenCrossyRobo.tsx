@@ -24,6 +24,19 @@ const ROBOT_WS_URL = 'wss://hurricane-laboratories-ddc1627c10dd.herokuapp.com/ws
 const ROBOT_ROOM_ID = 'default';
 const ROBOT_WS_ENABLED = 'false';
 
+// Smart contract configuration - Phase 1: Sequential blockchain → websocket execution
+const CROSSY_ROBOT_PACKAGE_ID = "0xaa4fbd2d5507be23930ee1d1febba86ba0fdd438d8167b5629114c2bc548d76f";
+const GAME_OBJECT_ID = "0x5841f9619151780ef94d69746cde27299df321b523f185f7fe6d24867b324de7";
+
+// Direction mapping to match smart contract
+const DIRECTION_TO_CONTRACT_MAP = {
+  'up': 0,      // MOVE_UP
+  'down': 1,    // MOVE_DOWN  
+  'left': 2,    // MOVE_LEFT
+  'right': 3,   // MOVE_RIGHT
+  'stop': 0     // Default to UP for stop command
+} as const;
+
 interface ARViewerScreenCrossyRoboProps {
   session: RaceSession;
   onBack: () => void;
@@ -730,8 +743,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   // AR effects renderer
   const arEffectsRendererRef = useRef<AREffectsRenderer | null>(null);
 
-  // Add key scale state
-  const [keyScale, setKeyScale] = useState(5.0);
+
 
   // Helper function to get the host video element
   const getHostVideoElement = (): HTMLVideoElement | null => {
@@ -819,7 +831,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
         threeViewerEngineRef.current = new ThreeViewerEngine(
           video,
           (msg: string) => logMessage(`[AR Crossy Robo Viewer] ${msg}`),
-          { keyScale: keyScale } // Use state value
+          { keyScale: 5.0 } // Fixed default value
         );
         
         // Wait for assets to load before proceeding
@@ -1211,7 +1223,13 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                 return newMap;
               } else {
                 // Create new host video container
+                console.log(`🎬 Creating new host video container for user ${user.uid}`);
+                console.log(`🔍 mainViewRef.current available:`, !!mainViewRef.current);
+                
                 setTimeout(() => {
+                  console.log(`🎬 Executing host video container creation for user ${user.uid}`);
+                  console.log(`🔍 mainViewRef.current still available:`, !!mainViewRef.current);
+                  
                   // Create main host video view
                   const mainContainer = document.createElement('div');
                   mainContainer.id = `main-host-${user.uid}`;
@@ -1227,19 +1245,38 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                   hostVideo.setAttribute('data-uid', user.uid.toString()); // Add data-uid attribute for AR detection
                   mainContainer.appendChild(hostVideo);
                   
+                  console.log(`📺 Created video element with id: ${hostVideo.id}`);
+                  
                   // Store reference for AR detection
                   hostVideoRef.current = hostVideo;
                   
                   // Add to main view container
                   if (mainViewRef.current) {
+                    console.log(`📺 Adding host video container to main view`);
                     // Clear any existing content first
                     mainViewRef.current.innerHTML = '';
                     mainViewRef.current.appendChild(mainContainer);
                     
                     // Play video in main view
-                    user.videoTrack!.play(hostVideo);
+                    console.log(`🎥 Playing video track in host video element`);
+                    try {
+                      user.videoTrack!.play(hostVideo);
+                      console.log(`✅ Video track play() called successfully`);
+                    } catch (error) {
+                      console.error(`❌ Error playing video track:`, error);
+                    }
                     
                     console.log(`🎮 Crossy Robo host video displayed in main view for user ${user.uid}`);
+                    
+                    // Verify the video element is in the DOM
+                    setTimeout(() => {
+                      const addedVideo = document.getElementById(`host-video-${user.uid}`);
+                      console.log(`🔍 Video element in DOM:`, !!addedVideo);
+                      if (addedVideo) {
+                        console.log(`📐 Video element dimensions: ${(addedVideo as HTMLVideoElement).videoWidth}x${(addedVideo as HTMLVideoElement).videoHeight}`);
+                        console.log(`📺 Video element playing:`, !(addedVideo as HTMLVideoElement).paused);
+                      }
+                    }, 500);
                     
                     // Initialize AR overlay for host stream
                     setTimeout(() => {
@@ -1251,6 +1288,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                             initializeAROverlay();
                           }, 1000); // Give video a moment to be fully ready
                         } else {
+                          console.log(`📐 Host video dimensions not ready yet: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
                           setTimeout(initializeARWhenReady, 500);
                         }
                       };
@@ -1282,6 +1320,8 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                       // Start checking immediately
                       setTimeout(initializeARWhenReady, 2000);
                     }, 100);
+                  } else {
+                    console.error(`❌ mainViewRef.current is null when trying to add host video container`);
                   }
                 }, 100);
               }
@@ -1611,96 +1651,27 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     };
   }, []);
 
-  // Send directional command via WebSocket (with optional blockchain payment)
-  const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
-    if (!isControlEnabled) return;
-    
-    // Check robot WebSocket connection first
-    if (!isRobotConnected || !robotWebSocketService.isConnected) {
-      const errorMsg = 'Robot not connected';
-      const errorCommand: RobotCommand = {
-        id: `error-${Date.now()}`,
-        timestamp: new Date().toLocaleTimeString(),
-        command: `❌ Error: ${errorMsg}`,
-        status: 'failed',
-        source: 'websocket'
-      };
-      setRobotCommands(prev => [errorCommand, ...prev].slice(0, 20));
-      return;
-    }
-    
-    const sendTimestamp = new Date().toLocaleTimeString();
-    const commandId = `cmd-${Date.now()}`;
-    
-    // Map directions to robot commands
-    const robotCommand = direction === 'up' ? 'forward' : 
-                         direction === 'down' ? 'backward' :
-                         direction === 'left' ? 'left' :
-                         direction === 'right' ? 'right' : 'stop';
-    
-    // Add "sent" command to log immediately
-    const sentCommand: RobotCommand = {
-      id: commandId,
-      timestamp: sendTimestamp,
-      command: `🚀 Sending: ${robotCommand}`,
-      status: 'sent',
-      source: 'websocket'
-    };
-    
-    setRobotCommands(prev => [sentCommand, ...prev].slice(0, 20));
-    
-    // Disable controls temporarily to prevent spam
-    setIsControlEnabled(false);
-    
+  // Execute smart contract movement
+  const executeContractMovement = async (
+    contractDirection: number, 
+    originalDirection: string
+  ): Promise<{ success: boolean; digest?: string; error?: string }> => {
     try {
-      // Send WebSocket command (fast, ~10-50ms)
-      const success = robotWebSocketService.sendControlCommand(robotCommand, 0.5);
-      
-      if (!success) {
-        throw new Error('Failed to send WebSocket command');
-      }
-      
-      // PERFORMANCE OPTIMIZATION: Fire blockchain transaction asynchronously without waiting
-      // This decouples robot control (immediate) from blockchain payments (1-3 seconds)
-      // Allows for rapid robot commands and stress testing of both systems independently
-      if ((currentAccount || enokiAddress) && direction !== 'stop') {
-        executeBlockchainPaymentAsync(commandId, direction);
-      }
-      
-    } catch (error) {
-      // Add "failed" command to log
-      const failTimestamp = new Date().toLocaleTimeString();
-      const failedCommand: RobotCommand = {
-        id: `${commandId}-fail`,
-        timestamp: failTimestamp,
-        command: `❌ Command failed: ${error}`,
-        status: 'failed',
-        source: 'websocket'
-      };
-      
-      setRobotCommands(prev => [failedCommand, ...prev].slice(0, 20));
-      console.error('Failed to send robot command:', error);
-    } finally {
-      // Re-enable controls immediately after WebSocket command (not waiting for blockchain)
-      // This enables rapid-fire commands for stress testing and responsive UX
-      setIsControlEnabled(true);
-    }
-  };
-
-  // Async blockchain payment handler (runs independently of robot commands)
-  const executeBlockchainPaymentAsync = async (commandId: string, direction: string) => {
-    try {
-      // Import Transaction here for direct use
+      // Import Transaction for direct use
       const { Transaction } = await import('@mysten/sui/transactions');
       
-      // Create a simple payment transaction
+      // Create transaction for smart contract call
       const transaction = new Transaction();
       
-      // Split 0.05 SUI (50,000,000 MIST) from gas coin for payment
-      const [coin] = transaction.splitCoins(transaction.gas, [transaction.pure.u64(50_000_000)]);
-      
-      // Transfer the payment to the robot address
-      transaction.transferObjects([coin], transaction.pure.address("0xcbdddb4e89a23e2ca51d41b5e05230fbfa502dc672cc58e298ec952d170b0901"));
+      // Call move_robot function on the smart contract
+      transaction.moveCall({
+        target: `${CROSSY_ROBOT_PACKAGE_ID}::crossy_robot::move_robot`,
+        arguments: [
+          transaction.object(GAME_OBJECT_ID), // Game object (shared object)
+          transaction.pure.u8(contractDirection), // Direction (0-3)
+          transaction.object('0x6'), // Clock object (system clock)
+        ],
+      });
       
       let result;
       
@@ -1729,31 +1700,135 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
           requestType: "WaitForLocalExecution",
           options: { showEffects: true, showEvents: true, showObjectChanges: true },
         });
+      } else {
+        throw new Error('No wallet connected');
       }
       
-      // Add blockchain payment confirmation
-      if (result) {
-        const paymentCommand: RobotCommand = {
-          id: `${commandId}-payment`,
-          timestamp: new Date().toLocaleTimeString(),
-          command: `💰 Payment sent: TX ${(result as any).digest?.substring(0, 8)}...`,
-          status: 'acknowledged',
-          source: 'blockchain'
+      // Check transaction success
+      if (result && (result as any).effects?.status?.status === 'success') {
+        return {
+          success: true,
+          digest: (result as any).digest
         };
-        setRobotCommands(prev => [paymentCommand, ...prev].slice(0, 20));
+      } else {
+        return {
+          success: false,
+          error: (result as any).effects?.status?.error || 'Transaction failed'
+        };
       }
-    } catch (paymentError) {
-      console.warn('Blockchain payment failed, but robot command was sent:', paymentError);
-      const paymentFailCommand: RobotCommand = {
-        id: `${commandId}-payment-fail`,
+      
+    } catch (error) {
+      console.error('Smart contract execution failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  };
+
+  // Helper function to map UI directions to robot commands
+  const mapDirectionToRobot = (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
+    const robotCommandMap = {
+      'up': 'forward',
+      'down': 'backward',
+      'left': 'left',
+      'right': 'right',
+      'stop': 'stop'
+    };
+    return robotCommandMap[direction];
+  };
+
+  // Send directional command via smart contract first, then WebSocket
+  const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
+    if (!isControlEnabled) return;
+    
+    const sendTimestamp = new Date().toLocaleTimeString();
+    const commandId = `cmd-${Date.now()}`;
+    
+    // Map UI direction to contract direction
+    const contractDirection = DIRECTION_TO_CONTRACT_MAP[direction];
+    
+    // Add "sending blockchain transaction" command to log immediately
+    const sendingBlockchainCommand: RobotCommand = {
+      id: commandId,
+      timestamp: sendTimestamp,
+      command: `🔗 Sending blockchain transaction: ${direction.toUpperCase()}`,
+      status: 'sent',
+      source: 'blockchain'
+    };
+    
+    setRobotCommands(prev => [sendingBlockchainCommand, ...prev].slice(0, 20));
+    
+    // Disable controls during entire process
+    setIsControlEnabled(false);
+    
+    try {
+      // STEP 1: Execute blockchain transaction FIRST and WAIT for confirmation
+      const txResult = await executeContractMovement(contractDirection, direction);
+      
+      if (!txResult.success) {
+        throw new Error(txResult.error || 'Blockchain transaction failed');
+      }
+      
+      // Add blockchain success log
+      const blockchainSuccessCommand: RobotCommand = {
+        id: `${commandId}-blockchain-success`,
         timestamp: new Date().toLocaleTimeString(),
-        command: `💰 Payment failed: ${paymentError}`,
+        command: `✅ Blockchain confirmed: ${txResult.digest?.substring(0, 8)}...`,
+        status: 'acknowledged',
+        source: 'blockchain'
+      };
+      setRobotCommands(prev => [blockchainSuccessCommand, ...prev].slice(0, 20));
+      
+      // STEP 2: Only AFTER blockchain success, send WebSocket command
+      if (isRobotConnected && robotWebSocketService.isConnected) {
+        const robotCommand = mapDirectionToRobot(direction);
+        
+        const wsSuccess = robotWebSocketService.sendControlCommand(robotCommand, 0.5);
+        
+        if (wsSuccess) {
+          const wsSuccessCommand: RobotCommand = {
+            id: `${commandId}-websocket-success`,
+            timestamp: new Date().toLocaleTimeString(),
+            command: `🤖 Robot command sent: ${robotCommand}`,
+            status: 'acknowledged',
+            source: 'websocket'
+          };
+          setRobotCommands(prev => [wsSuccessCommand, ...prev].slice(0, 20));
+        } else {
+          throw new Error('WebSocket command failed');
+        }
+      } else {
+        // Robot not connected, but blockchain transaction succeeded
+        const wsWarningCommand: RobotCommand = {
+          id: `${commandId}-websocket-warning`,
+          timestamp: new Date().toLocaleTimeString(),
+          command: `⚠️ Payment processed but robot offline`,
+          status: 'acknowledged',
+          source: 'websocket'
+        };
+        setRobotCommands(prev => [wsWarningCommand, ...prev].slice(0, 20));
+      }
+      
+    } catch (error) {
+      console.error('Command execution failed:', error);
+      
+      const failedCommand: RobotCommand = {
+        id: `${commandId}-fail`,
+        timestamp: new Date().toLocaleTimeString(),
+        command: `❌ Command failed: ${error instanceof Error ? error.message : String(error)}`,
         status: 'failed',
         source: 'blockchain'
       };
-      setRobotCommands(prev => [paymentFailCommand, ...prev].slice(0, 20));
+      
+      setRobotCommands(prev => [failedCommand, ...prev].slice(0, 20));
+    } finally {
+      // Re-enable controls after complete process
+      setIsControlEnabled(true);
     }
   };
+
+
 
   // Initialize blockchain service
   const initializeBlockchain = async () => {
@@ -1860,13 +1935,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     initializeBlockchain();
   }, [currentAccount, enokiAddress, zkLoginSession]);
 
-  // Add key scale slider handler
-  const handleKeyScaleChange = (newScale: number) => {
-    setKeyScale(newScale);
-    if (threeViewerEngineRef.current) {
-      threeViewerEngineRef.current.updateKeyScale(newScale);
-    }
-  };
+
 
   // Handle different game states
   if (gameState === 'connecting') {
@@ -2105,18 +2174,6 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                         {detectedMarkers.length > 0 && (
                           <span className="text-green-400"> ✓ RENDERING</span>
                         )}
-                        <div className="mt-2">
-                          <label className="block text-xs mb-1">Key Size: {keyScale.toFixed(1)}</label>
-                          <input
-                            type="range"
-                            min="5.0"
-                            max="20"
-                            step="0.5"
-                            value={keyScale}
-                            onChange={(e) => handleKeyScaleChange(parseFloat(e.target.value))}
-                            className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                          />
-                        </div>
                       </>
                     )}
                   </div>
@@ -2250,7 +2307,10 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                     {/* Cost Information */}
                     <div className="mt-2">
                       <div className="text-xs text-white/60">
-                        Each move: 0.05 SUI
+                        Smart Contract: Move Robot
+                      </div>
+                      <div className="text-xs text-white/40">
+                        Gas fee only (no payment required)
                       </div>
                     </div>
                   </div>
