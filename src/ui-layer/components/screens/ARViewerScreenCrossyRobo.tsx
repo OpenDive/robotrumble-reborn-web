@@ -1226,32 +1226,34 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                 console.log(`🎬 Creating new host video container for user ${user.uid}`);
                 console.log(`🔍 mainViewRef.current available:`, !!mainViewRef.current);
                 
-                setTimeout(() => {
-                  console.log(`🎬 Executing host video container creation for user ${user.uid}`);
-                  console.log(`🔍 mainViewRef.current still available:`, !!mainViewRef.current);
+                // Create retry mechanism to wait for mainViewRef to be available
+                const attemptVideoContainerCreation = (retryCount = 0) => {
+                  const maxRetries = 20; // Try for 2 seconds (20 × 100ms)
                   
-                  // Create main host video view
-                  const mainContainer = document.createElement('div');
-                  mainContainer.id = `main-host-${user.uid}`;
-                  mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
+                  console.log(`🎬 Executing host video container creation for user ${user.uid} (attempt ${retryCount + 1})`);
+                  console.log(`🔍 mainViewRef.current available:`, !!mainViewRef.current);
                   
-                  const hostVideo = document.createElement('video');
-                  hostVideo.className = 'w-full h-full object-cover';
-                  hostVideo.autoplay = true;
-                  hostVideo.playsInline = true;
-                  hostVideo.muted = true;
-                  // Remove mirroring for host video
-                  hostVideo.id = `host-video-${user.uid}`;
-                  hostVideo.setAttribute('data-uid', user.uid.toString()); // Add data-uid attribute for AR detection
-                  mainContainer.appendChild(hostVideo);
-                  
-                  console.log(`📺 Created video element with id: ${hostVideo.id}`);
-                  
-                  // Store reference for AR detection
-                  hostVideoRef.current = hostVideo;
-                  
-                  // Add to main view container
                   if (mainViewRef.current) {
+                    // Create main host video view
+                    const mainContainer = document.createElement('div');
+                    mainContainer.id = `main-host-${user.uid}`;
+                    mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
+                    
+                    const hostVideo = document.createElement('video');
+                    hostVideo.className = 'w-full h-full object-cover';
+                    hostVideo.autoplay = true;
+                    hostVideo.playsInline = true;
+                    hostVideo.muted = true;
+                    // Remove mirroring for host video
+                    hostVideo.id = `host-video-${user.uid}`;
+                    hostVideo.setAttribute('data-uid', user.uid.toString()); // Add data-uid attribute for AR detection
+                    mainContainer.appendChild(hostVideo);
+                    
+                    console.log(`📺 Created video element with id: ${hostVideo.id}`);
+                    
+                    // Store reference for AR detection
+                    hostVideoRef.current = hostVideo;
+                    
                     console.log(`📺 Adding host video container to main view`);
                     // Clear any existing content first
                     mainViewRef.current.innerHTML = '';
@@ -1320,10 +1322,16 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                       // Start checking immediately
                       setTimeout(initializeARWhenReady, 2000);
                     }, 100);
+                  } else if (retryCount < maxRetries) {
+                    console.log(`⏳ mainViewRef.current is null, retrying in 100ms (attempt ${retryCount + 1}/${maxRetries})`);
+                    setTimeout(() => attemptVideoContainerCreation(retryCount + 1), 100);
                   } else {
-                    console.error(`❌ mainViewRef.current is null when trying to add host video container`);
+                    console.error(`❌ mainViewRef.current is still null after ${maxRetries} attempts. Cannot add host video container.`);
                   }
-                }, 100);
+                };
+                
+                // Start the retry mechanism
+                setTimeout(() => attemptVideoContainerCreation(), 100);
               }
             } else {
               console.log(`👥 User ${user.uid} is a VIEWER with video`);
