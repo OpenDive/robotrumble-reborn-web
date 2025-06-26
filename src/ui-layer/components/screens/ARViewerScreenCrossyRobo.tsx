@@ -1835,6 +1835,67 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     return robotCommandMap[direction];
   };
 
+  // Send fire command directly to WebSocket (bypassing blockchain)
+  const sendFireCommand = async () => {
+    if (!isControlEnabled) return;
+    
+    const sendTimestamp = new Date().toLocaleTimeString();
+    const commandId = `fire-${Date.now()}`;
+    
+    // Add "sending fire command" to log immediately
+    const sendingFireCommand: RobotCommand = {
+      id: commandId,
+      timestamp: sendTimestamp,
+      command: `🔥 Sending FIRE`,
+      status: 'sent',
+      source: 'websocket'
+    };
+    
+    setRobotCommands(prev => [sendingFireCommand, ...prev].slice(0, 20));
+    
+    // Disable controls during command
+    setIsControlEnabled(false);
+    
+    try {
+      // Check robot WebSocket connection
+      if (!isRobotConnected || !robotWebSocketService.isConnected) {
+        throw new Error('Robot not connected');
+      }
+      
+      // Send fire command directly to robot
+      const wsSuccess = robotWebSocketService.sendControlCommand('fire', 0.5);
+      
+      if (wsSuccess) {
+        const fireSuccessCommand: RobotCommand = {
+          id: `${commandId}-success`,
+          timestamp: new Date().toLocaleTimeString(),
+          command: `🎯 FIRE command sent successfully!`,
+          status: 'acknowledged',
+          source: 'websocket'
+        };
+        setRobotCommands(prev => [fireSuccessCommand, ...prev].slice(0, 20));
+      } else {
+        throw new Error('Fire command failed to send');
+      }
+      
+    } catch (error) {
+      console.error('Fire command failed:', error);
+      
+      const failedFireCommand: RobotCommand = {
+        id: `${commandId}-fail`,
+        timestamp: new Date().toLocaleTimeString(),
+        command: `❌ FIRE command failed: ${error instanceof Error ? error.message : String(error)}`,
+        status: 'failed',
+        source: 'websocket'
+      };
+      
+      setRobotCommands(prev => [failedFireCommand, ...prev].slice(0, 20));
+    } finally {
+      // Re-enable controls
+      setIsControlEnabled(true);
+    }
+  };
+
   // Send directional command via smart contract first, then WebSocket
   const sendCommand = async (direction: 'up' | 'down' | 'left' | 'right' | 'stop') => {
     if (!isControlEnabled) return;
@@ -2373,18 +2434,18 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                       </button>
                       
                       <button
-                        onClick={() => sendCommand('stop')}
+                        onClick={sendFireCommand}
                         disabled={!isControlEnabled}
                         className={`
-                          w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-xs
+                          w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold text-sm
                           transition-all duration-150 relative z-20 pointer-events-auto
                           ${isControlEnabled 
-                            ? 'bg-green-600 hover:bg-green-700 active:bg-green-800 shadow-lg hover:shadow-xl' 
+                            ? 'bg-red-600 hover:bg-red-700 active:bg-red-800 shadow-lg hover:shadow-xl' 
                             : 'bg-gray-600 cursor-not-allowed opacity-50'
                           }
                         `}
                       >
-                        Create<br/>Game
+                        FIRE
                       </button>
                       
                       <button
