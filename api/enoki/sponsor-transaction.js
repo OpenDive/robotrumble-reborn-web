@@ -30,10 +30,8 @@ export default async function handler(req, res) {
     
     console.log('🎯 Sponsoring transaction via Enoki...');
     
-    // Convert base64 string back to bytes array for Enoki API
-    const transactionBytes = Uint8Array.from(atob(transactionBlockKindBytes), c => c.charCodeAt(0));
-    
     // Step 1: Sponsor the transaction
+    // Send the base64 string directly to Enoki API (it expects a string, not array)
     const sponsorResponse = await fetch('https://api.enoki.mystenlabs.com/v1/transaction-blocks/sponsor', {
       method: 'POST',
       headers: {
@@ -43,7 +41,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         network: 'testnet',
-        transactionBlockKindBytes: Array.from(transactionBytes),
+        transactionBlockKindBytes: transactionBlockKindBytes,
       }),
     });
     
