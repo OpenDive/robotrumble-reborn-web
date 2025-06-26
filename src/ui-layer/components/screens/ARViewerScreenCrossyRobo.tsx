@@ -24,7 +24,7 @@ const ROBOT_WS_URL = 'wss://hurricane-laboratories-ddc1627c10dd.herokuapp.com/ws
 const ROBOT_ROOM_ID = 'default';
 const ROBOT_WS_ENABLED = 'false';
 
-// Smart contract configuration - Phase 1: Sequential blockchain → websocket execution
+// Smart contract configuration - Phase 2: Sponsored transactions + fallback to regular transactions
 const CROSSY_ROBOT_PACKAGE_ID = "0xaa4fbd2d5507be23930ee1d1febba86ba0fdd438d8167b5629114c2bc548d76f";
 const GAME_OBJECT_ID = "0x5841f9619151780ef94d69746cde27299df321b523f185f7fe6d24867b324de7";
 
@@ -1651,7 +1651,104 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     };
   }, []);
 
-  // Execute smart contract movement
+  // Execute sponsored smart contract movement (Phase 2)
+  const executeSponsoredContractMovement = async (
+    contractDirection: number,
+    originalDirection: string
+  ): Promise<{ success: boolean; digest?: string; error?: string }> => {
+    try {
+      // Only works with Enoki wallets
+      if (!enokiAddress || !zkLoginSession) {
+        throw new Error('Sponsored transactions require Enoki wallet');
+      }
+
+      // Import Transaction for direct use
+      const { Transaction } = await import('@mysten/sui/transactions');
+      
+      // Create transaction for smart contract call
+      const transaction = new Transaction();
+      transaction.setSender(enokiAddress);
+      
+      // Call move_robot function on the smart contract
+      transaction.moveCall({
+        target: `${CROSSY_ROBOT_PACKAGE_ID}::crossy_robot::move_robot`,
+        arguments: [
+          transaction.object(GAME_OBJECT_ID), // Game object (shared object)
+          transaction.pure.u8(contractDirection), // Direction (0-3)
+          transaction.object('0x6'), // Clock object (system clock)
+        ],
+      });
+      
+      // Build transaction bytes for sponsoring
+      const transactionBlockKindBytes = await transaction.build({ 
+        client: suiClient, 
+        onlyTransactionKind: true 
+      });
+      
+      // Convert Uint8Array to base64 string for Enoki API
+      const base64TransactionBytes = btoa(String.fromCharCode(...transactionBlockKindBytes));
+      
+      // Get JWT from Enoki session
+      const jwt = zkLoginSession.jwt;
+      
+      // Step 1: Request sponsorship from backend
+      const sponsorResponse = await fetch('/api/enoki/sponsor-transaction', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transactionBlockKindBytes: base64TransactionBytes,
+          zkLoginJwt: jwt,
+        }),
+      });
+      
+      if (!sponsorResponse.ok) {
+        const errorData = await sponsorResponse.json();
+        throw new Error(errorData.error || 'Failed to sponsor transaction');
+      }
+      
+      const { transactionBlockBytes, digest } = await sponsorResponse.json();
+      
+      // Step 2: Sign the transaction bytes (convert base64 string to Uint8Array)
+      const signer = await enokiFlow.getKeypair({ network: 'testnet' });
+      const transactionBytes = new Uint8Array(atob(transactionBlockBytes).split('').map(c => c.charCodeAt(0)));
+      const signature = await signer.signTransaction(transactionBytes);
+      
+      // Step 3: Execute the sponsored transaction
+      const executeResponse = await fetch('/api/enoki/execute-sponsored-transaction', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          digest: digest,
+          signature: signature.signature,
+        }),
+      });
+      
+      if (!executeResponse.ok) {
+        const errorData = await executeResponse.json();
+        throw new Error(errorData.error || 'Failed to execute sponsored transaction');
+      }
+      
+      const result = await executeResponse.json();
+      
+      return {
+        success: true,
+        digest: result.digest || digest
+      };
+      
+    } catch (error) {
+      console.error('Sponsored transaction failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  };
+
+  // Execute smart contract movement (Phase 1 - Fallback)
   const executeContractMovement = async (
     contractDirection: number, 
     originalDirection: string
@@ -1764,7 +1861,36 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     
     try {
       // STEP 1: Execute blockchain transaction FIRST and WAIT for confirmation
-      const txResult = await executeContractMovement(contractDirection, direction);
+      // Try sponsored transaction first (Phase 2), fallback to regular transaction (Phase 1)
+      let txResult;
+      
+      if (enokiAddress && zkLoginSession) {
+        // Phase 2: Try sponsored transaction for better UX
+        console.log('🎯 Attempting sponsored transaction...');
+        txResult = await executeSponsoredContractMovement(contractDirection, direction);
+        
+        if (txResult.success) {
+          console.log('✅ Sponsored transaction successful!');
+          
+          // Update command log to show it was sponsored
+          const sponsoredCommand: RobotCommand = {
+            id: `${commandId}-sponsored`,
+          timestamp: new Date().toLocaleTimeString(),
+            command: `🎁 SPONSORED: ${direction.toUpperCase()} (gas-free!)`,
+          status: 'acknowledged',
+          source: 'blockchain'
+        };
+          setRobotCommands(prev => [sponsoredCommand, ...prev].slice(0, 20));
+        } else {
+          console.log('⚠️ Sponsored transaction failed, falling back to regular transaction...');
+          // Fallback to regular transaction
+          txResult = await executeContractMovement(contractDirection, direction);
+        }
+      } else {
+        // Phase 1: Regular transaction (traditional wallet)
+        console.log('💳 Using regular transaction (traditional wallet)...');
+        txResult = await executeContractMovement(contractDirection, direction);
+      }
       
       if (!txResult.success) {
         throw new Error(txResult.error || 'Blockchain transaction failed');
@@ -2309,9 +2435,15 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                       <div className="text-xs text-white/60">
                         Smart Contract: Move Robot
                       </div>
-                      <div className="text-xs text-white/40">
-                        Gas fee only (no payment required)
-                      </div>
+                      {enokiAddress && zkLoginSession ? (
+                        <div className="text-xs text-green-400">
+                          🎁 SPONSORED (completely free!)
+                    </div>
+                      ) : (
+                        <div className="text-xs text-white/40">
+                          Gas fee only (no payment required)
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

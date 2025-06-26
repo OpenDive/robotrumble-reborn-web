@@ -165,6 +165,108 @@ app.get('/api/token', (req, res) => {
   }
 });
 
+// Enoki sponsored transaction endpoints
+app.post('/api/enoki/sponsor-transaction', async (req, res) => {
+  try {
+    const { transactionBlockKindBytes, zkLoginJwt } = req.body;
+    
+    if (!transactionBlockKindBytes || !zkLoginJwt) {
+      return res.status(400).json({ error: 'Missing transactionBlockKindBytes or zkLoginJwt' });
+    }
+    
+    const ENOKI_PRIVATE_API_KEY = process.env.ENOKI_PRIVATE_API_KEY;
+    if (!ENOKI_PRIVATE_API_KEY) {
+      return res.status(500).json({ error: 'Enoki private API key not configured' });
+    }
+    
+    // Step 1: Sponsor the transaction
+    const sponsorResponse = await fetch('https://api.enoki.mystenlabs.com/v1/transaction-blocks/sponsor', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${ENOKI_PRIVATE_API_KEY}`,
+        'zklogin-jwt': zkLoginJwt,
+      },
+      body: JSON.stringify({
+        network: 'testnet',
+        transactionBlockKindBytes: transactionBlockKindBytes,
+      }),
+    });
+    
+    if (!sponsorResponse.ok) {
+      const errorText = await sponsorResponse.text();
+      console.error('Enoki sponsor error:', errorText);
+      return res.status(sponsorResponse.status).json({ error: 'Failed to sponsor transaction' });
+    }
+    
+    const sponsorData = await sponsorResponse.json();
+    console.log('🔍 Full Enoki sponsor response:', JSON.stringify(sponsorData, null, 2));
+    
+    // Extract data from nested structure
+    const digest = sponsorData.data?.digest || sponsorData.digest;
+    const transactionBlockBytes = sponsorData.data?.bytes || sponsorData.transactionBlockBytes;
+    
+    console.log('✅ Transaction sponsored, digest:', digest);
+    console.log('✅ Transaction bytes length:', transactionBlockBytes?.length);
+    
+    if (!digest || !transactionBlockBytes) {
+      console.error('❌ Missing required fields in Enoki response');
+      return res.status(500).json({ error: 'Invalid response from Enoki API' });
+    }
+    
+    res.json({
+      transactionBlockBytes: transactionBlockBytes,
+      digest: digest
+    });
+    
+  } catch (error) {
+    console.error('Error sponsoring transaction:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/enoki/execute-sponsored-transaction', async (req, res) => {
+  try {
+    const { digest, signature } = req.body;
+    
+    if (!digest || !signature) {
+      return res.status(400).json({ error: 'Missing digest or signature' });
+    }
+    
+    const ENOKI_PRIVATE_API_KEY = process.env.ENOKI_PRIVATE_API_KEY;
+    if (!ENOKI_PRIVATE_API_KEY) {
+      return res.status(500).json({ error: 'Enoki private API key not configured' });
+    }
+    
+    // Step 2: Execute the sponsored transaction
+    const executeResponse = await fetch(`https://api.enoki.mystenlabs.com/v1/transaction-blocks/sponsor/${digest}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${ENOKI_PRIVATE_API_KEY}`,
+      },
+      body: JSON.stringify({
+        signature: signature,
+      }),
+    });
+    
+    if (!executeResponse.ok) {
+      const errorText = await executeResponse.text();
+      console.error('Enoki execute error:', errorText);
+      return res.status(executeResponse.status).json({ error: 'Failed to execute sponsored transaction' });
+    }
+    
+    const executeData = await executeResponse.json();
+    console.log('✅ Sponsored transaction executed:', executeData.digest);
+    
+    res.json(executeData);
+    
+  } catch (error) {
+    console.error('Error executing sponsored transaction:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Development token server is running' });
 });
