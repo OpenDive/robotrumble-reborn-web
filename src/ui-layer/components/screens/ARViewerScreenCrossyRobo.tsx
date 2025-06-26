@@ -1692,6 +1692,12 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       const jwt = zkLoginSession.jwt;
       
       // Step 1: Request sponsorship from backend
+      console.log('🔍 Sending to API:', { 
+        transactionBlockKindBytes: base64TransactionBytes.substring(0, 50) + '...', 
+        zkLoginJwt: jwt ? 'present' : 'missing',
+        jwtLength: jwt?.length 
+      });
+      
       const sponsorResponse = await fetch('/api/enoki/sponsor-transaction', {
         method: 'POST',
         headers: {
@@ -1704,7 +1710,16 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       });
       
       if (!sponsorResponse.ok) {
-        const errorData = await sponsorResponse.json();
+        const errorText = await sponsorResponse.text();
+        console.log('❌ API Error Response:', sponsorResponse.status, errorText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText };
+        }
+        
         throw new Error(errorData.error || 'Failed to sponsor transaction');
       }
       
