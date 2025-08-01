@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
 import AgoraRTC, { IAgoraRTCClient, IRemoteVideoTrack, IRemoteAudioTrack } from 'agora-rtc-sdk-ng';
 import { Button } from '../shared/Button';
 import { LoadingModal } from '../shared/LoadingModal';
@@ -7,16 +6,11 @@ import { ErrorModal } from '../shared/ErrorModal';
 import { JoinGameView } from '../shared/JoinGameView';
 import { RaceSession } from '../../../shared/types/race';
 import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
-import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
-import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
 import { suiCrossyRobotService, GameState as SuiGameState } from '../../../shared/services/suiCrossyRobotService';
 import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction, useSuiClient } from '@mysten/dapp-kit';
 import { useEnokiFlow, useZkLogin, useZkLoginSession } from '@mysten/enoki/react';
 import { useAuth } from '../../../shared/contexts/AuthContext';
-
-import { AREffectsRenderer } from '../../../engine-layer/core/ar/AREffectsRenderer';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { robotWebSocketService, RobotFeedback, RobotCommand } from '../../services/RobotWebSocketService';
 
 // Environment configuration for robot WebSocket
@@ -65,495 +59,17 @@ interface Robot {
   battery: number;
 }
 
-interface ThreeJSKey {
-  markerId: number;
-  mesh: THREE.Object3D;
-  lastSeen: number;
-}
 
-interface ARViewerScreenCrossyRoboState {
-  isInitialized: boolean;
-  isLoading: boolean;
-  error: string | null;
-  keyScale: number;
-}
 
-class ThreeViewerEngine {
-  private hostVideoElement: HTMLVideoElement;
-  private logMessage: (message: string) => void;
-  private options: { keyScale: number };
-  private canvas: HTMLCanvasElement;
-  private renderer: THREE.WebGLRenderer | null = null;
-  private scene: THREE.Scene | null = null;
-  private camera: THREE.PerspectiveCamera | null = null;
-  private animationFrameId: number | null = null;
-  private assetsLoaded = false;
-  private keyModelTemplate: THREE.Object3D | null = null;
-  private keys: ThreeJSKey[] = [];
-  private resizeHandler: () => void;
 
-  constructor(hostVideoElement: HTMLVideoElement, logMessage: (message: string) => void, options: { keyScale: number } = { keyScale: 7.0 }) {
-    this.hostVideoElement = hostVideoElement;
-    this.logMessage = logMessage;
-    this.options = options;
-
-    // Setup canvas
-    this.canvas = document.createElement('canvas');
-    this.canvas.id = `ar-viewer-canvas-${hostVideoElement.id}`;
-    this.canvas.style.position = 'absolute';
-    this.canvas.style.top = '0';
-    this.canvas.style.left = '0';
-    this.canvas.style.width = '100%';
-    this.canvas.style.height = '100%';
-    this.canvas.style.pointerEvents = 'none';
-    this.canvas.style.zIndex = '10';
-    this.canvas.style.backgroundColor = 'transparent';
-    this.canvas.style.mixBlendMode = 'normal';
-
-    // Find container and add canvas
-    let container = hostVideoElement.parentElement;
-    if (container) {
-      if (getComputedStyle(container).position === 'static') {
-        container.style.position = 'relative';
-      }
-      container.appendChild(this.canvas);
-      this.logMessage('Added AR canvas to host video container');
-    } else {
-      document.body.appendChild(this.canvas);
-      this.logMessage('Warning: Could not find proper container, added AR canvas to document body');
-    }
-
-    // Initialize ThreeJS
-    this.initThreeJS();
-
-    // Handle window resize
-    this.resizeHandler = this.onResize.bind(this);
-    window.addEventListener('resize', this.resizeHandler);
-
-    this.logMessage('ThreeJS AR Viewer Engine initialized');
-  }
-
-  private initThreeJS(): void {
-    // Create renderer with transparency
-    this.renderer = new THREE.WebGLRenderer({
-      canvas: this.canvas,
-      alpha: true,
-      premultipliedAlpha: false,
-      antialias: true
-    });
-    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-    this.renderer.setClearColor(0x000000, 0); // Transparent background
-
-    // Create scene
-    this.scene = new THREE.Scene();
-
-    // Create camera
-    this.camera = new THREE.PerspectiveCamera(
-      75, // Field of view
-      this.canvas.clientWidth / this.canvas.clientHeight, // Aspect ratio
-      0.1, // Near clipping plane
-      1000 // Far clipping plane
-    );
-    this.camera.position.z = 5;
-
-    // Add lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    this.scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(0, 1, 1);
-    this.scene.add(directionalLight);
-
-    // Start animation loop
-    this.startRenderLoop();
-  }
-
-  private startRenderLoop(): void {
-    const animate = () => {
-      this.animationFrameId = requestAnimationFrame(animate);
-
-      // Render the scene
-      if (this.renderer && this.scene && this.camera) {
-        this.renderer.render(this.scene, this.camera);
-      }
-    };
-
-    animate();
-  }
-
-  private onResize(): void {
-    if (this.canvas && this.renderer && this.camera) {
-      // Get the current size of the container
-      const width = this.canvas.clientWidth;
-      const height = this.canvas.clientHeight;
-
-      // Update camera aspect ratio
-      this.camera.aspect = width / height;
-      this.camera.updateProjectionMatrix();
-
-      // Update renderer size
-      this.renderer.setSize(width, height, false);
-    }
-  }
-
-  async loadAssets(): Promise<boolean> {
-    try {
-      this.logMessage('Loading 3D key model for ThreeJS viewer...');
-
-      // Try to load the actual key.glb model first
-      const gltfLoader = new GLTFLoader();
-      
-      try {
-        this.logMessage('Attempting to load key.glb model...');
-        const gltf = await new Promise<any>((resolve, reject) => {
-          gltfLoader.load(
-            '/key.glb', // Path to the GLTF file in the public directory
-            (gltf) => resolve(gltf),
-            (progress) => {
-              this.logMessage(`Loading key.glb: ${Math.round((progress.loaded / progress.total) * 100)}%`);
-            },
-            (error) => reject(error)
-          );
-        });
-
-        // Successfully loaded GLTF model
-        this.keyModelTemplate = gltf.scene.clone();
-        if (this.keyModelTemplate) {
-          this.keyModelTemplate.visible = false;
-          // Scale the model appropriately
-          this.keyModelTemplate.scale.set(0.5, 0.5, 0.5);
-        }
-
-        this.logMessage('Successfully loaded key.glb model');
-      } catch (gltfError) {
-        this.logMessage(`Failed to load key.glb: ${gltfError}. Using fallback key.`);
-        
-        // Create a fallback golden key if GLTF loading fails
-        const createFallbackKey = (): THREE.Group => {
-          this.logMessage('Creating fallback key model for viewer');
-          const keyGroup = new THREE.Group();
-
-          // Create gold material
-          const goldMaterial = new THREE.MeshStandardMaterial({
-            color: 0xffd700,
-            metalness: 0.8,
-            roughness: 0.2,
-            emissive: 0x664800,
-            emissiveIntensity: 0.2
-          });
-
-          // Create a simple key-like shape
-          const shaftGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.0, 16);
-          const shaft = new THREE.Mesh(shaftGeometry, goldMaterial);
-          shaft.position.y = -0.5;
-          keyGroup.add(shaft);
-
-          const headGeometry = new THREE.BoxGeometry(0.6, 0.4, 0.2);
-          const head = new THREE.Mesh(headGeometry, goldMaterial);
-          head.position.y = 0.2;
-          keyGroup.add(head);
-
-          const teeth1Geometry = new THREE.BoxGeometry(0.15, 0.25, 0.2);
-          const teeth1 = new THREE.Mesh(teeth1Geometry, goldMaterial);
-          teeth1.position.set(-0.2, -1.0, 0);
-          keyGroup.add(teeth1);
-
-          const teeth2Geometry = new THREE.BoxGeometry(0.15, 0.35, 0.2);
-          const teeth2 = new THREE.Mesh(teeth2Geometry, goldMaterial);
-          teeth2.position.set(0, -1.0, 0);
-          keyGroup.add(teeth2);
-
-          // Scale the key appropriately
-          keyGroup.scale.set(0.5, 0.5, 0.5);
-
-          this.logMessage('Fallback key created with bright gold material');
-          return keyGroup;
-        };
-
-        // Use fallback key
-        this.keyModelTemplate = createFallbackKey();
-        if (this.keyModelTemplate) {
-          this.keyModelTemplate.visible = false;
-        }
-      }
-
-      // Add to scene but keep hidden
-      if (this.scene && this.keyModelTemplate) {
-        this.scene.add(this.keyModelTemplate);
-      }
-
-      this.assetsLoaded = true;
-      this.logMessage('ThreeJS assets loaded successfully for viewer');
-
-      return true;
-    } catch (error) {
-      this.logMessage(`Error loading ThreeJS assets for viewer: ${error}`);
-      return false;
-    }
-  }
-
-  async addKey(markerId: number): Promise<ThreeJSKey> {
-    // Make sure assets are loaded
-    if (!this.assetsLoaded) {
-      await this.loadAssets();
-    }
-
-    // Clone the key model template
-    if (!this.keyModelTemplate || !this.scene) {
-      throw new Error('Key template or scene not available');
-    }
-
-    const keyInstance = this.keyModelTemplate.clone();
-    keyInstance.visible = false; // Initially hidden
-    keyInstance.name = `viewer-key-${markerId}`;
-
-    // Add to the scene
-    this.scene.add(keyInstance);
-
-    // Store key data
-    const key: ThreeJSKey = {
-      markerId,
-      mesh: keyInstance,
-      lastSeen: Date.now()
-    };
-
-    this.keys.push(key);
-    this.logMessage(`Created ThreeJS key for marker ${markerId}`);
-    return key;
-  }
-
-  private calculateDistanceScale(marker: DetectedMarker): number {
-    // Calculate apparent size of marker
-    if (!marker.corners || marker.corners.length < 4) return 1.0;
-
-    const corners = marker.corners;
-    const width = Math.abs(corners[1].x - corners[0].x);
-    const height = Math.abs(corners[3].y - corners[0].y);
-    const apparentSize = Math.sqrt(width * width + height * height);
-
-    // Base expected size (you may need to adjust this based on your setup)
-    const baseSize = 100;
-    const sizeRatio = apparentSize / baseSize;
-
-    // Apply logarithmic scaling for more natural distance perception
-    return Math.max(0.1, Math.min(2.0, Math.log(sizeRatio + 1) + 0.5));
-  }
-
-  private calculateMarkerConstraints(marker: DetectedMarker): { scale: number; distanceScale: number; bounds?: any } {
-    if (!marker.corners || marker.corners.length < 4) {
-      return { scale: 1, distanceScale: 1 };
-    }
-
-    // Calculate marker dimensions in 2D space
-    const corners = marker.corners;
-    const xs = corners.map(c => c.x);
-    const ys = corners.map(c => c.y);
-    
-    const bounds = {
-      minX: Math.min(...xs),
-      maxX: Math.max(...xs),
-      minY: Math.min(...ys),
-      maxY: Math.max(...ys),
-      width: Math.max(...xs) - Math.min(...xs),
-      height: Math.max(...ys) - Math.min(...ys)
-    };
-
-    // Use marker size to determine appropriate scale
-    const markerSize = Math.min(bounds.width, bounds.height);
-
-    // Scale factor to keep key within marker bounds (with some padding)
-    const maxKeySize = markerSize * 0.12; // 12% of marker size  
-    const keyScale = maxKeySize / 90; // Divide by 90 to get the right scale
-
-    // Calculate distance-based scale
-    const distanceScale = this.calculateDistanceScale(marker);
-
-    return {
-      scale: Math.max(keyScale, 0.1), // Minimum scale to ensure visibility
-      distanceScale: distanceScale,
-      bounds: bounds
-    };
-  }
-
-  private markerTo3DPosition(marker: DetectedMarker, depth: number = -1.0): THREE.Vector3 {
-    if (!marker.center) {
-      return new THREE.Vector3(0, 0, depth);
-    }
-
-    // Convert from screen coordinates to normalized device coordinates
-    const videoWidth = this.hostVideoElement.videoWidth || 640;
-    const videoHeight = this.hostVideoElement.videoHeight || 480;
-
-    // Normalize coordinates to [-1, 1] range
-    const normalizedX = (marker.center.x / videoWidth) * 2 - 1;
-    const normalizedY = -((marker.center.y / videoHeight) * 2 - 1); // Flip Y axis
-
-    // Convert to world coordinates based on camera position and field of view
-    const aspectRatio = videoWidth / videoHeight;
-    if (!this.camera) {
-      return new THREE.Vector3(0, 0, depth);
-    }
-    const fov = this.camera.fov * Math.PI / 180; // Convert to radians
-    const distance = Math.abs(depth);
-
-    const worldY = Math.tan(fov / 2) * distance * normalizedY;
-    const worldX = worldY * aspectRatio * normalizedX;
-
-    return new THREE.Vector3(worldX, worldY, depth);
-  }
-
-  updateWithMarkers(markers: DetectedMarker[]): void {
-    if (!this.assetsLoaded) return;
-
-    const now = Date.now();
-
-    if (markers && markers.length > 0) {
-      // Filter out marker ID 0 and only process specific marker IDs (64, 1, 2, 3)
-      const validMarkers = markers.filter(marker => 
-        marker.id !== 0 && (marker.id === 64 || marker.id === 1 || marker.id === 2 || marker.id === 3)
-      );
-
-      // Process each valid marker
-      validMarkers.forEach(marker => {
-        // Find corresponding key for this marker
-        let key = this.keys.find(k => k.markerId === marker.id);
-
-        // If no key exists for this marker ID, create one
-        if (!key) {
-          this.addKey(marker.id).then(newKey => {
-            key = newKey;
-          });
-          return;
-        }
-
-        // Show key
-        key.mesh.visible = true;
-
-        try {
-          // Calculate constraints based on marker corners
-          const constraints = this.calculateMarkerConstraints(marker);
-
-          // Position the key based on marker center and constraints
-          let position: THREE.Vector3;
-
-          if (marker.poseMatrix) {
-            // Use pose matrix if available for accurate 3D positioning
-            const matrix = new THREE.Matrix4().fromArray(marker.poseMatrix.elements);
-            const pos = new THREE.Vector3();
-            const quaternion = new THREE.Quaternion();
-            const scale = new THREE.Vector3();
-            matrix.decompose(pos, quaternion, scale);
-
-            // Apply constraints to keep key within marker bounds
-            pos.multiplyScalar(0.01); // Bring it closer
-            pos.z = Math.max(pos.z, -2.0); // Don't go too far back
-            pos.z = Math.min(pos.z, -0.5); // Don't come too close
-
-            position = pos;
-            key.mesh.quaternion.copy(quaternion);
-          } else {
-            // Fallback to 2D-to-3D conversion using marker center
-            position = this.markerTo3DPosition(marker, -1.0);
-          }
-
-          // Apply position
-          key.mesh.position.copy(position);
-
-          // Apply constrained scale based on marker size AND distance
-          const baseScale = constraints.scale * this.options.keyScale;
-          const finalScale = baseScale * constraints.distanceScale; // Apply distance scaling
-          key.mesh.scale.set(finalScale, finalScale, finalScale);
-
-          // Optional: Add slight rotation for visual effect, but keep it subtle
-          key.mesh.rotation.y += 0.005; // Slower rotation to avoid distraction
-
-          // Log positioning info for debugging
-          this.logMessage(`ThreeJS Key ${marker.id} positioned at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) with scale ${finalScale.toFixed(2)} (base: ${baseScale.toFixed(2)}, distance: ${constraints.distanceScale.toFixed(2)})`);
-
-        } catch (err) {
-          this.logMessage(`Error positioning ThreeJS key: ${err}`);
-        }
-
-        key.lastSeen = now;
-      });
-
-      // Hide keys for markers that are no longer visible
-      this.keys.forEach(key => {
-        const markerVisible = validMarkers.some(m => m.id === key.markerId);
-        const timeSinceLastSeen = now - key.lastSeen;
-
-        if (!markerVisible || timeSinceLastSeen > 500) {
-          key.mesh.visible = false;
-        }
-      });
-    } else {
-      // No markers detected - hide all keys
-      this.keys.forEach(key => {
-        key.mesh.visible = false;
-      });
-    }
-  }
-
-  dispose(): void {
-    // Stop animation frame
-    if (this.animationFrameId) {
-      cancelAnimationFrame(this.animationFrameId);
-    }
-
-    // Dispose of ThreeJS resources
-    if (this.scene) {
-      // Remove and dispose all objects from the scene
-      while(this.scene.children.length > 0) { 
-        const object = this.scene.children[0];
-        this.scene.remove(object);
-
-        // Dispose geometries and materials
-        if ((object as any).geometry) (object as any).geometry.dispose();
-        if ((object as any).material) {
-          if (Array.isArray((object as any).material)) {
-            (object as any).material.forEach((material: any) => material.dispose());
-          } else {
-            (object as any).material.dispose();
-          }
-        }
-      }
-    }
-
-    // Dispose renderer
-    if (this.renderer) {
-      this.renderer.dispose();
-    }
-
-    // Remove canvas
-    if (this.canvas && this.canvas.parentNode) {
-      this.canvas.parentNode.removeChild(this.canvas);
-    }
-
-    // Remove resize listener
-    window.removeEventListener('resize', this.resizeHandler);
-
-    this.logMessage('ThreeJS AR Viewer Engine disposed');
-  }
-
-  updateKeyScale(newScale: number): void {
-    this.options.keyScale = newScale;
-    this.logMessage(`Updated key scale to: ${newScale}`);
-  }
-}
 
 export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> = ({ session, onBack }) => {
   const mainViewRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   
   // Agora refs
   const rtcClientRef = useRef<IAgoraRTCClient | null>(null);
-  
-  // Full AR System refs
-  const arDetectorRef = useRef<EnhancedARDetector | null>(null);
-  const renderSystemRef = useRef<GameRenderSystem | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
   
   // Connection state - unified for both video and robot
   const [gameState, setGameState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
@@ -579,10 +95,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   const [isMicEnabled, setIsMicEnabled] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   
-  // AR state
-  const [arInitialized, setArInitialized] = useState(false);
-  const [detectedMarkers, setDetectedMarkers] = useState<DetectedMarker[]>([]);
-  const [arEffectsEnabled, setArEffectsEnabled] = useState(true);
+
 
   // Delivery control state (read-only for viewers)
   const [startPoint, setStartPoint] = useState<DeliveryPoint | null>(null);
@@ -624,20 +137,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   // Authentication
   const { user } = useAuth();
 
-  // AR effects toggle handler
-  const toggleAREffects = () => {
-    const newEnabled = !arEffectsEnabled;
-    setArEffectsEnabled(newEnabled);
-    
-    if (renderSystemRef.current) {
-      renderSystemRef.current.setAREffectsEnabled(newEnabled);
-      
-      // If enabling AR effects, update with current markers
-      if (newEnabled && detectedMarkers.length > 0) {
-        renderSystemRef.current.updateAREffects(detectedMarkers);
-      }
-    }
-  };
+
 
   // Toggle camera for viewer chat
   const toggleCamera = async () => {
@@ -736,296 +236,22 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     }
   };
 
-  // Add ThreeJS viewer imports
-  const threeViewerEngineRef = useRef<ThreeViewerEngine | null>(null);
-  const [arOverlayReady, setArOverlayReady] = useState(false);
-
-  // AR effects renderer
-  const arEffectsRendererRef = useRef<AREffectsRenderer | null>(null);
 
 
 
-  // Helper function to get the host video element
-  const getHostVideoElement = (): HTMLVideoElement | null => {
-    // Find all video elements and return the one with valid dimensions
-    const allVideos = document.querySelectorAll('video') as NodeListOf<HTMLVideoElement>;
-    
-    // Filter for videos with valid dimensions that are playing
-    const validVideos = Array.from(allVideos).filter(video => 
-      video && 
-      video.videoWidth > 0 && 
-      video.videoHeight > 0 &&
-      !video.paused &&
-      video.currentTime > 0
-    );
-    
-    if (validVideos.length > 0) {
-      // Return the video with the largest dimensions (likely the main host video)
-      const bestVideo = validVideos.reduce((best, current) => {
-        const bestSize = best.videoWidth * best.videoHeight;
-        const currentSize = current.videoWidth * current.videoHeight;
-        return currentSize > bestSize ? current : best;
-      });
-      
-      logMessage(`[AR Crossy Robo Viewer] Found valid host video: id="${bestVideo.id}", dimensions=${bestVideo.videoWidth}x${bestVideo.videoHeight}`);
-      return bestVideo;
-    }
-    
-    // Fallback: find any video with dimensions, even if paused
-    const videosWithDimensions = Array.from(allVideos).filter(video => 
-      video && video.videoWidth > 0 && video.videoHeight > 0
-    );
-    
-    if (videosWithDimensions.length > 0) {
-      const fallbackVideo = videosWithDimensions[0];
-      logMessage(`[AR Crossy Robo Viewer] Using fallback video: id="${fallbackVideo.id}", dimensions=${fallbackVideo.videoWidth}x${fallbackVideo.videoHeight}`);
-      return fallbackVideo;
-    }
-    
-    // Debug logging
-    logMessage(`[AR Crossy Robo Viewer] No valid video found. Found ${allVideos.length} total videos:`);
-    allVideos.forEach((v, i) => {
-      logMessage(`[AR Crossy Robo Viewer] Video ${i}: id="${v.id}", dimensions=${v.videoWidth}x${v.videoHeight}, playing=${!v.paused}`);
-    });
-    
-    return null;
-  };
+
+
 
   // Helper function for logging messages
   const logMessage = (message: string) => {
     console.log(message);
   };
 
-  const initializeAROverlay = async () => {
-    const video = getHostVideoElement();
-    if (!video) {
-      logMessage('[AR Crossy Robo Viewer] No host video element found');
-      // Debug: Log all available video elements
-      const allVideos = document.querySelectorAll('video');
-      logMessage(`[AR Crossy Robo Viewer] Found ${allVideos.length} video elements in DOM`);
-      allVideos.forEach((v, i) => {
-        logMessage(`[AR Crossy Robo Viewer] Video ${i}: id="${v.id}", data-uid="${v.getAttribute('data-uid')}", dimensions=${v.videoWidth}x${v.videoHeight}`);
-      });
-      return;
-    }
 
-    logMessage(`[AR Crossy Robo Viewer] Found host video element: id="${video.id}", dimensions=${video.videoWidth}x${video.videoHeight}`);
 
-    // Wait for video to be ready if dimensions aren't available yet
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      logMessage('[AR Crossy Robo Viewer] Video dimensions not ready yet, waiting...');
-      setTimeout(() => initializeAROverlay(), 500);
-      return;
-    }
 
-    try {
-      // Initialize original AR detector for marker detection only
-      if (!arDetectorRef.current) {
-        arDetectorRef.current = new EnhancedARDetector((msg: string) => logMessage(`[AR Crossy Robo Viewer] ${msg}`));
-        await arDetectorRef.current.initialize();
-        logMessage('[AR Crossy Robo Viewer] AR Detector initialized');
-      }
 
-      // Initialize ThreeJS viewer engine for 3D key rendering
-      if (!threeViewerEngineRef.current) {
-        threeViewerEngineRef.current = new ThreeViewerEngine(
-          video,
-          (msg: string) => logMessage(`[AR Crossy Robo Viewer] ${msg}`),
-          { keyScale: 5.0 } // Fixed default value
-        );
-        
-        // Wait for assets to load before proceeding
-        const assetsLoaded = await threeViewerEngineRef.current.loadAssets();
-        if (!assetsLoaded) {
-          logMessage('[AR Crossy Robo Viewer] Failed to load ThreeJS assets');
-          return;
-        }
-        
-        // Pre-create keys for common marker IDs (matching reference implementation)
-        await threeViewerEngineRef.current.addKey(1);
-        await threeViewerEngineRef.current.addKey(2);
-        await threeViewerEngineRef.current.addKey(3);
-        
-        logMessage('[AR Crossy Robo Viewer] ThreeJS Viewer Engine initialized with pre-created keys');
-      }
 
-      // Initialize other AR systems (effects, etc.)
-      if (!arEffectsRendererRef.current) {
-        arEffectsRendererRef.current = new AREffectsRenderer({ particleCount: 100 });
-        if (renderSystemRef.current?.getScene()) {
-          arEffectsRendererRef.current.initialize(renderSystemRef.current.getScene()!);
-        }
-        logMessage('[AR Crossy Robo Viewer] AR Effects Renderer initialized');
-      }
-
-      if (!renderSystemRef.current) {
-        renderSystemRef.current = new GameRenderSystem();
-        // Initialize with a canvas if needed
-        if (canvasRef.current) {
-          renderSystemRef.current.initialize(canvasRef.current);
-        }
-        logMessage('[AR Crossy Robo Viewer] Game Render System initialized');
-      }
-
-      setArOverlayReady(true);
-      logMessage('[AR Crossy Robo Viewer] AR overlay initialized successfully');
-      
-      // Start AR rendering loop
-      setArInitialized(true);
-      startARRenderingLoop();
-      logMessage('[AR Crossy Robo Viewer] AR rendering loop started');
-    } catch (error) {
-      logMessage(`[AR Crossy Robo Viewer] Failed to initialize AR overlay: ${error}`);
-    }
-  };
-
-  // Start AR rendering loop
-  const startARRenderingLoop = () => {
-    let frameCount = 0;
-    let lastLogTime = 0;
-
-    const renderLoop = () => {
-      frameCount++;
-      
-      const video = getHostVideoElement();
-      if (!video || !arDetectorRef.current || !threeViewerEngineRef.current) {
-        animationFrameRef.current = requestAnimationFrame(renderLoop);
-        return;
-      }
-
-      try {
-        // Check video readiness
-        if (video.videoWidth === 0 || video.videoHeight === 0 || video.paused || video.ended) {
-          animationFrameRef.current = requestAnimationFrame(renderLoop);
-          return;
-        }
-
-        // Log progress every 5 seconds to show the loop is running
-        const now = Date.now();
-        if (now - lastLogTime > 5000) {
-          logMessage(`[AR Crossy Robo Viewer] AR detection loop running - Frame ${frameCount}, Video: ${video.videoWidth}x${video.videoHeight}, ID: ${video.id}`);
-          lastLogTime = now;
-        }
-
-        // Check video readiness periodically
-        if (frameCount % 60 === 0) {
-          logMessage(`[AR Crossy Robo Viewer] AR Render Loop Frame ${frameCount} - Video ready: ${video.videoWidth}x${video.videoHeight}, Current time: ${video.currentTime}, Paused: ${video.paused}`);
-        }
-
-        // Detect markers in the host video stream
-        const detectedMarkers = arDetectorRef.current.detectMarkers(video);
-
-        // Transform detected markers to the format expected by ThreeJS engine
-        let formattedMarkers: DetectedMarker[] = [];
-        
-        // Debug: Log the raw detection results occasionally
-        if (frameCount % 120 === 0) { // Every 2 seconds
-          logMessage(`[AR Crossy Robo Viewer] Raw marker detection: ${detectedMarkers ? detectedMarkers.length : 'null'} markers found`);
-          if (detectedMarkers && detectedMarkers.length > 0) {
-            detectedMarkers.forEach((marker, idx) => {
-              logMessage(`[AR Crossy Robo Viewer] Raw marker ${idx}: id=${marker.id}, corners=${marker.corners?.length}, center=${marker.center ? `(${marker.center.x.toFixed(1)}, ${marker.center.y.toFixed(1)})` : 'none'}`);
-            });
-          }
-        }
-        
-        if (detectedMarkers && detectedMarkers.length > 0) {
-          formattedMarkers = detectedMarkers.map(marker => {
-            // Ensure marker has the required properties for ThreeJS engine
-            const formattedMarker: DetectedMarker = {
-              id: marker.id || 1, // Fallback to ID 1 if not provided
-              corners: marker.corners || [],
-              center: marker.center || {
-                x: marker.corners && marker.corners.length > 0 ? 
-                   marker.corners.reduce((sum, corner) => sum + corner.x, 0) / marker.corners.length : 
-                   video.videoWidth / 2,
-                y: marker.corners && marker.corners.length > 0 ? 
-                   marker.corners.reduce((sum, corner) => sum + corner.y, 0) / marker.corners.length : 
-                   video.videoHeight / 2
-              },
-              pose: marker.pose,
-              poseMatrix: marker.poseMatrix
-            };
-
-            // Log the formatted marker data
-            if (frameCount % 30 === 0) { // Log every 30 frames to avoid spam
-              logMessage(`[AR Crossy Robo Viewer] Formatted marker ${formattedMarker.id}: center=(${formattedMarker.center.x.toFixed(1)}, ${formattedMarker.center.y.toFixed(1)}), corners=${formattedMarker.corners.length}, pose=${formattedMarker.poseMatrix ? 'YES' : 'NO'}`);
-            }
-
-            return formattedMarker;
-          });
-
-          logMessage(`[AR Crossy Robo Viewer] Detected ${formattedMarkers.length} markers on host stream`);
-        } else {
-          // No markers detected - do nothing
-          if (frameCount % 300 === 0) { // Every 5 seconds
-            logMessage(`[AR Crossy Robo Viewer] No markers detected`);
-          }
-        }
-        
-        // Update ThreeJS viewer with formatted markers for 3D key rendering
-        threeViewerEngineRef.current.updateWithMarkers(formattedMarkers);
-
-        // Also update AR effects (particles, etc.)
-        if (renderSystemRef.current && arEffectsRendererRef.current && formattedMarkers.length > 0) {
-          renderSystemRef.current.updateAREffects(formattedMarkers);
-        }
-
-        setDetectedMarkers(formattedMarkers);
-      } catch (error) {
-        if (frameCount % 60 === 0) { // Only log errors occasionally to avoid spam
-          logMessage(`[AR Crossy Robo Viewer] Error in render loop: ${error}`);
-        }
-      }
-
-      animationFrameRef.current = requestAnimationFrame(renderLoop);
-    };
-
-    logMessage('[AR Crossy Robo Viewer] Starting AR detection render loop');
-    animationFrameRef.current = requestAnimationFrame(renderLoop);
-  };
-
-  const cleanupAROverlay = () => {
-    try {
-      // Stop animation loop
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-
-      // Cleanup ThreeJS viewer engine
-      if (threeViewerEngineRef.current) {
-        threeViewerEngineRef.current.dispose();
-        threeViewerEngineRef.current = null;
-        logMessage('[AR Crossy Robo Viewer] ThreeJS Viewer Engine disposed');
-      }
-
-      // Cleanup other AR systems
-      if (arDetectorRef.current) {
-        arDetectorRef.current.dispose();
-        arDetectorRef.current = null;
-        logMessage('[AR Crossy Robo Viewer] AR Detector disposed');
-      }
-
-      if (arEffectsRendererRef.current) {
-        arEffectsRendererRef.current.dispose();
-        arEffectsRendererRef.current = null;
-        logMessage('[AR Crossy Robo Viewer] AR Effects Renderer disposed');
-      }
-
-      if (renderSystemRef.current) {
-        renderSystemRef.current.dispose();
-        renderSystemRef.current = null;
-        logMessage('[AR Crossy Robo Viewer] Game Render System disposed');
-      }
-
-      setArOverlayReady(false);
-      setArInitialized(false);
-      setDetectedMarkers([]);
-      logMessage('[AR Crossy Robo Viewer] AR overlay cleanup completed');
-    } catch (error) {
-      logMessage(`[AR Crossy Robo Viewer] Error during AR overlay cleanup: ${error}`);
-    }
-  };
 
   // Connect to Robot WebSocket
   const connectToRobot = async (): Promise<void> => {
@@ -1280,48 +506,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                       }
                     }, 500);
                     
-                    // Initialize AR overlay for host stream
-                    setTimeout(() => {
-                      const initializeARWhenReady = () => {
-                        if (hostVideo.videoWidth > 0 && hostVideo.videoHeight > 0) {
-                          console.log(`📐 Host video dimensions ready: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
-                          // Use the same logic as Force AR button for reliable initialization
-                          setTimeout(() => {
-                            initializeAROverlay();
-                          }, 1000); // Give video a moment to be fully ready
-                        } else {
-                          console.log(`📐 Host video dimensions not ready yet: ${hostVideo.videoWidth}x${hostVideo.videoHeight}`);
-                          setTimeout(initializeARWhenReady, 500);
-                        }
-                      };
-                      
-                      hostVideo.addEventListener('loadeddata', () => {
-                        console.log('📹 Host video loadeddata event fired');
-                        setTimeout(initializeARWhenReady, 200);
-                      });
-                      
-                      hostVideo.addEventListener('playing', () => {
-                        console.log('📹 Host video playing event fired');
-                        setTimeout(initializeARWhenReady, 200);
-                      });
 
-                      // Also try to initialize periodically while video is loading
-                      const checkInterval = setInterval(() => {
-                        if (hostVideo.videoWidth > 0 && hostVideo.videoHeight > 0 && !hostVideo.paused) {
-                          console.log('📹 Host video ready via interval check');
-                          clearInterval(checkInterval);
-                          setTimeout(() => {
-                            initializeAROverlay();
-                          }, 1000);
-                        }
-                      }, 1000);
-
-                      // Stop checking after 30 seconds
-                      setTimeout(() => clearInterval(checkInterval), 30000);
-                      
-                      // Start checking immediately
-                      setTimeout(initializeARWhenReady, 2000);
-                    }, 100);
                   } else if (retryCount < maxRetries) {
                     console.log(`⏳ mainViewRef.current is null, retrying in 100ms (attempt ${retryCount + 1}/${maxRetries})`);
                     setTimeout(() => attemptVideoContainerCreation(retryCount + 1), 100);
@@ -1385,7 +570,6 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
             if (mainContainer) {
               mainContainer.remove();
             }
-            cleanupAROverlay();
             setHostUser(null);
             console.log(`👑❌ Crossy Robo host ${user.uid} stopped streaming`);
           } else {
@@ -1441,7 +625,6 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
           if (mainContainer) {
             mainContainer.remove();
           }
-          cleanupAROverlay();
           setHostUser(null);
           console.log(`👑🚪 Crossy Robo host ${user.uid} left`);
         }
@@ -1553,8 +736,6 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   // Disconnect from Agora stream
   const disconnectFromStream = async () => {
     try {
-      // Clean up AR overlay first
-      cleanupAROverlay();
       
       // Clean up local media tracks
       if (localVideoTrack) {
@@ -1619,42 +800,11 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     return () => clearInterval(debugInterval);
   }, [isAgoraConnected, localUid, remoteUsers, hostUser, viewerUsers]);
 
-  // Handle window resize
-  useEffect(() => {
-    // Set up resize observer for canvas sizing (like ARStreamScreen.tsx)
-    let resizeObserver: ResizeObserver | null = null;
-    
-    if (canvasRef.current) {
-      resizeObserver = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          const { width, height } = entry.contentRect;
-          if (canvasRef.current) {
-            canvasRef.current.width = width;
-            canvasRef.current.height = height;
-            console.log(`AR Canvas resized to: ${width}x${height}`);
-            
-            // Update render system if it exists
-            if (renderSystemRef.current) {
-              renderSystemRef.current.resize();
-            }
-          }
-        }
-      });
-      
-      resizeObserver.observe(canvasRef.current.parentElement || canvasRef.current);
-    }
 
-    return () => {
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-    };
-  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      cleanupAROverlay();
       disconnectFromStream();
     };
   }, []);
@@ -2189,7 +1339,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
             </Button>
             <div>
               <h1 className="text-xl font-bold text-white">{session.trackName}</h1>
-              <p className="text-sm text-white/70">Crossy Robo Viewer {arInitialized && '(AR Active)'}</p>
+              <p className="text-sm text-white/70">Crossy Robo Viewer</p>
             </div>
           </div>
           
@@ -2254,13 +1404,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
               </Button>
             )}
 
-            {/* AR Status */}
-            {arInitialized && (
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
-                <span className="text-blue-400 text-sm">AR Detection</span>
-              </div>
-            )}
+
             
             {/* Connection Status */}
             <div className="flex items-center gap-4">
@@ -2346,24 +1490,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                 style={{ zIndex: 1 }}
               />
 
-              {/* AR Overlay Canvas - Constrained to video area only */}
-              {hostUser && (
-                <canvas 
-                  ref={canvasRef}
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  style={{
-                    zIndex: 10,
-                    background: 'transparent',
-                    display: arInitialized ? 'block' : 'none',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    maxWidth: '100%',
-                    maxHeight: '100%'
-                  }}
-                />
-              )}
+
 
               {/* Stream Info Overlay */}
               {isAgoraConnected && (
@@ -2377,15 +1504,6 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                     Your UID: {localUid}<br />
                     Host: {hostUser ? `User ${hostUser.uid}` : 'None'}<br />
                     Viewers: {remoteUsers.size}<br />
-                    {arInitialized && (
-                      <>
-                        AR Status: Active<br />
-                        Markers: {detectedMarkers.length}
-                        {detectedMarkers.length > 0 && (
-                          <span className="text-green-400"> ✓ RENDERING</span>
-                        )}
-                      </>
-                    )}
                   </div>
                 </div>
               )}
