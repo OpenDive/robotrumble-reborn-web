@@ -463,13 +463,35 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                     // Create main host video view
                     const mainContainer = document.createElement('div');
                     mainContainer.id = `main-host-${user.uid}`;
-                    mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
+                    mainContainer.className = 'w-full h-full bg-black flex items-center justify-center';
                     
                     const hostVideo = document.createElement('video');
-                    hostVideo.className = 'w-full h-full object-cover';
+                    hostVideo.className = 'max-w-full max-h-full';
+                    hostVideo.style.width = 'auto';
+                    hostVideo.style.height = 'auto';
+                    hostVideo.style.objectFit = 'fill';
                     hostVideo.autoplay = true;
                     hostVideo.playsInline = true;
                     hostVideo.muted = true;
+                    
+                    // Debug: Log actual video dimensions when loaded
+                    hostVideo.addEventListener('loadedmetadata', () => {
+                      console.log('🔍 STREAM SOURCE DEBUG - What we actually received:', {
+                        videoWidth: hostVideo.videoWidth,
+                        videoHeight: hostVideo.videoHeight,
+                        aspectRatio: (hostVideo.videoWidth / hostVideo.videoHeight).toFixed(2),
+                        clientWidth: hostVideo.clientWidth,
+                        clientHeight: hostVideo.clientHeight,
+                        naturalAspectRatio: hostVideo.videoWidth / hostVideo.videoHeight > 1.5 ? '16:9 or wider' : '4:3 or taller'
+                      });
+                      
+                      // Check if we're getting the expected resolution
+                      if (hostVideo.videoHeight < 900) {
+                        console.warn('⚠️ CROPPING DETECTED: Video height is only', hostVideo.videoHeight, 'pixels');
+                        console.warn('⚠️ This suggests the SOURCE is sending cropped content');
+                        console.warn('⚠️ Check: iOS app settings, screen recording settings, or game window size');
+                      }
+                    });
                     // Remove mirroring for host video
                     hostVideo.id = `host-video-${user.uid}`;
                     hostVideo.setAttribute('data-uid', user.uid.toString()); // Add data-uid attribute for AR detection
@@ -1465,8 +1487,8 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       <div className="flex" style={{ height: 'calc(100vh - 10rem)' }}>
         {/* Always show content when we reach this point since gameState is 'connected' */}
           <>
-            {/* Left Side: Main AR View Area */}
-            <div className="flex-1 relative">
+            {/* Left Side: Main Video View Area */}
+            <div className="flex-1 relative flex items-center justify-center bg-black">
               {!hostUser ? (
                 /* Waiting for Host */
                 <div className="h-full flex items-center justify-center">
@@ -1483,10 +1505,10 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                 </div>
               ) : null}
 
-              {/* Host Video Container - populated dynamically */}
+              {/* Host Video Container - populated dynamically with natural aspect ratio */}
               <div 
                 ref={mainViewRef} 
-                className="absolute inset-0 w-full h-full"
+                className="w-full h-full flex items-center justify-center"
                 style={{ zIndex: 1 }}
               />
 
