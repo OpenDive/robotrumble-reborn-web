@@ -1,11 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
 import AgoraRTC, { IAgoraRTCClient, IRemoteVideoTrack, IRemoteAudioTrack } from 'agora-rtc-sdk-ng';
 import { Button } from '../shared/Button';
 import { RaceSession } from '../../../shared/types/race';
 import { APP_ID, fetchToken } from '../../../shared/utils/agoraAuth';
-import { EnhancedARDetector, DetectedMarker } from '../../../engine-layer/core/ar/EnhancedARDetector';
-import { GameRenderSystem } from '../../../engine-layer/core/renderer/GameRenderSystem';
 import { SuiWalletConnect } from '../shared/SuiWalletConnect';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction, useSuiClient } from '@mysten/dapp-kit';
 import { useEnokiFlow, useZkLogin, useZkLoginSession } from '@mysten/enoki/react';
@@ -41,17 +38,11 @@ interface Robot {
 
 export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> = ({ session, onBack }) => {
   const mainViewRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   
   // Agora refs
   const rtcClientRef = useRef<IAgoraRTCClient | null>(null);
-  
-  // Full AR System refs
-  const arDetectorRef = useRef<EnhancedARDetector | null>(null);
-  const renderSystemRef = useRef<GameRenderSystem | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
   
   // Streaming state
   const [isConnected, setIsConnected] = useState(false);
@@ -68,11 +59,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   const [isMicEnabled, setIsMicEnabled] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   
-  // AR state
-  const [arInitialized, setArInitialized] = useState(false);
-  const [detectedMarkers, setDetectedMarkers] = useState<DetectedMarker[]>([]);
-  const [arEffectsEnabled, setArEffectsEnabled] = useState(true);
-
   // Battle control state (read-only for viewers)
   const [startPoint, setStartPoint] = useState<BattlePoint | null>(null);
   const [endPoint, setEndPoint] = useState<BattlePoint | null>(null);
@@ -106,20 +92,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   const { user } = useAuth();
   const enokiFlow = useEnokiFlow();
 
-  // AR effects toggle handler
-  const toggleAREffects = () => {
-    const newEnabled = !arEffectsEnabled;
-    setArEffectsEnabled(newEnabled);
-    
-    if (renderSystemRef.current) {
-      renderSystemRef.current.setAREffectsEnabled(newEnabled);
-      
-      // If enabling AR effects, update with current markers
-      if (newEnabled && detectedMarkers.length > 0) {
-        renderSystemRef.current.updateAREffects(detectedMarkers);
-      }
-    }
-  };
 
   // Toggle camera for viewer chat
   const toggleCamera = async () => {
@@ -359,125 +331,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
     return () => clearTimeout(initialTimer);
   }, [isConnected, hostUser]);
 
-  // Initialize full AR system with complete 3D scene
-  const initializeAROverlay = async () => {
-    if (!canvasRef.current || arInitialized) return;
-    
-    try {
-      console.log('Initializing full AR system for Robo Rumble viewer...');
-      
-      // Ensure canvas matches its container size
-      const container = canvasRef.current.parentElement;
-      if (container) {
-        const rect = container.getBoundingClientRect();
-        canvasRef.current.width = rect.width;
-        canvasRef.current.height = rect.height;
-        console.log(`AR Canvas sized to container: ${rect.width}x${rect.height}`);
-      }
-      
-      // Create full GameRenderSystem for complete 3D AR experience
-      const renderSystem = new GameRenderSystem();
-      renderSystemRef.current = renderSystem;
-      
-      // Initialize with transparent background for overlay
-      renderSystem.initialize(canvasRef.current);
-      
-      // Set AR mode to enable transparent rendering
-      renderSystem.setARMode(true);
-      
-      // Enable AR effects by default
-      renderSystem.setAREffectsEnabled(arEffectsEnabled);
-      
-      // Create AR detector for marker detection
-      const arDetector = new EnhancedARDetector((message) => {
-        console.log(`[AR Robo Rumble Viewer] ${message}`);
-      });
-      arDetectorRef.current = arDetector;
-      
-      // Get scene and camera from render system
-      const scene = renderSystem.getScene();
-      const camera = renderSystem.getCamera();
-      
-      // Initialize AR detector with full 3D context
-      await arDetector.initialize(scene || undefined, camera || undefined);
-      
-      // Start full AR rendering loop
-      startARRenderingLoop();
-      
-      setArInitialized(true);
-      console.log('Full AR system initialized for Robo Rumble viewer');
-    } catch (error) {
-      console.error('Failed to initialize AR system:', error);
-    }
-  };
-
-  // Full AR rendering loop with complete 3D scene
-  const startARRenderingLoop = () => {
-    if (!arDetectorRef.current || !renderSystemRef.current) return;
-    
-    let frameCount = 0;
-    
-    const renderLoop = () => {
-      frameCount++;
-      
-      // Run AR detection on host video
-      if (hostVideoRef.current && arDetectorRef.current) {
-        // Check video readiness every 60 frames (roughly once per second at 60fps)
-        if (frameCount % 60 === 0) {
-          const video = hostVideoRef.current;
-          console.log(`AR Detection Status - Video ready: ${video.videoWidth}x${video.videoHeight}, Current time: ${video.currentTime}, Paused: ${video.paused}`);
-        }
-        
-        const markers = arDetectorRef.current.detectMarkers(hostVideoRef.current);
-        
-        if (markers.length > 0) {
-          console.log(`[AR Robo Rumble Viewer] Detected ${markers.length} markers on host stream`);
-        }
-        
-        setDetectedMarkers(markers);
-        
-        // Update AR markers in the full 3D scene
-        if (renderSystemRef.current) {
-          renderSystemRef.current.updateAREffects(markers);
-          
-          // Set AR effects visibility
-          renderSystemRef.current.setAREffectsEnabled(arEffectsEnabled);
-          
-          // Render the complete 3D AR scene
-          renderSystemRef.current.render();
-        }
-      }
-      
-      animationFrameRef.current = requestAnimationFrame(renderLoop);
-    };
-    
-    animationFrameRef.current = requestAnimationFrame(renderLoop);
-  };
-
-  // Cleanup full AR system
-  const cleanupAROverlay = () => {
-    console.log('Cleaning up AR system...');
-    
-    // Stop animation loop
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    
-    // Dispose render system
-    if (renderSystemRef.current) {
-      renderSystemRef.current.dispose();
-      renderSystemRef.current = null;
-    }
-    
-    if (arDetectorRef.current) {
-      arDetectorRef.current.dispose();
-      arDetectorRef.current = null;
-    }
-    
-    setArInitialized(false);
-    setDetectedMarkers([]);
-  };
 
   // Connect to stream
   const connectToStream = async () => {
@@ -609,7 +462,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                     setTimeout(() => {
                       if (roboRumbleVideo.videoWidth > 0 && roboRumbleVideo.videoHeight > 0) {
                         console.log(`📐 Video dimensions ready: ${roboRumbleVideo.videoWidth}x${roboRumbleVideo.videoHeight}`);
-                        initializeAROverlay();
                       }
                     }, 500);
                     
@@ -652,7 +504,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
             if (mainContainer) {
               mainContainer.remove();
             }
-            cleanupAROverlay();
             setHostUser(null);
             console.log(`👑❌ Robo Rumble host stopped streaming`);
           }
@@ -688,7 +539,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
           if (mainContainer) {
             mainContainer.remove();
           }
-          cleanupAROverlay();
           setHostUser(null);
           console.log(`👑🚪 Robo Rumble host left`);
         }
@@ -745,9 +595,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   // Disconnect from stream
   const disconnectFromStream = async () => {
     try {
-      // Clean up AR overlay first
-      cleanupAROverlay();
-      
       // Clean up local media tracks
       if (localVideoTrack) {
         localVideoTrack.stop();
@@ -800,37 +647,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
     }
   };
 
-  // Handle window resize
-  useEffect(() => {
-    // Set up resize observer for canvas sizing
-    let resizeObserver: ResizeObserver | null = null;
-    
-    if (canvasRef.current) {
-      resizeObserver = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          const { width, height } = entry.contentRect;
-          if (canvasRef.current) {
-            canvasRef.current.width = width;
-            canvasRef.current.height = height;
-            console.log(`AR Canvas resized to: ${width}x${height}`);
-            
-            // Update render system if it exists
-            if (renderSystemRef.current) {
-              renderSystemRef.current.resize();
-            }
-          }
-        }
-      });
-      
-      resizeObserver.observe(canvasRef.current.parentElement || canvasRef.current);
-    }
-
-    return () => {
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-    };
-  }, []);
 
   // Initialize blockchain service (for viewing RoboRumble state)
   useEffect(() => {
@@ -920,7 +736,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      cleanupAROverlay();
       disconnectFromStream();
     };
   }, []);
@@ -947,7 +762,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
             </Button>
             <div>
               <h1 className="text-xl font-bold text-white">{session.trackName}</h1>
-              <p className="text-sm text-white/70">RoboRumble AR Stream {arInitialized && '(AR Active)'}</p>
+              <p className="text-sm text-white/70">RoboRumble Stream</p>
             </div>
           </div>
           
@@ -990,13 +805,6 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
               </Button>
             )}
 
-            {/* AR Status */}
-            {arInitialized && (
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
-                <span className="text-blue-400 text-sm">AR Detection</span>
-              </div>
-            )}
             
             {/* Connection Status */}
             <div className="flex items-center gap-2">
@@ -1098,38 +906,19 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                 style={{ zIndex: 1 }}
               />
 
-              {/* AR Overlay Canvas */}
-              {hostUser && (
-                <canvas 
-                  ref={canvasRef}
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  style={{
-                    zIndex: 2,
-                    background: 'transparent',
-                    display: arInitialized ? 'block' : 'none',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    maxWidth: '100%',
-                    maxHeight: '100%'
-                  }}
-                />
-              )}
 
               {/* Stream Info Overlay */}
               {isConnected && (
                 <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-sm font-medium">Watching RoboRumble AR Stream</span>
+                    <span className="text-sm font-medium">Watching RoboRumble Stream</span>
                   </div>
                   <div className="text-xs text-white/70">
                     Channel: robot-video<br />
                     Your UID: {localUid}<br />
                     Host: {hostUser ? `User ${hostUser.uid}` : 'None'}<br />
-                    Viewers: {remoteUsers.size}<br />
-                    {arInitialized && `AR Markers: ${detectedMarkers.length}`}
+                    Viewers: {remoteUsers.size}
                   </div>
                 </div>
               )}
