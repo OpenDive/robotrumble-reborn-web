@@ -560,7 +560,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
     }
   };
 
-  const updateSplitScreenDisplay = (users: RemoteUser[]) => {
+  const updateSplitScreenDisplay = (users: RemoteUser[], overridePrimaryIndex?: number) => {
     if (!mainViewRef.current) return;
     
     // Create main PiP container
@@ -660,8 +660,11 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       // videoElement is guaranteed to be defined at this point
       if (!videoElement) return;
       
-      // Use CSS positioning instead of DOM manipulation
-      const isMainVideo = (primaryUserIndex === 0 && index === 0) || (primaryUserIndex === 1 && index === 1);
+      // Use override index if provided, otherwise use current state
+      const effectivePrimaryIndex = overridePrimaryIndex !== undefined ? overridePrimaryIndex : primaryUserIndex;
+        
+      // Determine if this should be the main video based on effective primary index
+      const isMainVideo = (effectivePrimaryIndex === 0 && index === 0) || (effectivePrimaryIndex === 1 && index === 1);
       
       // Clear all positioning styles first
       videoElement.style.top = '';
@@ -706,9 +709,9 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       const newPrimaryIndex = primaryUserIndex === 0 ? 1 : 0;
       console.log('Setting new primaryUserIndex:', newPrimaryIndex);
       setPrimaryUserIndex(newPrimaryIndex);
-      // Force immediate update after swap
+      // Force immediate update after swap with new primary index
       setTimeout(() => {
-        updateSplitScreenDisplay(users);
+        updateSplitScreenDisplay(users, newPrimaryIndex);
       }, 50);
     };
     
@@ -719,7 +722,8 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
     
     // Add user info overlays
     users.forEach((user, index) => {
-      const isMainVideo = (primaryUserIndex === 0 && index === 0) || (primaryUserIndex === 1 && index === 1);
+      const effectivePrimaryIndex = overridePrimaryIndex !== undefined ? overridePrimaryIndex : primaryUserIndex;
+      const isMainVideo = (effectivePrimaryIndex === 0 && index === 0) || (effectivePrimaryIndex === 1 && index === 1);
       
       if (isMainVideo) {
         // Main video overlay
