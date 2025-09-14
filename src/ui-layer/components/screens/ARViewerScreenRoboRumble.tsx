@@ -40,6 +40,8 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   const mainViewRef = useRef<HTMLDivElement>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const splitScreenTopRef = useRef<HTMLVideoElement>(null);
+  const splitScreenBottomRef = useRef<HTMLVideoElement>(null);
   
   // Agora refs
   const rtcClientRef = useRef<IAgoraRTCClient | null>(null);
@@ -51,6 +53,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   const [remoteUsers, setRemoteUsers] = useState<Map<number, RemoteUser>>(new Map());
   const [hostUser, setHostUser] = useState<RemoteUser | null>(null);
   const [viewerUsers, setViewerUsers] = useState<Map<number, RemoteUser>>(new Map());
+  const [splitScreenUsers, setSplitScreenUsers] = useState<RemoteUser[]>([]);
   
   // Local media state for viewer chat
   const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
@@ -368,114 +371,34 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
             existingUser.videoTrack = user.videoTrack;
             existingUser.hasVideo = true;
             
+            // Add user to split screen (first 2 users get split screen)
+            setSplitScreenUsers(prev => {
+              const updated = [...prev];
+              const existingIndex = updated.findIndex(u => u.uid === existingUser.uid);
+              
+              if (existingIndex >= 0) {
+                // Update existing user
+                updated[existingIndex] = existingUser;
+              } else if (updated.length < 2) {
+                // Add new user to split screen if space available
+                updated.push(existingUser);
+                console.log(`📺 Added user ${user.uid} to split screen (position ${updated.length})`);
+              }
+              
+              // Update split screen display
+              setTimeout(() => updateSplitScreenDisplay(updated), 100);
+              
+              return updated;
+            });
+            
             // Determine if this is the host (first video publisher or has higher authority)
             // For simplicity, treat the first video publisher as host
             if (!hostUser) {
               console.log(`👑 User ${user.uid} is now the Robo Rumble HOST`);
-              // This is the host - display in main view with AR
               existingUser.isHost = true;
               setHostUser(existingUser);
-              
-              // If no host yet, create a fallback video for synchronized viewing
-              setTimeout(() => {
-                console.log(`🎬 No host detected, starting local robo rumble video for synchronized viewing`);
-                
-                // Create main video view
-                const mainContainer = document.createElement('div');
-                mainContainer.id = `main-roborumble-video`;
-                mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
-                
-                const roboRumbleVideo = document.createElement('video');
-                roboRumbleVideo.className = 'w-full h-full object-cover';
-                roboRumbleVideo.autoplay = true;
-                roboRumbleVideo.playsInline = true;
-                roboRumbleVideo.muted = true;
-                roboRumbleVideo.loop = true;
-                roboRumbleVideo.style.transform = 'scaleX(-1)'; // Mirror the video
-                roboRumbleVideo.style.filter = 'brightness(0.8)'; // Match host screen brightness
-                roboRumbleVideo.id = `roborumble-video`;
-                roboRumbleVideo.src = '/assets/videos/robot_rumble.mp4'; // Play the robo rumble video locally
-                
-                console.log(`🎥 Loading robo rumble video locally for synchronized viewing`);
-                
-                // Add event listeners for debugging
-                roboRumbleVideo.addEventListener('loadeddata', () => {
-                  console.log(`📹 Local robo rumble video loaded: ${roboRumbleVideo.videoWidth}x${roboRumbleVideo.videoHeight}`);
-                });
-                
-                roboRumbleVideo.addEventListener('playing', () => {
-                  console.log(`📹 Local robo rumble video is playing`);
-                });
-                
-                roboRumbleVideo.addEventListener('error', async (e) => {
-                  console.error(`❌ Local robo rumble video error:`, e);
-                  console.log('🔄 Fallback to webcam for synchronized viewing...');
-                  
-                  try {
-                    // Fallback to webcam
-                    const stream = await navigator.mediaDevices.getUserMedia({ 
-                      video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                      } 
-                    });
-                    
-                    console.log('📹 Webcam access granted for viewer');
-                    
-                    // Replace robo rumble video with webcam video
-                    roboRumbleVideo.srcObject = stream;
-                    roboRumbleVideo.src = ''; // Clear the src
-                    roboRumbleVideo.style.transform = 'scaleX(-1)'; // Mirror webcam
-                    
-                    console.log('✅ Using webcam as fallback for synchronized viewing');
-                  } catch (webcamError) {
-                    console.error('❌ Failed to access webcam as fallback:', webcamError);
-                    
-                    // Show error message in video container
-                    mainContainer.innerHTML = `
-                      <div class="w-full h-full flex items-center justify-center bg-gray-800 text-white">
-                        <div class="text-center">
-                          <p class="text-lg font-semibold mb-2">Video Source Error</p>
-                          <p class="text-sm">Failed to load demo video and camera</p>
-                        </div>
-                      </div>
-                    `;
-                  }
-                });
-                
-                mainContainer.appendChild(roboRumbleVideo);
-                
-                // Store reference for AR detection
-                hostVideoRef.current = roboRumbleVideo;
-                
-                // Add to main view container
-                if (mainViewRef.current) {
-                  console.log(`📺 Adding local robo rumble video to main view`);
-                  mainViewRef.current.appendChild(mainContainer);
-                  
-                  // Start playing the video
-                  roboRumbleVideo.play().then(() => {
-                    console.log(`✅ Local robo rumble video started playing successfully`);
-                    
-                    // Initialize AR overlay once video is playing
-                    setTimeout(() => {
-                      if (roboRumbleVideo.videoWidth > 0 && roboRumbleVideo.videoHeight > 0) {
-                        console.log(`📐 Video dimensions ready: ${roboRumbleVideo.videoWidth}x${roboRumbleVideo.videoHeight}`);
-                      }
-                    }, 500);
-                    
-                  }).catch((playError) => {
-                    console.error(`❌ Failed to play local robo rumble video:`, playError);
-                    // Error handler above will handle fallback to webcam
-                  });
-                } else {
-                  console.error(`❌ mainViewRef.current is null`);
-                }
-              }, 1000);
             } else {
               console.log(`👥 User ${user.uid} is a VIEWER with video`);
-              // This is a viewer - display in participant tile
               existingUser.isHost = false;
               setViewerUsers(prev => new Map(prev.set(user.uid as number, existingUser)));
             }
@@ -497,15 +420,17 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
         console.log(`🔇 User ${user.uid} unpublished ${mediaType}`);
         
         if (mediaType === 'video') {
+          // Remove user from split screen
+          setSplitScreenUsers(prev => {
+            const updated = prev.filter(u => u.uid !== user.uid);
+            setTimeout(() => updateSplitScreenDisplay(updated), 100);
+            return updated;
+          });
+          
           const remoteUser = remoteUsers.get(user.uid as number);
           if (remoteUser?.isHost) {
-            // Host stopped streaming - clean up main view and AR
-            const mainContainer = document.getElementById(`main-roborumble-video`);
-            if (mainContainer) {
-              mainContainer.remove();
-            }
             setHostUser(null);
-            console.log(`👑❌ Robo Rumble host stopped streaming`);
+            console.log(`👑❌ Host stopped streaming`);
           }
         }
         
@@ -532,15 +457,17 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       client.on('user-left', (user) => {
         console.log(`🔴 User ${user.uid} left the Robo Rumble channel`);
         
-        // If host left, clean up main view
+        // Remove user from split screen
+        setSplitScreenUsers(prev => {
+          const updated = prev.filter(u => u.uid !== user.uid);
+          setTimeout(() => updateSplitScreenDisplay(updated), 100);
+          return updated;
+        });
+        
         const remoteUser = remoteUsers.get(user.uid as number);
         if (remoteUser?.isHost) {
-          const mainContainer = document.getElementById(`main-roborumble-video`);
-          if (mainContainer) {
-            mainContainer.remove();
-          }
           setHostUser(null);
-          console.log(`👑🚪 Robo Rumble host left`);
+          console.log(`👑🚪 Host left`);
         }
         
         setRemoteUsers(prev => {
@@ -592,6 +519,141 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
     }
   };
 
+  // Update split screen display
+  const updateSplitScreenDisplay = (users: RemoteUser[]) => {
+    if (!mainViewRef.current) return;
+    
+    // Clear existing split screen
+    const existingSplitScreen = document.getElementById('split-screen-container');
+    if (existingSplitScreen) {
+      existingSplitScreen.remove();
+    }
+    
+    // Create split screen container
+    const splitScreenContainer = document.createElement('div');
+    splitScreenContainer.id = 'split-screen-container';
+    splitScreenContainer.className = 'absolute inset-0 w-full h-full flex flex-col';
+    
+    // Create top and bottom video containers with fixed heights
+    const topContainer = document.createElement('div');
+    topContainer.className = 'h-1/2 bg-black border-b border-white/20 overflow-hidden';
+    topContainer.id = 'split-screen-top';
+    
+    const bottomContainer = document.createElement('div');
+    bottomContainer.className = 'h-1/2 bg-black overflow-hidden';
+    bottomContainer.id = 'split-screen-bottom';
+    
+    // Add users to split screen
+    users.forEach((user, index) => {
+      const videoElement = document.createElement('video');
+      videoElement.className = 'w-full h-full object-cover';
+      videoElement.autoplay = true;
+      videoElement.playsInline = true;
+      videoElement.muted = true;
+      videoElement.style.transform = 'scaleX(-1)';
+      
+      if (user.videoTrack) {
+        user.videoTrack.play(videoElement);
+        console.log(`📺 Playing video for user ${user.uid} in split screen position ${index + 1}`);
+      } else {
+        // Fallback content
+        const fallbackDiv = document.createElement('div');
+        fallbackDiv.className = 'w-full h-full flex items-center justify-center bg-gray-800 text-white text-2xl font-bold';
+        fallbackDiv.textContent = `User ${user.uid}`;
+        
+        if (index === 0) {
+          topContainer.appendChild(fallbackDiv);
+        } else {
+          bottomContainer.appendChild(fallbackDiv);
+        }
+        return;
+      }
+      
+      // Add overlay with user info
+      const overlay = document.createElement('div');
+      overlay.className = 'absolute top-2 left-2 bg-black/60 backdrop-blur-sm rounded px-2 py-1 text-white text-sm';
+      overlay.textContent = user.isHost ? `Host (${user.uid})` : `User ${user.uid}`;
+      
+      const container = document.createElement('div');
+      container.className = 'relative w-full h-full';
+      container.appendChild(videoElement);
+      container.appendChild(overlay);
+      
+      if (index === 0) {
+        topContainer.appendChild(container);
+        splitScreenTopRef.current = videoElement;
+      } else {
+        bottomContainer.appendChild(container);
+        splitScreenBottomRef.current = videoElement;
+      }
+    });
+    
+    // If only one user, show placeholder for second slot
+    if (users.length === 1) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-800 text-white/50';
+      placeholder.innerHTML = `
+        <div class="text-center">
+          <div class="w-16 h-16 mx-auto mb-4 bg-white/10 rounded-full flex items-center justify-center">
+            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+          </div>
+          <p class="text-lg">Waiting for second participant...</p>
+        </div>
+      `;
+      bottomContainer.appendChild(placeholder);
+    }
+    
+    // If no users, show empty split screen layout
+    if (users.length === 0) {
+      // Top placeholder
+      const topPlaceholder = document.createElement('div');
+      topPlaceholder.className = 'w-full h-full flex items-center justify-center bg-gray-900 text-white/50';
+      topPlaceholder.innerHTML = `
+        <div class="text-center">
+          <div class="w-12 h-12 mx-auto mb-3 bg-white/10 rounded-full flex items-center justify-center">
+            <svg class="w-6 h-6 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 002 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <p class="text-sm">Waiting for first participant...</p>
+        </div>
+      `;
+      topContainer.appendChild(topPlaceholder);
+      
+      // Bottom placeholder
+      const bottomPlaceholder = document.createElement('div');
+      bottomPlaceholder.className = 'w-full h-full flex items-center justify-center bg-gray-800 text-white/50';
+      bottomPlaceholder.innerHTML = `
+        <div class="text-center">
+          <div class="w-12 h-12 mx-auto mb-3 bg-white/10 rounded-full flex items-center justify-center">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+          </div>
+          <p class="text-sm">Waiting for second participant...</p>
+        </div>
+      `;
+      bottomContainer.appendChild(bottomPlaceholder);
+    }
+    
+    // Always add the containers to show split layout
+    splitScreenContainer.appendChild(topContainer);
+    splitScreenContainer.appendChild(bottomContainer);
+    
+    mainViewRef.current.appendChild(splitScreenContainer);
+    console.log(`✅ Split screen updated with ${users.length} users`);
+  };
+
+  // Initialize split screen on connection
+  useEffect(() => {
+    if (isConnected && mainViewRef.current) {
+      // Initialize empty split screen
+      updateSplitScreenDisplay([]);
+    }
+  }, [isConnected]);
+
   // Disconnect from stream
   const disconnectFromStream = async () => {
     try {
@@ -629,11 +691,11 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
         participantGrid.innerHTML = '';
       }
       
-      // Clean up RoboRumble video container
-      const roboRumbleContainer = document.getElementById('main-roborumble-video');
-      if (roboRumbleContainer) {
-        roboRumbleContainer.remove();
-        console.log('🗑️ Cleaned up RoboRumble video container');
+      // Clean up split screen container
+      const splitScreenContainer = document.getElementById('split-screen-container');
+      if (splitScreenContainer) {
+        splitScreenContainer.remove();
+        console.log('🗑️ Cleaned up split screen container');
       }
       
       setIsConnected(false);
@@ -641,6 +703,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       setRemoteUsers(new Map());
       setHostUser(null);
       setViewerUsers(new Map());
+      setSplitScreenUsers([]);
       console.log('Disconnected from Robo Rumble stream');
     } catch (error) {
       console.error('Error disconnecting from stream:', error);
@@ -881,25 +944,9 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
           </div>
         ) : (
           <>
-            {/* Left Side: Main AR View Area */}
+            {/* Left Side: Main Split Screen View Area */}
             <div className="flex-1 relative">
-              {!hostUser ? (
-                /* Waiting for Host */
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center text-white/70">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-white/5 rounded-full flex items-center justify-center">
-                      <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    </div>
-                    <h3 className="text-lg font-medium text-white mb-2">Waiting for Battle Session</h3>
-                    <p className="text-sm mb-4">RoboRumble demo will start when host begins session</p>
-                    <p className="text-xs text-white/50">Participants: {remoteUsers.size}</p>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Host Video Container - populated dynamically */}
+              {/* Split Screen Container - populated dynamically */}
               <div 
                 ref={mainViewRef} 
                 className="absolute inset-0 w-full h-full"
@@ -912,13 +959,13 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                 <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-sm font-medium">Watching RoboRumble Stream</span>
+                    <span className="text-sm font-medium">Split Screen View</span>
                   </div>
                   <div className="text-xs text-white/70">
                     Channel: robot-video<br />
                     Your UID: {localUid}<br />
-                    Host: {hostUser ? `User ${hostUser.uid}` : 'None'}<br />
-                    Viewers: {remoteUsers.size}
+                    Split Screen: {splitScreenUsers.length}/2<br />
+                    Total Viewers: {remoteUsers.size}
                   </div>
                 </div>
               )}
