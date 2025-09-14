@@ -54,6 +54,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   const [hostUser, setHostUser] = useState<RemoteUser | null>(null);
   const [viewerUsers, setViewerUsers] = useState<Map<number, RemoteUser>>(new Map());
   const [splitScreenUsers, setSplitScreenUsers] = useState<RemoteUser[]>([]);
+  const [primaryUserIndex, setPrimaryUserIndex] = useState<number>(0);
   
   // Local media state for viewer chat
   const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
@@ -519,34 +520,35 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
     }
   };
 
-  // Update split screen display
+  // Update picture-in-picture display
   const updateSplitScreenDisplay = (users: RemoteUser[]) => {
     if (!mainViewRef.current) return;
     
-    // Clear existing split screen
-    const existingSplitScreen = document.getElementById('split-screen-container');
-    if (existingSplitScreen) {
-      existingSplitScreen.remove();
+    // Clear existing display
+    const existingContainer = document.getElementById('pip-container');
+    if (existingContainer) {
+      existingContainer.remove();
     }
     
-    // Create split screen container
-    const splitScreenContainer = document.createElement('div');
-    splitScreenContainer.id = 'split-screen-container';
-    splitScreenContainer.className = 'absolute inset-0 w-full h-full flex flex-col';
+    // Create picture-in-picture container
+    const pipContainer = document.createElement('div');
+    pipContainer.id = 'pip-container';
+    pipContainer.className = 'absolute inset-0 w-full h-full bg-black';
     
-    // Create top and bottom video containers with fixed heights
-    const topContainer = document.createElement('div');
-    topContainer.className = 'h-1/2 bg-black border-b border-white/20 overflow-hidden';
-    topContainer.id = 'split-screen-top';
+    // Create main video container (75% of screen)
+    const mainContainer = document.createElement('div');
+    mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
+    mainContainer.id = 'pip-main';
     
-    const bottomContainer = document.createElement('div');
-    bottomContainer.className = 'h-1/2 bg-black overflow-hidden';
-    bottomContainer.id = 'split-screen-bottom';
+    // Create overlay video container (positioned in top-right corner)
+    const overlayContainer = document.createElement('div');
+    overlayContainer.className = 'absolute top-4 right-4 w-1/3 h-1/3 bg-black border-2 border-white/30 rounded-lg overflow-hidden cursor-pointer transition-all duration-200 hover:border-white/50 hover:scale-105 z-10';
+    overlayContainer.id = 'pip-overlay';
     
-    // Add users to split screen
+    // Add users to PiP layout based on primaryUserIndex
     users.forEach((user, index) => {
       const videoElement = document.createElement('video');
-      videoElement.className = 'w-full h-full object-cover';
+      videoElement.className = 'w-full h-full object-contain bg-black';
       videoElement.autoplay = true;
       videoElement.playsInline = true;
       videoElement.muted = true;
@@ -554,95 +556,107 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       
       if (user.videoTrack) {
         user.videoTrack.play(videoElement);
-        console.log(`📺 Playing video for user ${user.uid} in split screen position ${index + 1}`);
+        console.log(`📺 Playing video for user ${user.uid} in PiP position ${index + 1}`);
+        
+        // Debug logging
+        videoElement.addEventListener('loadedmetadata', () => {
+          console.log(`🔍 Video ${user.uid} dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
+          console.log(`🔍 Video ${user.uid} aspect ratio: ${videoElement.videoWidth / videoElement.videoHeight}`);
+        });
       } else {
         // Fallback content
-        const fallbackDiv = document.createElement('div');
-        fallbackDiv.className = 'w-full h-full flex items-center justify-center bg-gray-800 text-white text-2xl font-bold';
-        fallbackDiv.textContent = `User ${user.uid}`;
-        
-        if (index === 0) {
-          topContainer.appendChild(fallbackDiv);
-        } else {
-          bottomContainer.appendChild(fallbackDiv);
-        }
-        return;
+        console.log(`⚠️ No video track for user ${user.uid}`);
       }
       
-      // Add overlay with user info
-      const overlay = document.createElement('div');
-      overlay.className = 'absolute top-2 left-2 bg-black/60 backdrop-blur-sm rounded px-2 py-1 text-white text-sm';
-      overlay.textContent = user.isHost ? `Host (${user.uid})` : `User ${user.uid}`;
+      // Determine which container based on primary user setting
+      const isMainVideo = (primaryUserIndex === 0 && index === 0) || (primaryUserIndex === 1 && index === 1);
       
-      const container = document.createElement('div');
-      container.className = 'relative w-full h-full';
-      container.appendChild(videoElement);
-      container.appendChild(overlay);
-      
-      if (index === 0) {
-        topContainer.appendChild(container);
-        splitScreenTopRef.current = videoElement;
-      } else {
-        bottomContainer.appendChild(container);
-        splitScreenBottomRef.current = videoElement;
+      if (isMainVideo) {
+        // This user goes to main container
+        mainContainer.appendChild(videoElement);
+        
+        // Add user info overlay for main video
+        const mainOverlay = document.createElement('div');
+        mainOverlay.className = 'absolute bottom-4 left-4 bg-black/70 text-white px-3 py-1 rounded-lg text-sm';
+        mainOverlay.textContent = `${user.uid} (Main)`;
+        mainContainer.appendChild(mainOverlay);
+      } else if (index < 2) {
+        // This user goes to overlay container (only show first 2 users)
+        overlayContainer.appendChild(videoElement);
+        
+        // Add user info overlay for pip video
+        const pipOverlay = document.createElement('div');
+        pipOverlay.className = 'absolute bottom-1 left-1 bg-black/70 text-white px-2 py-0.5 rounded text-xs';
+        pipOverlay.textContent = String(user.uid);
+        overlayContainer.appendChild(pipOverlay);
       }
     });
     
-    // If only one user, show placeholder for second slot
+    // Add swap functionality to overlay container (only if we have 2+ users)
+    if (users.length >= 2) {
+      overlayContainer.addEventListener('click', () => {
+        console.log('🔄 Swapping video feeds');
+        setPrimaryUserIndex(primaryUserIndex === 0 ? 1 : 0);
+        // Re-render the display with swapped primary user
+        setTimeout(() => updateSplitScreenDisplay(users), 100);
+      });
+    }
+    
+    // If only one user, show placeholder in overlay
     if (users.length === 1) {
       const placeholder = document.createElement('div');
-      placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-800 text-white/50';
+      placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-800/80 text-white/60';
       placeholder.innerHTML = `
         <div class="text-center">
-          <div class="w-16 h-16 mx-auto mb-4 bg-white/10 rounded-full flex items-center justify-center">
-            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div class="w-8 h-8 mx-auto mb-2 bg-white/10 rounded-full flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
           </div>
-          <p class="text-lg">Waiting for second participant...</p>
+          <p class="text-xs">Waiting...</p>
         </div>
       `;
-      bottomContainer.appendChild(placeholder);
+      overlayContainer.appendChild(placeholder);
     }
     
-    // If no users, show empty split screen layout
+    // If no users, show empty layout
     if (users.length === 0) {
-      // Top placeholder
-      const topPlaceholder = document.createElement('div');
-      topPlaceholder.className = 'w-full h-full flex items-center justify-center bg-gray-900 text-white/50';
-      topPlaceholder.innerHTML = `
+      // Main placeholder
+      const mainPlaceholder = document.createElement('div');
+      mainPlaceholder.className = 'w-full h-full flex items-center justify-center bg-gray-900 text-white/50';
+      mainPlaceholder.innerHTML = `
         <div class="text-center">
-          <div class="w-12 h-12 mx-auto mb-3 bg-white/10 rounded-full flex items-center justify-center">
-            <svg class="w-6 h-6 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div class="w-16 h-16 mx-auto mb-4 bg-white/10 rounded-full flex items-center justify-center">
+            <svg class="w-8 h-8 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 002 2v8a2 2 0 002 2z" />
             </svg>
           </div>
-          <p class="text-sm">Waiting for first participant...</p>
+          <p class="text-lg">Waiting for participants...</p>
         </div>
       `;
-      topContainer.appendChild(topPlaceholder);
+      mainContainer.appendChild(mainPlaceholder);
       
-      // Bottom placeholder
-      const bottomPlaceholder = document.createElement('div');
-      bottomPlaceholder.className = 'w-full h-full flex items-center justify-center bg-gray-800 text-white/50';
-      bottomPlaceholder.innerHTML = `
+      // Overlay placeholder
+      const overlayPlaceholder = document.createElement('div');
+      overlayPlaceholder.className = 'w-full h-full flex items-center justify-center bg-gray-800/80 text-white/60';
+      overlayPlaceholder.innerHTML = `
         <div class="text-center">
-          <div class="w-12 h-12 mx-auto mb-3 bg-white/10 rounded-full flex items-center justify-center">
-            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div class="w-8 h-8 mx-auto mb-2 bg-white/10 rounded-full flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
           </div>
-          <p class="text-sm">Waiting for second participant...</p>
+          <p class="text-xs">PiP</p>
         </div>
       `;
-      bottomContainer.appendChild(bottomPlaceholder);
+      overlayContainer.appendChild(overlayPlaceholder);
     }
     
-    // Always add the containers to show split layout
-    splitScreenContainer.appendChild(topContainer);
-    splitScreenContainer.appendChild(bottomContainer);
+    // Always add the containers to show PiP layout
+    pipContainer.appendChild(mainContainer);
+    pipContainer.appendChild(overlayContainer);
     
-    mainViewRef.current.appendChild(splitScreenContainer);
+    mainViewRef.current.appendChild(pipContainer);
     console.log(`✅ Split screen updated with ${users.length} users`);
   };
 
@@ -1074,7 +1088,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                               bg-yellow-600 hover:bg-yellow-700 text-white"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 0v1.5M12 21l3.5-3.5M12 21l-3.5-3.5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M9 1L8 6l4-1 4 1-1-5-4 1.5L9 1z" />
                     </svg>
                   </button>
                 </div>
