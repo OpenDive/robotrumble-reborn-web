@@ -335,9 +335,15 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
   };
 
   // Connect to game (both video and robot)
-  const connectToGame = async () => {
+  const connectToGame = async (robotId?: string) => {
     setGameState('connecting');
     setConnectionError(null);
+    
+    // Set the selected robot if provided
+    if (robotId) {
+      setSelectedRobot(robotId);
+      console.log(`🤖 Selected robot: ${robotId}`);
+    }
     
     try {
       // Step 1: Connect to Agora (video streaming)
@@ -350,7 +356,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       
       // Step 3: Both connections successful
       setGameState('connected');
-      console.log('✅ Full game connection established');
+      console.log(`✅ Full game connection established for ${robotId || 'default robot'}`);
       
     } catch (error) {
       console.error('❌ Game connection failed:', error);

@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from './Button';
 
 interface JoinGameViewProps {
-  onJoin: () => void;
+  onJoin: (robotId?: string) => void;
   sessionName?: string;
 }
 
@@ -59,15 +59,25 @@ export const JoinGameView: React.FC<JoinGameViewProps> = ({ onJoin, sessionName 
           </div>
         </div>
         
-        {/* Join Button */}
-        <Button
-          variant="primary"
-          size="large"
-          onClick={onJoin}
-          className="!px-12 !py-4 !text-lg font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
-        >
-          Join Crossy Robot Game
-        </Button>
+        {/* Join Buttons */}
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Button
+            variant="primary"
+            size="large"
+            onClick={() => onJoin('robot-a')}
+            className="!px-12 !py-4 !text-lg font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+          >
+            Join Robot A
+          </Button>
+          <Button
+            variant="primary"
+            size="large"
+            onClick={() => onJoin('robot-b')}
+            className="!px-12 !py-4 !text-lg font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+          >
+            Join Robot B
+          </Button>
+        </div>
         
         {/* Disclaimer */}
         <p className="text-xs text-white/40 mt-8 max-w-sm mx-auto">
