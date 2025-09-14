@@ -47,7 +47,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   const rtcClientRef = useRef<IAgoraRTCClient | null>(null);
   
   // Debounce ref for updateSplitScreenDisplay
-  const updateDisplayTimeoutRef = useRef<number | null>(null);
+  const updateDisplayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingDisplayRef = useRef<boolean>(false);
   
   // Persistent video element cache to prevent React render interruptions
@@ -64,7 +64,12 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   const [hostUser, setHostUser] = useState<RemoteUser | null>(null);
   const [viewerUsers, setViewerUsers] = useState<Map<number, RemoteUser>>(new Map());
   const [splitScreenUsers, setSplitScreenUsers] = useState<RemoteUser[]>([]);
-  const [primaryUserIndex, setPrimaryUserIndex] = useState<number>(0);
+  const primaryUserIndexRef = useRef<number>(0);
+  const [primaryUserIndex, setPrimaryUserIndex] = useState(0);
+  
+  useEffect(() => {
+    primaryUserIndexRef.current = primaryUserIndex;
+  }, [primaryUserIndex]);
   
   // Local media state for viewer chat
   const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
@@ -705,8 +710,9 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
     
     // Add click handler to overlay area for swapping
     const handleOverlayClick = () => {
-      console.log('Overlay clicked, current primaryUserIndex:', primaryUserIndex);
-      const newPrimaryIndex = primaryUserIndex === 0 ? 1 : 0;
+      const currentPrimaryIndex = primaryUserIndexRef.current;
+      console.log('Overlay clicked, current primaryUserIndex:', currentPrimaryIndex);
+      const newPrimaryIndex = currentPrimaryIndex === 0 ? 1 : 0;
       console.log('Setting new primaryUserIndex:', newPrimaryIndex);
       setPrimaryUserIndex(newPrimaryIndex);
       // Force immediate update after swap with new primary index
