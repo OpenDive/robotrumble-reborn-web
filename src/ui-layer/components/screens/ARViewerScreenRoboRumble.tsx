@@ -972,7 +972,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
             </div>
 
             {/* Right Side: Battle Control Panel (Read-only for viewers) */}
-            <div className="w-96 bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden relative z-20">
+            <div className="w-[28rem] bg-gray-900 text-white border-l border-white/10 flex flex-col overflow-hidden relative z-20">
               {/* Chat Header - Fixed */}
               <div className="flex-shrink-0 p-4 border-b border-white/10 relative z-10">
                 <h2 className="text-lg font-bold text-white mb-1 relative z-10">Rumble Chat</h2>
@@ -1068,6 +1068,14 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                       </svg>
                     )}
+                  </button>
+                  <button
+                    className="px-3 py-2 rounded text-sm font-medium transition-all duration-150 relative z-20 pointer-events-auto
+                              bg-yellow-600 hover:bg-yellow-700 text-white"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 0v1.5M12 21l3.5-3.5M12 21l-3.5-3.5" />
+                    </svg>
                   </button>
                 </div>
                 
