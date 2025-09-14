@@ -552,7 +552,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       videoElement.autoplay = true;
       videoElement.playsInline = true;
       videoElement.muted = true;
-      videoElement.style.transform = 'scaleX(-1)';
+      // Don't mirror host video feeds - they should display as-is
       
       if (user.videoTrack) {
         user.videoTrack.play(videoElement);
@@ -592,15 +592,15 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       }
     });
     
-    // Add swap functionality to overlay container (only if we have 2+ users)
-    if (users.length >= 2) {
-      overlayContainer.addEventListener('click', () => {
-        console.log('🔄 Swapping video feeds');
-        setPrimaryUserIndex(primaryUserIndex === 0 ? 1 : 0);
-        // Re-render the display with swapped primary user
-        setTimeout(() => updateSplitScreenDisplay(users), 100);
-      });
-    }
+    // Add swap functionality to overlay container (works even with 1 user for future swapping)
+    overlayContainer.addEventListener('click', () => {
+      console.log('🔄 Swapping video feeds - current primary:', primaryUserIndex);
+      const newPrimaryIndex = primaryUserIndex === 0 ? 1 : 0;
+      setPrimaryUserIndex(newPrimaryIndex);
+      console.log('🔄 New primary index:', newPrimaryIndex);
+      // Re-render the display with swapped primary user
+      setTimeout(() => updateSplitScreenDisplay(users), 100);
+    });
     
     // If only one user, show placeholder in overlay
     if (users.length === 1) {
