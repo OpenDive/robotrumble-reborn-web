@@ -426,10 +426,41 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
             existingUser.videoTrack = user.videoTrack;
             existingUser.hasVideo = true;
             
-            // Determine if this is the host (first video publisher or has higher authority)
-            // For simplicity, treat the first video publisher as host
-            if (!hostUser) {
-              console.log(`👑 User ${user.uid} is now the Crossy Robo HOST`);
+            // Determine if this is the host - Robot A should maintain host priority in its own room
+            // Since this is Robot A's interface, the first robot to connect should be Robot A
+            // and should maintain host priority over any subsequent robots (Robot B)
+            
+            // Track the first robot that connects as Robot A
+            // We need to check the new map size, not the old remoteUsers state
+            const newMapSize = newMap.size;
+            const isFirstRobot = !hostUser && newMapSize === 1;
+            const isCurrentHost = hostUser && hostUser.uid === user.uid;
+            
+            // Robot A (first robot) should become/remain host if:
+            // 1. This is the first robot to connect (becomes Robot A), OR
+            // 2. This robot is already the current host
+            // Robot B should NEVER take over from Robot A in Robot A's interface
+            const shouldBeHost = isFirstRobot || isCurrentHost;
+            
+            console.log(`🔍 Host assignment check for user ${user.uid}:`);
+            console.log(`  - Is first robot: ${isFirstRobot}`);
+            console.log(`  - Is current host: ${isCurrentHost}`);
+            console.log(`  - Current host: ${hostUser?.uid || 'none'}`);
+            console.log(`  - New map size: ${newMapSize}`);
+            console.log(`  - Should be host: ${shouldBeHost}`);
+            
+            if (shouldBeHost) {
+              console.log(`👑 User ${user.uid} is now the Crossy Robo HOST (Robot A priority)`);
+              
+              // If there was a previous host, clean up their container
+              if (hostUser && hostUser.uid !== user.uid) {
+                const oldHostContainer = document.getElementById(`main-host-${hostUser.uid}`);
+                if (oldHostContainer) {
+                  oldHostContainer.remove();
+                  console.log(`🗑️ Removed old host container for user ${hostUser.uid}`);
+                }
+              }
+              
               // This is the host - display in main view with AR
               existingUser.isHost = true;
               setHostUser(existingUser);
@@ -1036,7 +1067,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     return robotCommandMap[direction];
   };
 
-  // Send fire command directly to WebSocket (bypassing blockchain)
+  // Send fire command directly to new WebSocket (bypassing blockchain)
   const sendFireCommand = async () => {
     if (!isControlEnabled) return;
     
@@ -1058,26 +1089,79 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
     setIsControlEnabled(false);
     
     try {
-      // Check robot WebSocket connection
-      if (!isRobotConnected || !robotWebSocketService.isConnected) {
-        throw new Error('Robot not connected');
-      }
+      // Create WebSocket connection to new server
+      const ws = new WebSocket('wss://robot-rumble-server-f48fa1b1741f.herokuapp.com/');
       
-      // Send fire command directly to robot
-      const wsSuccess = robotWebSocketService.sendControlCommand('fire', 0.5);
+      let connectionHandled = false;
       
-      if (wsSuccess) {
+      // Set up WebSocket event handlers
+      ws.onopen = () => {
+        if (connectionHandled) return;
+        connectionHandled = true;
+        
+        console.log('🔗 Connected to robot-rumble-server for fire command');
+        
+        // Send simple shoot command (Unity expects plain string)
+        ws.send('shoot');
+        console.log('🎯 Sent shoot command: "shoot"');
+        
         const fireSuccessCommand: RobotCommand = {
           id: `${commandId}-success`,
           timestamp: new Date().toLocaleTimeString(),
-          command: `🎯 FIRE command sent successfully!`,
+          command: `🎯 SHOOT command sent successfully!`,
           status: 'acknowledged',
           source: 'websocket'
         };
         setRobotCommands(prev => [fireSuccessCommand, ...prev].slice(0, 20));
-      } else {
-        throw new Error('Fire command failed to send');
-      }
+        
+        // Close connection after sending
+        setTimeout(() => {
+          ws.close();
+        }, 1000);
+      };
+      
+      ws.onerror = (error) => {
+        if (connectionHandled) return;
+        connectionHandled = true;
+        
+        console.error('WebSocket error:', error);
+        
+        const failedFireCommand: RobotCommand = {
+          id: `${commandId}-fail`,
+          timestamp: new Date().toLocaleTimeString(),
+          command: `❌ FIRE command failed: WebSocket connection error`,
+          status: 'failed',
+          source: 'websocket'
+        };
+        
+        setRobotCommands(prev => [failedFireCommand, ...prev].slice(0, 20));
+        setIsControlEnabled(true);
+      };
+      
+      ws.onclose = () => {
+        console.log('🔗 Disconnected from robot-rumble-server');
+        // Always re-enable controls when connection closes
+        setIsControlEnabled(true);
+      };
+      
+      // Set timeout for connection
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.CONNECTING && !connectionHandled) {
+          connectionHandled = true;
+          ws.close();
+          
+          const timeoutFireCommand: RobotCommand = {
+            id: `${commandId}-timeout`,
+            timestamp: new Date().toLocaleTimeString(),
+            command: `❌ FIRE command failed: Connection timeout`,
+            status: 'failed',
+            source: 'websocket'
+          };
+          
+          setRobotCommands(prev => [timeoutFireCommand, ...prev].slice(0, 20));
+          setIsControlEnabled(true);
+        }
+      }, 5000);
       
     } catch (error) {
       console.error('Fire command failed:', error);
@@ -1091,8 +1175,6 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       };
       
       setRobotCommands(prev => [failedFireCommand, ...prev].slice(0, 20));
-    } finally {
-      // Re-enable controls
       setIsControlEnabled(true);
     }
   };
