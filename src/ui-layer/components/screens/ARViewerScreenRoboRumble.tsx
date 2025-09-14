@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import AgoraRTC, { IAgoraRTCClient, IRemoteVideoTrack, IRemoteAudioTrack } from 'agora-rtc-sdk-ng';
 import { Button } from '../shared/Button';
 import { RaceSession } from '../../../shared/types/race';
@@ -45,6 +45,16 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   
   // Agora refs
   const rtcClientRef = useRef<IAgoraRTCClient | null>(null);
+  
+  // Debounce ref for updateSplitScreenDisplay
+  const updateDisplayTimeoutRef = useRef<number | null>(null);
+  const isUpdatingDisplayRef = useRef<boolean>(false);
+  
+  // Persistent video element cache to prevent React render interruptions
+  const videoElementCacheRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  
+  // Track which video tracks are currently playing to prevent duplicate play() calls
+  const playingTracksRef = useRef<Set<string>>(new Set());
   
   // Streaming state
   const [isConnected, setIsConnected] = useState(false);
@@ -336,6 +346,19 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   }, [isConnected, hostUser]);
 
 
+  // Debounced version of updateSplitScreenDisplay to prevent rapid calls
+  const debouncedUpdateSplitScreenDisplay = useCallback((users: RemoteUser[]) => {
+    if (updateDisplayTimeoutRef.current) {
+      clearTimeout(updateDisplayTimeoutRef.current);
+    }
+    
+    updateDisplayTimeoutRef.current = window.setTimeout(() => {
+      console.log('Updating split screen display with users:', users.length);
+      updateSplitScreenDisplay(users);
+      updateDisplayTimeoutRef.current = null;
+    }, 100);
+  }, [primaryUserIndex]);
+
   // Connect to stream
   const connectToStream = async () => {
     try {
@@ -386,8 +409,8 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                 console.log(`📺 Added user ${user.uid} to split screen (position ${updated.length})`);
               }
               
-              // Update split screen display
-              setTimeout(() => updateSplitScreenDisplay(updated), 100);
+              // Update split screen display with debouncing
+              debouncedUpdateSplitScreenDisplay(updated);
               
               return updated;
             });
@@ -424,7 +447,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
           // Remove user from split screen
           setSplitScreenUsers(prev => {
             const updated = prev.filter(u => u.uid !== user.uid);
-            setTimeout(() => updateSplitScreenDisplay(updated), 100);
+            debouncedUpdateSplitScreenDisplay(updated);
             return updated;
           });
           
@@ -458,10 +481,27 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       client.on('user-left', (user) => {
         console.log(`🔴 User ${user.uid} left the Robo Rumble channel`);
         
+        // Clean up video element and playing tracks from cache
+        const userKey = String(user.uid);
+        const cachedElement = videoElementCacheRef.current.get(userKey);
+        if (cachedElement) {
+          videoElementCacheRef.current.delete(userKey);
+          console.log(`🗑️ Cleaned up cached video element for user ${user.uid}`);
+        }
+        
+        // Clean up playing tracks for this user
+        const tracksToRemove = Array.from(playingTracksRef.current).filter(trackKey => 
+          trackKey.startsWith(`${userKey}-`)
+        );
+        tracksToRemove.forEach(trackKey => {
+          playingTracksRef.current.delete(trackKey);
+          console.log(`🗑️ Cleaned up playing track: ${trackKey}`);
+        });
+        
         // Remove user from split screen
         setSplitScreenUsers(prev => {
           const updated = prev.filter(u => u.uid !== user.uid);
-          setTimeout(() => updateSplitScreenDisplay(updated), 100);
+          debouncedUpdateSplitScreenDisplay(updated);
           return updated;
         });
         
@@ -520,143 +560,200 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
     }
   };
 
-  // Update picture-in-picture display
   const updateSplitScreenDisplay = (users: RemoteUser[]) => {
     if (!mainViewRef.current) return;
     
-    // Clear existing display
-    const existingContainer = document.getElementById('pip-container');
-    if (existingContainer) {
-      existingContainer.remove();
-    }
-    
-    // Create picture-in-picture container
+    // Create main PiP container
     const pipContainer = document.createElement('div');
     pipContainer.id = 'pip-container';
     pipContainer.className = 'absolute inset-0 w-full h-full bg-black';
     
-    // Create main video container (75% of screen)
-    const mainContainer = document.createElement('div');
-    mainContainer.className = 'absolute inset-0 w-full h-full bg-black';
-    mainContainer.id = 'pip-main';
+    // Create a single video container that holds all videos
+    const videoContainer = document.createElement('div');
     
-    // Create overlay video container (positioned in top-right corner)
-    const overlayContainer = document.createElement('div');
-    overlayContainer.className = 'absolute top-4 right-4 w-1/3 h-1/3 bg-black border-2 border-white/30 rounded-lg overflow-hidden cursor-pointer transition-all duration-200 hover:border-white/50 hover:scale-105 z-10';
-    overlayContainer.id = 'pip-overlay';
-    
-    // Add users to PiP layout based on primaryUserIndex
-    users.forEach((user, index) => {
-      const videoElement = document.createElement('video');
-      videoElement.className = 'w-full h-full object-contain bg-black';
-      videoElement.autoplay = true;
-      videoElement.playsInline = true;
-      videoElement.muted = true;
-      // Don't mirror host video feeds - they should display as-is
+    // Clear existing overlays and event listeners from previous container if it exists
+    const existingContainer = mainViewRef.current.querySelector('#video-container');
+    if (existingContainer) {
+      const existingOverlays = existingContainer.querySelectorAll('.user-overlay');
+      existingOverlays.forEach(overlay => overlay.remove());
       
-      if (user.videoTrack) {
+      // Clean up previous click handlers
+      const existingClickArea = existingContainer.querySelector('.overlay-click-area');
+      if (existingClickArea && (existingClickArea as any)._clickHandler) {
+        existingClickArea.removeEventListener('click', (existingClickArea as any)._clickHandler);
+      }
+    }
+    videoContainer.className = 'absolute inset-0 w-full h-full';
+    videoContainer.id = 'video-container';
+    
+    // Create click area for overlay swapping (invisible)
+    const overlayClickArea = document.createElement('div');
+    overlayClickArea.className = 'absolute top-4 right-4 w-1/3 h-1/3 cursor-pointer z-20';
+    overlayClickArea.id = 'pip-overlay-click';
+    
+    // Process each user and position their video elements using CSS
+    users.forEach((user, index) => {
+      const userKey = String(user.uid);
+      
+      // Try to reuse existing video element from persistent cache
+      let videoElement = videoElementCacheRef.current.get(userKey);
+      
+      if (!videoElement && user.videoTrack) {
+        // Create new video element only if we don't have one in cache
+        videoElement = document.createElement('video');
+        videoElement.autoplay = true;
+        videoElement.playsInline = true;
+        videoElement.muted = true;
+        videoElement.setAttribute('data-uid', userKey);
+        videoElement.style.position = 'absolute';
+        videoElement.style.objectFit = 'contain';
+        videoElement.style.backgroundColor = 'black';
+        
+        // Store in persistent cache
+        videoElementCacheRef.current.set(userKey, videoElement);
+        
+        // Add to video container ONCE - never move it again
+        videoContainer.appendChild(videoElement);
+        
+        // Play video track only once when creating new element
+        const trackKey = `${userKey}-${user.videoTrack.getTrackId()}`;
         user.videoTrack.play(videoElement);
+        playingTracksRef.current.add(trackKey);
         console.log(`📺 Playing video for user ${user.uid} in PiP position ${index + 1}`);
         
         // Debug logging
         videoElement.addEventListener('loadedmetadata', () => {
-          console.log(`🔍 Video ${user.uid} dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
-          console.log(`🔍 Video ${user.uid} aspect ratio: ${videoElement.videoWidth / videoElement.videoHeight}`);
+          console.log(`🔍 Video ${user.uid} dimensions: ${videoElement!.videoWidth}x${videoElement!.videoHeight}`);
+          console.log(`🔍 Video ${user.uid} aspect ratio: ${videoElement!.videoWidth / videoElement!.videoHeight}`);
         });
+      } else if (videoElement && user.videoTrack) {
+        // Reusing existing video element - avoid calling play() unless it's a new track
+        console.log(`♻️ Reusing existing video element for user ${user.uid}`);
+        
+        // Ensure video is in the container (but don't move if already there)
+        if (videoElement.parentNode !== videoContainer) {
+          videoContainer.appendChild(videoElement);
+        }
+        
+        // Only play if this is a completely new track (different track ID)
+        const currentTrackKey = `${userKey}-${user.videoTrack.getTrackId()}`;
+        if (!playingTracksRef.current.has(currentTrackKey)) {
+          // Clean up old track references for this user
+          const oldTracks = Array.from(playingTracksRef.current).filter(trackKey => 
+            trackKey.startsWith(`${userKey}-`)
+          );
+          oldTracks.forEach(trackKey => playingTracksRef.current.delete(trackKey));
+          
+          // Play new track
+          user.videoTrack.play(videoElement);
+          playingTracksRef.current.add(currentTrackKey);
+          console.log(`🔄 Playing NEW video track for user ${user.uid}`);
+        } else {
+          console.log(`✅ Video track for user ${user.uid} already playing on cached element`);
+        }
       } else {
-        // Fallback content
-        console.log(`⚠️ No video track for user ${user.uid}`);
+        // No video element and no video track
+        console.log(`⚠️ No video track or element for user ${user.uid}`);
+        return; // Skip this user
       }
       
-      // Determine which container based on primary user setting
+      // videoElement is guaranteed to be defined at this point
+      if (!videoElement) return;
+      
+      // Use CSS positioning instead of DOM manipulation
+      const isMainVideo = (primaryUserIndex === 0 && index === 0) || (primaryUserIndex === 1 && index === 1);
+      
+      // Clear all positioning styles first
+      videoElement.style.top = '';
+      videoElement.style.left = '';
+      videoElement.style.right = '';
+      videoElement.style.bottom = '';
+      videoElement.style.width = '';
+      videoElement.style.height = '';
+      videoElement.style.border = '';
+      videoElement.style.borderRadius = '';
+      
+      if (isMainVideo) {
+        // Position as main video (full screen)
+        videoElement.style.top = '0px';
+        videoElement.style.left = '0px';
+        videoElement.style.width = '100%';
+        videoElement.style.height = '100%';
+        videoElement.style.zIndex = '1';
+        videoElement.style.display = 'block';
+        console.log(`🎯 Positioned user ${user.uid} as MAIN video`);
+      } else if (index < 2) {
+        // Position as overlay video (top-right corner)
+        videoElement.style.top = '16px';
+        videoElement.style.right = '16px';
+        videoElement.style.left = 'auto';
+        videoElement.style.width = '33.333333%';
+        videoElement.style.height = '33.333333%';
+        videoElement.style.zIndex = '10';
+        videoElement.style.display = 'block';
+        videoElement.style.border = '2px solid rgba(255, 255, 255, 0.3)';
+        videoElement.style.borderRadius = '8px';
+        console.log(`🎯 Positioned user ${user.uid} as OVERLAY video`);
+      } else {
+        // Hide additional users
+        videoElement.style.display = 'none';
+      }
+    });
+    
+    // Add click handler to overlay area for swapping
+    const handleOverlayClick = () => {
+      console.log('Overlay clicked, current primaryUserIndex:', primaryUserIndex);
+      const newPrimaryIndex = primaryUserIndex === 0 ? 1 : 0;
+      console.log('Setting new primaryUserIndex:', newPrimaryIndex);
+      setPrimaryUserIndex(newPrimaryIndex);
+      // Force immediate update after swap
+      setTimeout(() => {
+        updateSplitScreenDisplay(users);
+      }, 50);
+    };
+    
+    overlayClickArea.addEventListener('click', handleOverlayClick);
+    
+    // Store reference for cleanup
+    (overlayClickArea as any)._clickHandler = handleOverlayClick;
+    
+    // Add user info overlays
+    users.forEach((user, index) => {
       const isMainVideo = (primaryUserIndex === 0 && index === 0) || (primaryUserIndex === 1 && index === 1);
       
       if (isMainVideo) {
-        // This user goes to main container
-        mainContainer.appendChild(videoElement);
-        
-        // Add user info overlay for main video
+        // Main video overlay
         const mainOverlay = document.createElement('div');
-        mainOverlay.className = 'absolute bottom-4 left-4 bg-black/70 text-white px-3 py-1 rounded-lg text-sm';
+        mainOverlay.className = 'absolute bottom-4 left-4 bg-black/70 text-white px-3 py-1 rounded-lg text-sm z-20';
         mainOverlay.textContent = `${user.uid} (Main)`;
-        mainContainer.appendChild(mainOverlay);
+        pipContainer.appendChild(mainOverlay);
       } else if (index < 2) {
-        // This user goes to overlay container (only show first 2 users)
-        overlayContainer.appendChild(videoElement);
-        
-        // Add user info overlay for pip video
+        // PiP video overlay
         const pipOverlay = document.createElement('div');
-        pipOverlay.className = 'absolute bottom-1 left-1 bg-black/70 text-white px-2 py-0.5 rounded text-xs';
+        pipOverlay.className = 'absolute top-5 right-5 bg-black/70 text-white px-2 py-0.5 rounded text-xs z-20';
         pipOverlay.textContent = String(user.uid);
-        overlayContainer.appendChild(pipOverlay);
+        pipContainer.appendChild(pipOverlay);
       }
     });
     
-    // Add swap functionality to overlay container (works even with 1 user for future swapping)
-    overlayContainer.addEventListener('click', () => {
-      console.log('🔄 Swapping video feeds - current primary:', primaryUserIndex);
-      const newPrimaryIndex = primaryUserIndex === 0 ? 1 : 0;
-      setPrimaryUserIndex(newPrimaryIndex);
-      console.log('🔄 New primary index:', newPrimaryIndex);
-      // Re-render the display with swapped primary user
-      setTimeout(() => updateSplitScreenDisplay(users), 100);
-    });
-    
-    // If only one user, show placeholder in overlay
+    // Add placeholder if only one user
     if (users.length === 1) {
       const placeholder = document.createElement('div');
-      placeholder.className = 'w-full h-full flex items-center justify-center bg-gray-800/80 text-white/60';
-      placeholder.innerHTML = `
-        <div class="text-center">
-          <div class="w-8 h-8 mx-auto mb-2 bg-white/10 rounded-full flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </div>
-          <p class="text-xs">Waiting...</p>
-        </div>
-      `;
-      overlayContainer.appendChild(placeholder);
+      placeholder.className = 'absolute top-4 right-4 w-1/3 h-1/3 flex items-center justify-center bg-gray-800/80 text-white/60 border-2 border-white/30 rounded-lg z-10';
+      placeholder.innerHTML = `<div class="text-center">
+        <div class="text-2xl mb-2">⏳</div>
+        <div>Waiting for Robot B...</div>
+      </div>`;
+      pipContainer.appendChild(placeholder);
     }
     
-    // If no users, show empty layout
-    if (users.length === 0) {
-      // Main placeholder
-      const mainPlaceholder = document.createElement('div');
-      mainPlaceholder.className = 'w-full h-full flex items-center justify-center bg-gray-900 text-white/50';
-      mainPlaceholder.innerHTML = `
-        <div class="text-center">
-          <div class="w-16 h-16 mx-auto mb-4 bg-white/10 rounded-full flex items-center justify-center">
-            <svg class="w-8 h-8 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 002 2v8a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <p class="text-lg">Waiting for participants...</p>
-        </div>
-      `;
-      mainContainer.appendChild(mainPlaceholder);
-      
-      // Overlay placeholder
-      const overlayPlaceholder = document.createElement('div');
-      overlayPlaceholder.className = 'w-full h-full flex items-center justify-center bg-gray-800/80 text-white/60';
-      overlayPlaceholder.innerHTML = `
-        <div class="text-center">
-          <div class="w-8 h-8 mx-auto mb-2 bg-white/10 rounded-full flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </div>
-          <p class="text-xs">PiP</p>
-        </div>
-      `;
-      overlayContainer.appendChild(overlayPlaceholder);
-    }
+    // Append video container to main PiP container
+    pipContainer.appendChild(videoContainer);
+    pipContainer.appendChild(overlayClickArea);
     
-    // Always add the containers to show PiP layout
-    pipContainer.appendChild(mainContainer);
-    pipContainer.appendChild(overlayContainer);
-    
+    // Add the PiP container to the main view
     mainViewRef.current.appendChild(pipContainer);
+    
     console.log(`✅ Split screen updated with ${users.length} users`);
   };
 
@@ -664,7 +761,7 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
   useEffect(() => {
     if (isConnected && mainViewRef.current) {
       // Initialize empty split screen
-      updateSplitScreenDisplay([]);
+      debouncedUpdateSplitScreenDisplay([]);
     }
   }, [isConnected]);
 
@@ -709,13 +806,23 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
       const splitScreenContainer = document.getElementById('split-screen-container');
       if (splitScreenContainer) {
         splitScreenContainer.remove();
-        console.log('🗑️ Cleaned up split screen container');
-      }
+        if (mainViewRef.current) {
+          mainViewRef.current.innerHTML = '';
+        }
       
-      setIsConnected(false);
-      setLocalUid(null);
-      setRemoteUsers(new Map());
-      setHostUser(null);
+        // Clear video element cache and playing tracks
+        videoElementCacheRef.current.clear();
+        playingTracksRef.current.clear();
+        console.log('🗑️ Cleared all cached video elements and playing tracks');
+      
+        setIsConnected(false);
+        setLocalUid(null);
+        setRemoteUsers(new Map());
+        setHostUser(null);
+        setViewerUsers(new Map());
+        setSplitScreenUsers([]);
+        console.log('Disconnected from Robo Rumble stream');
+      }
       setViewerUsers(new Map());
       setSplitScreenUsers([]);
       console.log('Disconnected from Robo Rumble stream');
@@ -1154,27 +1261,14 @@ export const ARViewerScreenRoboRumble: React.FC<ARViewerScreenRoboRumbleProps> =
                   </div>
                 )}
                 
-                {/* Other viewers */}
+                {/* Other viewers - removed duplicate video rendering */}
                 {Array.from(remoteUsers.entries())
                   .filter(([uid, user]) => uid !== hostUser?.uid)
                   .map(([uid, user]) => (
                     <div key={uid} className="flex-shrink-0 w-16 h-16 relative">
                       <div className="w-full h-full bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center text-white font-semibold text-xs overflow-hidden">
-                        {user.hasVideo && user.videoTrack ? (
-                          <video 
-                            ref={(videoEl) => {
-                              if (videoEl && user.videoTrack) {
-                                user.videoTrack.play(videoEl);
-                              }
-                            }}
-                            className="w-full h-full object-cover"
-                            autoPlay
-                            playsInline
-                            muted
-                          />
-                        ) : (
-                          uid.toString().slice(-2)
-                        )}
+                        {/* Video rendering handled by updateSplitScreenDisplay function */}
+                        {uid.toString().slice(-2)}
                       </div>
                       
                       {/* Status indicators */}
