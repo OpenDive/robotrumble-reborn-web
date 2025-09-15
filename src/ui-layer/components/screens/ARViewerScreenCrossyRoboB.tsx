@@ -63,7 +63,7 @@ interface Robot {
 
 
 
-export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> = ({ session, onBack }) => {
+export const ARViewerScreenCrossyRoboB: React.FC<ARViewerScreenCrossyRoboProps> = ({ session, onBack }) => {
   const mainViewRef = useRef<HTMLDivElement>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
