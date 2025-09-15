@@ -1610,6 +1610,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                     <span className="text-sm font-medium">Watching Crossy Robo Stream</span>
                   </div>
                   <div className="text-xs text-white/70">
+                    Robot: A<br />
                     Channel: robot-video<br />
                     Your UID: {localUid}<br />
                     Host: {hostUser ? `User ${hostUser.uid}` : 'None'}<br />

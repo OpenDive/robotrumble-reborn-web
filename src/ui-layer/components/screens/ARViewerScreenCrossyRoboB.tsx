@@ -15,7 +15,7 @@ import { robotWebSocketService, RobotFeedback, RobotCommand } from '../../servic
 
 // Environment configuration for robot WebSocket
 const ROBOT_WS_URL = 'wss://hurricane-laboratories-ddc1627c10dd.herokuapp.com/ws';
-const ROBOT_ROOM_ID = 'default';
+const ROBOT_ROOM_ID = 'robot-b';
 const ROBOT_WS_ENABLED = 'false';
 
 // Smart contract configuration - Phase 2: Sponsored transactions + fallback to regular transactions
@@ -1610,6 +1610,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
                     <span className="text-sm font-medium">Watching Crossy Robo Stream</span>
                   </div>
                   <div className="text-xs text-white/70">
+                    Robot: B<br />
                     Channel: robot-video<br />
                     Your UID: {localUid}<br />
                     Host: {hostUser ? `User ${hostUser.uid}` : 'None'}<br />
