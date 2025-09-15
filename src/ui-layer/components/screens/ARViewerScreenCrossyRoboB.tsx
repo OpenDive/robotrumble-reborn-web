@@ -426,21 +426,18 @@ export const ARViewerScreenCrossyRoboB: React.FC<ARViewerScreenCrossyRoboProps> 
             existingUser.videoTrack = user.videoTrack;
             existingUser.hasVideo = true;
             
-            // Determine if this is the host - Robot A should maintain host priority in its own room
-            // Since this is Robot A's interface, the first robot to connect should be Robot A
-            // and should maintain host priority over any subsequent robots (Robot B)
+            // Determine if this is the host - Allow newer joiners to take over
+            // In Robot B interface, the most recent joiner with video becomes the host
             
-            // Track the first robot that connects as Robot A
-            // We need to check the new map size, not the old remoteUsers state
+            // Track the current state
             const newMapSize = newMap.size;
             const isFirstRobot = !hostUser && newMapSize === 1;
             const isCurrentHost = hostUser && hostUser.uid === user.uid;
             
-            // Robot A (first robot) should become/remain host if:
-            // 1. This is the first robot to connect (becomes Robot A), OR
-            // 2. This robot is already the current host
-            // Robot B should NEVER take over from Robot A in Robot A's interface
-            const shouldBeHost = isFirstRobot || isCurrentHost;
+            // Host selection logic for Robot B interface:
+            // 1. If no current host, this user becomes host
+            // 2. If there is a current host, this newer joiner takes over as host
+            const shouldBeHost = !hostUser || true; // Always take over as host when publishing video
             
             console.log(`🔍 Host assignment check for user ${user.uid}:`);
             console.log(`  - Is first robot: ${isFirstRobot}`);
@@ -450,7 +447,7 @@ export const ARViewerScreenCrossyRoboB: React.FC<ARViewerScreenCrossyRoboProps> 
             console.log(`  - Should be host: ${shouldBeHost}`);
             
             if (shouldBeHost) {
-              console.log(`👑 User ${user.uid} is now the Crossy Robo HOST (Robot A priority)`);
+              console.log(`👑 User ${user.uid} is now the Crossy Robo HOST (newer joiner takes over)`);
               
               // If there was a previous host, clean up their container
               if (hostUser && hostUser.uid !== user.uid) {
