@@ -1087,7 +1087,7 @@ export const ARViewerScreenCrossyRoboB: React.FC<ARViewerScreenCrossyRoboProps> 
     
     try {
       // Create WebSocket connection to new server
-      const ws = new WebSocket('wss://robot-rumble-server-f48fa1b1741f.herokuapp.com/');
+      const ws = new WebSocket('wss://robot-rumble-server2-29b4f4921468.herokuapp.com/');
       
       let connectionHandled = false;
       
