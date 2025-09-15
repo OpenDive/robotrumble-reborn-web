@@ -11,6 +11,7 @@ import { ARStreamScreen } from './components/screens/ARStreamScreen';
 import { ARViewerScreen } from './components/screens/ARViewerScreen';
 import { ARStreamScreenCrossyRobo } from './components/screens/ARStreamScreenCrossyRobo';
 import { ARViewerScreenCrossyRobo } from './components/screens/ARViewerScreenCrossyRobo';
+import { ARViewerScreenCrossyRoboB } from './components/screens/ARViewerScreenCrossyRoboB';
 import { ARStreamScreenRoboRumble } from './components/screens/ARStreamScreenRoboRumble';
 import { ARViewerScreenRoboRumble } from './components/screens/ARViewerScreenRoboRumble';
 import { TeamRegistrationScreen } from './components/screens/TeamRegistrationScreen';
@@ -40,6 +41,7 @@ function AppContent() {
   const navigate = useNavigate();
   const { user, isLoading } = useAuth();
   const [selectedSession, setSelectedSession] = useState<RaceSession | null>(null);
+  const [selectedRobot, setSelectedRobot] = useState<string | null>(null);
 
   // Show loading screen while checking authentication
   if (isLoading) {
@@ -93,9 +95,14 @@ function AppContent() {
     navigate('/ar-stream');
   };
 
-  const handleJoinARStream = (session: RaceSession) => {
+  const handleJoinARStream = (session: RaceSession, robotId?: string) => {
     setSelectedSession(session);
-    navigate('/ar-viewer');
+    setSelectedRobot(robotId || null);
+    if (robotId === 'robot-b') {
+      navigate('/ar-viewer-robot-b');
+    } else {
+      navigate('/ar-viewer');
+    }
   };
 
   const handleBackToLobby = () => {
@@ -168,6 +175,29 @@ function AppContent() {
       default:
         return (
           <ARViewerScreen 
+            session={session}
+            onBack={handleBackToLobby}
+          />
+        );
+    }
+  };
+
+  // Helper function to get the Robot B AR Viewer component based on track name
+  const getARViewerRobotBComponent = (session: RaceSession) => {
+    switch (session.trackName) {
+      case 'Crossy Robo':
+        return (
+          <ARViewerScreenCrossyRoboB 
+            session={session}
+            onBack={handleBackToLobby}
+          />
+        );
+      case 'Robo Rumble':
+      case 'Robo Delivery':
+      default:
+        // For now, fallback to Robot A for other games
+        return (
+          <ARViewerScreenCrossyRobo 
             session={session}
             onBack={handleBackToLobby}
           />
@@ -249,6 +279,26 @@ function AppContent() {
         selectedSession ? (
           <RouteTransition route="ar-viewer">
             {getARViewerComponent(selectedSession)}
+          </RouteTransition>
+        ) : (
+          <div className="w-full h-screen bg-[#0B0B1A] flex items-center justify-center text-white">
+            <div className="text-center">
+              <h2 className="text-xl font-bold mb-2">No Session Selected</h2>
+              <p className="text-white/70 mb-4">Please select a session from the lobby</p>
+              <button 
+                onClick={handleBackToLobby}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+              >
+                Back to Lobby
+              </button>
+            </div>
+          </div>
+        )
+      } />
+      <Route path="/ar-viewer-robot-b" element={
+        selectedSession ? (
+          <RouteTransition route="ar-viewer-robot-b">
+            {getARViewerRobotBComponent(selectedSession)}
           </RouteTransition>
         ) : (
           <div className="w-full h-screen bg-[#0B0B1A] flex items-center justify-center text-white">

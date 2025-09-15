@@ -12,6 +12,7 @@ import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction, us
 import { useEnokiFlow, useZkLogin, useZkLoginSession } from '@mysten/enoki/react';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import { robotWebSocketService, RobotFeedback, RobotCommand } from '../../services/RobotWebSocketService';
+import { useNavigate } from 'react-router-dom';
 
 // Environment configuration for robot WebSocket
 const ROBOT_WS_URL = 'wss://hurricane-laboratories-ddc1627c10dd.herokuapp.com/ws';
@@ -64,6 +65,7 @@ interface Robot {
 
 
 export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> = ({ session, onBack }) => {
+  const navigate = useNavigate();
   const mainViewRef = useRef<HTMLDivElement>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -336,10 +338,16 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
 
   // Connect to game (both video and robot)
   const connectToGame = async (robotId?: string) => {
+    // If Robot B is selected, navigate to the Robot B component
+    if (robotId === 'robot-b') {
+      navigate('/ar-viewer-robot-b');
+      return;
+    }
+    
     setGameState('connecting');
     setConnectionError(null);
     
-    // Set the selected robot if provided
+    // Set the selected robot if provided (defaults to robot-a)
     if (robotId) {
       setSelectedRobot(robotId);
       console.log(`🤖 Selected robot: ${robotId}`);
@@ -356,7 +364,7 @@ export const ARViewerScreenCrossyRobo: React.FC<ARViewerScreenCrossyRoboProps> =
       
       // Step 3: Both connections successful
       setGameState('connected');
-      console.log(`✅ Full game connection established for ${robotId || 'default robot'}`);
+      console.log(`✅ Full game connection established for ${robotId || 'robot-a'}`);
       
     } catch (error) {
       console.error('❌ Game connection failed:', error);

@@ -72,7 +72,7 @@ export const ARViewerScreenCrossyRoboB: React.FC<ARViewerScreenCrossyRoboProps> 
   const rtcClientRef = useRef<IAgoraRTCClient | null>(null);
   
   // Connection state - unified for both video and robot
-  const [gameState, setGameState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [gameState, setGameState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('connecting');
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   
@@ -1404,6 +1404,21 @@ export const ARViewerScreenCrossyRoboB: React.FC<ARViewerScreenCrossyRoboProps> 
   useEffect(() => {
     initializeBlockchain();
   }, [currentAccount, enokiAddress, zkLoginSession]);
+
+  // Auto-connect to Robot B when component mounts
+  useEffect(() => {
+    const autoConnect = async () => {
+      if (gameState === 'connecting') {
+        try {
+          await connectToGame('robot-b');
+        } catch (error) {
+          console.error('Auto-connect to Robot B failed:', error);
+        }
+      }
+    };
+
+    autoConnect();
+  }, []);
 
 
 
